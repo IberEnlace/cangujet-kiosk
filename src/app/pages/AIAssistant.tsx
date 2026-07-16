@@ -1,30 +1,21 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Sparkles, Mic, Send, AlertTriangle, ShieldCheck, ChevronRight,
-  ShoppingCart, ArrowLeft, X, ShieldAlert, Award
+  ShoppingCart, ArrowLeft, X, ShieldAlert, Award, RefreshCw
 } from "lucide-react";
-
-// Menu Data for AI Queries
-type FoodItem = {
-  id: string;
-  name: string;
-  price: number;
-  category: "burger" | "side" | "drink" | "dessert" | "salad";
-  tags: string[];
-  cal: number;
-  protein: string;
-  image: string;
-  allergens: string[];
-};
-
-const aiMenu: FoodItem[] = [
-  { id: "b1", name: "Spicy Nori Burger", price: 8.90, category: "burger", tags: ["Spicy", "High Protein", "Popular"], cal: 520, protein: "32g", image: "https://images.unsplash.com/photo-1606149059549-6042addafc5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", allergens: ["Gluten", "Sesame"] },
-  { id: "b2", name: "Smoky Truffle Beef", price: 10.50, category: "burger", tags: ["Premium", "High Protein"], cal: 680, protein: "38g", image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", allergens: ["Gluten", "Dairy"] },
-  { id: "s1", name: "Rosemary Fries", price: 3.50, category: "side", tags: ["Vegetarian", "Vegan", "Classic"], cal: 320, protein: "4g", image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", allergens: [] },
-  { id: "s2", name: "Zen Garden Bowl", price: 7.20, category: "salad", tags: ["Healthy", "Vegetarian", "Vegan", "High Protein"], cal: 240, protein: "18g", image: "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", allergens: ["Soy"] },
-  { id: "d1", name: "Iced Matcha Latte", price: 4.50, category: "drink", tags: ["Healthy", "Vegetarian", "Popular"], cal: 150, protein: "3g", image: "https://images.unsplash.com/photo-1543007630-9710e4a00a20?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", allergens: ["Dairy"] },
-  { id: "k1", name: "Tiny Tenders Combo", price: 6.00, category: "side", tags: ["Kids", "Popular"], cal: 380, protein: "22g", image: "https://images.unsplash.com/photo-1562967914-608f82629710?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", allergens: ["Gluten"] }
-];
+import type { AIFoodItem as FoodItem } from "../data/aiMenu";
+import {
+  checkProductAllergens,
+  findHealthyMeals,
+  findHighProtein,
+  findKidsMeals,
+  findVegetarianMeals,
+  noriMenuProducts,
+  noriSupportedAllergens,
+} from "../services/noriMenuEngine";
+import type { NoriChatRequest, NoriChatResponse, NoriConversationState } from "../../server/types/noriChat";
+import { useCart } from "../context/CartContext";
+import { executeNoriCartActions } from "../services/noriCartActions";
 
 type Message = {
   sender: "user" | "bot";
@@ -36,6 +27,10 @@ type Message = {
 };
 
 export default function AIAssistant({ onBackToSelection }: { onBackToSelection?: () => void }) {
+  const { items: cart, addItem, removeItem, updateQty, clearCart, subtotal, updateCustomizations } = useCart();
+  const cartRef = useRef(cart);
+  cartRef.current = cart;
+  const actionResultsRef = useRef<NoriChatRequest["actionResults"]>([]);
   const [activeTab, setActiveTab] = useState<"chat" | "presets" | "allergies">("chat");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -46,11 +41,22 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
   ]);
   const [inputVal, setInputVal] = useState("");
   const [isListening, setIsListening] = useState(false);
-  const [cart, setCart] = useState<FoodItem[]>([]);
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
   const [presetCategory, setPresetCategory] = useState<"healthy" | "vegetarian" | "kids" | "protein">("healthy");
+  const [conversationState, setConversationState] = useState<NoriConversationState>();
 
-  // Simulated AI response parser
+  const resetConversation = () => {
+    setConversationState(undefined);
+    actionResultsRef.current = [];
+    setSelectedAllergens([]);
+    setMessages([{
+      sender: "bot",
+      text: "Conversation reset. How can I help with your next order?",
+      timestamp: "Just now",
+    }]);
+    setInputVal("");
+  };
+
   const handleQuery = (queryText: string) => {
     if (!queryText.trim()) return;
 
@@ -63,79 +69,84 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
     setMessages(prev => [...prev, newMsg]);
     setInputVal("");
 
-    // Simulate thinking delay
-    setTimeout(() => {
-      let botResponse = "";
-      let recs: FoodItem[] = [];
-      let flagged: string[] = [];
-      let upsell: FoodItem | undefined;
-
-      const lower = queryText.toLowerCase();
-
-      // Allergy flag detection in conversation
-      selectedAllergens.forEach(allergen => {
-        if (!lower.includes(allergen.toLowerCase())) {
-          // Auto add if globally active
-          flagged.push(allergen);
+    const request: NoriChatRequest = {
+      message: queryText,
+      cart: cartRef.current.map(item => ({
+        productId: item.id,
+        quantity: item.qty,
+        customizations: item.customizations,
+      })),
+      activeAllergens: selectedAllergens,
+      language: "en",
+      conversationState,
+      actionResults: actionResultsRef.current,
+    };
+    void fetch("/api/nori/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    })
+      .then(async response => {
+        if (!response.ok) throw new Error("Nori API request failed.");
+        return response.json() as Promise<NoriChatResponse>;
+      })
+      .then(result => {
+        setConversationState(result.conversationState);
+        const executionResults = executeNoriCartActions(result.actions, {
+          addItem, updateCustomizations, removeItem, updateQty, clearCart,
+        });
+        actionResultsRef.current = executionResults.map(({ actionId, status }) => ({ actionId, status }));
+        for (const execution of executionResults) {
+          if (execution.status !== "success") continue;
+          const action = result.actions.find(item => "actionId" in item && item.actionId === execution.actionId);
+          if (!action) continue;
+          if (action.type === "add_to_cart") {
+            const existing = cartRef.current.find(item => item.id === action.productId);
+            if (existing) {
+              cartRef.current = cartRef.current.map(item => item.id === action.productId
+                ? { ...item, qty: item.qty + action.quantity }
+                : item);
+            } else {
+              const product = noriMenuProducts.find(item => item.id === action.productId);
+              if (product) cartRef.current = [...cartRef.current, {
+                id: product.id, name: product.name, price: product.price, basePrice: product.price,
+                qty: action.quantity, image: product.image, category: product.category, calories: product.cal,
+              }];
+            }
+          }
         }
-      });
-
-      if (lower.includes("peanut") || lower.includes("nuts")) {
-        if (!flagged.includes("Peanuts")) flagged.push("Peanuts");
-      }
-
-      if (lower.includes("gluten") || lower.includes("wheat")) {
-        if (!flagged.includes("Gluten")) flagged.push("Gluten");
-      }
-
-      if (lower.includes("spicy") || lower.includes("chicken") || lower.includes("fries")) {
-        recs = aiMenu.filter(item => item.id === "b1" || item.id === "s1");
-        botResponse = "I've found our Spicy Nori Burger paired with Golden Rosemary Fries for you. Would you like to add this combination to your order?";
-        // Cross-selling up
-        upsell = aiMenu.find(item => item.id === "d1"); // Matcha Latte
-      }
-      else if (lower.includes("under") || lower.includes("cheap") || lower.includes("$")) {
-        recs = aiMenu.filter(item => item.price < 8.00);
-        botResponse = "Here are our premium choices under $12, perfect for a budget-friendly lunch.";
-      }
-      else if (lower.includes("high protein") || lower.includes("protein") || lower.includes("gym")) {
-        recs = aiMenu.filter(item => item.tags.includes("High Protein"));
-        botResponse = "For maximum protein intake, I recommend these beef and chicken entrees containing up to 38g of protein per serving.";
-        upsell = aiMenu.find(item => item.id === "s2"); // Salad bowl
-      }
-      else if (lower.includes("healthy") || lower.includes("fit") || lower.includes("diet")) {
-        recs = aiMenu.filter(item => item.tags.includes("Healthy"));
-        botResponse = "Our light selections contain low calorie thresholds and fresh ingredients.";
-      }
-      else if (lower.includes("kid") || lower.includes("child") || lower.includes("toy")) {
-        recs = aiMenu.filter(item => item.tags.includes("Kids"));
-        botResponse = "Here is our children's special, designed with mild seasoning and child-safe portions.";
-      }
-      else {
-        recs = [aiMenu[0], aiMenu[2]];
-        botResponse = "I recommend our guest favorites: The Spicy Nori Burger alongside our hand-cut Rosemary Fries.";
-      }
-
-      // Check if recommendations contain users' selected allergens
-      if (flagged.length > 0) {
-        const unsafeIds = recs.filter(r => r.allergens.some(a => flagged.includes(a))).map(r => r.id);
-        if (unsafeIds.length > 0) {
-          botResponse += " (Note: I flagged items containing allergens you specified.)";
-        }
-      }
-
-      setMessages(prev => [
-        ...prev,
-        {
+        const cartExecutions = executionResults.filter(execution =>
+          execution.status === "success"
+          && result.actions.some(action => action.type === "add_to_cart" && action.actionId === execution.actionId),
+        );
+        const failedExecution = executionResults.some(item => item.status === "failed");
+        const displayedReply = failedExecution
+          ? "I could not add the items to your cart."
+          : cartExecutions.length
+            ? `Added ${cartExecutions.map(item => noriMenuProducts.find(product => product.id === item.productId)?.name).filter(Boolean).join(" and ")} to your cart.`
+            : result.reply;
+        const upsellAction = result.actions.find((action): action is Extract<typeof action, { type: "add_to_cart" }> =>
+          action.type === "add_to_cart" && !result.recommendedProducts.some(product => product.id === action.productId),
+        );
+        setMessages(prev => [
+          ...prev,
+          {
+            sender: "bot",
+            text: displayedReply,
+            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            recommendations: result.recommendedProducts,
+            allergiesFlagged: result.warnings.length > 0 ? selectedAllergens : undefined,
+            upsellItem: upsellAction ? noriMenuProducts.find(product => product.id === upsellAction.productId) : undefined,
+          }
+        ]);
+      })
+      .catch(() => {
+        setMessages(prev => [...prev, {
           sender: "bot",
-          text: botResponse,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          recommendations: recs,
-          allergiesFlagged: flagged.length > 0 ? flagged : undefined,
-          upsellItem: upsell
-        }
-      ]);
-    }, 800);
+          text: "I could not reach the Nori service. Please try again or ask a staff member for help.",
+          timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        }]);
+      });
   };
 
   // Keyboard simulator helper
@@ -147,13 +158,12 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
     setSelectedAllergens(prev => prev.includes(allergen) ? prev.filter(a => a !== allergen) : [...prev, allergen]);
   };
 
-  // Get active menu list for presets tab
   const getPresetList = () => {
     switch (presetCategory) {
-      case "healthy": return aiMenu.filter(item => item.tags.includes("Healthy"));
-      case "vegetarian": return aiMenu.filter(item => item.tags.includes("Vegetarian"));
-      case "kids": return aiMenu.filter(item => item.tags.includes("Kids"));
-      case "protein": return aiMenu.filter(item => item.tags.includes("High Protein"));
+      case "healthy": return findHealthyMeals();
+      case "vegetarian": return findVegetarianMeals();
+      case "kids": return findKidsMeals();
+      case "protein": return findHighProtein();
     }
   };
 
@@ -188,8 +198,15 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
 
         {/* Cart counter */}
         <div className="flex items-center gap-3">
+          <button
+            onClick={resetConversation}
+            className="text-xs bg-white/5 border border-white/10 px-4 py-2 rounded-full font-mono text-white/60 flex items-center gap-2 hover:bg-white/10 transition"
+            title="Reset conversation"
+          >
+            <RefreshCw size={14} className="text-[#d7ff7a]" /> Reset
+          </button>
           <span className="text-xs bg-white/5 border border-white/10 px-4 py-2 rounded-full font-mono text-white/60 flex items-center gap-2">
-            <ShoppingCart size={14} className="text-[#d7ff7a]" /> Cart: {cart.length} item(s)
+            <ShoppingCart size={14} className="text-[#d7ff7a]" /> Cart: {cart.reduce((sum, item) => sum + item.qty, 0)} item(s)
           </span>
         </div>
       </header>
@@ -246,7 +263,7 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
                       {msg.sender === "bot" && msg.recommendations && (
                         <div className="grid sm:grid-cols-2 gap-3 mt-2">
                           {msg.recommendations.map(rec => {
-                            const hasAllergen = rec.allergens.some(a => selectedAllergens.includes(a));
+                            const hasAllergen = checkProductAllergens(rec, selectedAllergens).hasRisk;
                             return (
                               <div key={rec.id} className={`p-4 rounded-2xl border ${hasAllergen ? "border-red-500/30 bg-red-500/5" : "border-white/10 bg-white/[0.02]"} flex flex-col justify-between gap-3`}>
                                 <div className="flex gap-3">
@@ -262,7 +279,14 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
                                 <div className="flex justify-between items-center mt-2 border-t border-white/5 pt-2">
                                   <b className="font-mono text-[#d7ff7a] text-xs">${rec.price.toFixed(2)}</b>
                                   <button
-                                    onClick={() => setCart(prev => [...prev, rec])}
+                                    onClick={() => executeNoriCartActions([{
+                                      type: "add_to_cart",
+                                      actionId: `manual-${rec.id}-${Date.now()}`,
+                                      productId: rec.id,
+                                      quantity: 1,
+                                      customizations: [],
+                                      label: `Add ${rec.name}`,
+                                    }], { addItem })}
                                     className="px-3 py-1.5 bg-white text-black hover:bg-[#d7ff7a] transition rounded-lg text-[10px] font-bold"
                                   >
                                     Add to Cart
@@ -286,7 +310,14 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
                           </div>
                           <button
                             onClick={() => {
-                              if (msg.upsellItem) setCart(prev => [...prev, msg.upsellItem!]);
+                              if (msg.upsellItem) executeNoriCartActions([{
+                                type: "add_to_cart",
+                                actionId: `upsell-${msg.upsellItem.id}-${Date.now()}`,
+                                productId: msg.upsellItem.id,
+                                quantity: 1,
+                                customizations: [],
+                                label: `Add ${msg.upsellItem.name}`,
+                              }], { addItem });
                             }}
                             className="bg-[#d7ff7a] hover:bg-[#c3ec60] text-black text-[10px] font-bold px-3 py-1.5 rounded-lg transition"
                           >
@@ -334,7 +365,14 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
                         <div className="flex justify-between items-center mt-4">
                           <b className="font-mono text-[#d7ff7a] text-xs">${item.price.toFixed(2)}</b>
                           <button
-                            onClick={() => setCart(prev => [...prev, item])}
+                            onClick={() => executeNoriCartActions([{
+                              type: "add_to_cart",
+                              actionId: `preset-${item.id}-${Date.now()}`,
+                              productId: item.id,
+                              quantity: 1,
+                              customizations: [],
+                              label: `Add ${item.name}`,
+                            }], { addItem })}
                             className="px-3.5 py-1.5 bg-white text-black hover:bg-[#d7ff7a] rounded-lg text-xs font-bold transition"
                           >
                             Quick Add
@@ -354,7 +392,7 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
                   <p className="text-xs text-white/45 mb-4">Flag ingredients you are allergic to. Nori AI will automatically highlight warning signs on matching menu items.</p>
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    {["Gluten", "Sesame", "Dairy", "Soy"].map(all => {
+                    {noriSupportedAllergens.map(all => {
                       const active = selectedAllergens.includes(all);
                       return (
                         <button
@@ -376,13 +414,14 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
                 <div className="border-t border-white/5 pt-6">
                   <h4 className="text-xs font-bold text-white/50 uppercase tracking-wider mb-4">Allergy Risk Detection Preview</h4>
                   <div className="space-y-2">
-                    {aiMenu.map(item => {
-                      const containsAllergen = item.allergens.some(a => selectedAllergens.includes(a));
+                    {noriMenuProducts.map(item => {
+                      const allergenCheck = checkProductAllergens(item, selectedAllergens);
+                      const containsAllergen = allergenCheck.hasRisk;
                       return (
                         <div key={item.id} className={`flex items-center justify-between p-3 rounded-xl border ${containsAllergen ? "border-red-500/20 bg-red-500/5 text-red-300" : "border-white/5 bg-white/[0.01]"}`}>
                           <span className="text-xs font-semibold">{item.name}</span>
                           {containsAllergen ? (
-                            <span className="text-[10px] font-bold font-mono text-red-400 uppercase flex items-center gap-1"><AlertTriangle size={12} /> Unsafe ({item.allergens.filter(a => selectedAllergens.includes(a)).join(", ")})</span>
+                            <span className="text-[10px] font-bold font-mono text-red-400 uppercase flex items-center gap-1"><AlertTriangle size={12} /> Risk ({[...allergenCheck.contains, ...allergenCheck.mayContain, ...allergenCheck.crossContact].join(", ")})</span>
                           ) : (
                             <span className="text-[10px] font-bold font-mono text-[#d7ff7a] uppercase flex items-center gap-1"><ShieldCheck size={12} /> Safe</span>
                           )}
@@ -488,7 +527,7 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
             <div>
               <div className="flex justify-between items-center mb-4">
                 <h4 className="text-sm font-bold text-white uppercase tracking-wider">AI Order Tray</h4>
-                <button onClick={() => setCart([])} className="text-[10px] text-white/40 hover:underline">Clear Tray</button>
+                <button onClick={clearCart} className="text-[10px] text-white/40 hover:underline">Clear Tray</button>
               </div>
 
               {cart.length === 0 ? (
@@ -498,17 +537,17 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
                 </div>
               ) : (
                 <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
-                  {cart.map((item, idx) => (
-                    <div key={idx} className="flex items-center justify-between p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
+                  {cart.map(item => (
+                    <div key={item.id} className="flex items-center justify-between p-2.5 rounded-xl border border-white/5 bg-white/[0.01]">
                       <div className="flex items-center gap-3">
                         <img src={item.image} alt="" className="size-10 rounded-lg object-cover" />
                         <div>
-                          <b className="text-xs text-white block">{item.name}</b>
-                          <span className="text-[9px] text-[#d7ff7a] font-mono">${item.price.toFixed(2)}</span>
+                          <b className="text-xs text-white block">{item.qty}x {item.name}</b>
+                          <span className="text-[9px] text-[#d7ff7a] font-mono">${(item.price * item.qty).toFixed(2)}</span>
                         </div>
                       </div>
                       <button
-                        onClick={() => setCart(prev => prev.filter((_, i) => i !== idx))}
+                        onClick={() => removeItem(item.id)}
                         className="p-1 hover:bg-white/5 rounded text-white/40 hover:text-white"
                       >
                         <X size={14} />
@@ -521,17 +560,17 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
 
             {/* Total Block */}
             <div className="border-t border-white/5 pt-6 mt-6">
-              <div className="flex justify-between text-xs text-white/45 mb-2"><span>Estimated Subtotal</span><span>${cart.reduce((s, i) => s + i.price, 0).toFixed(2)}</span></div>
-              <div className="flex justify-between text-xs text-white/45 mb-4"><span>Estimated Taxes (8%)</span><span>${(cart.reduce((s, i) => s + i.price, 0) * 0.08).toFixed(2)}</span></div>
+              <div className="flex justify-between text-xs text-white/45 mb-2"><span>Estimated Subtotal</span><span>${subtotal.toFixed(2)}</span></div>
+              <div className="flex justify-between text-xs text-white/45 mb-4"><span>Estimated Taxes (8%)</span><span>${(subtotal * 0.08).toFixed(2)}</span></div>
               <div className="flex justify-between text-base font-semibold text-white mb-6">
                 <span>Total Cost</span>
-                <span className="text-[#d7ff7a] font-mono">${(cart.reduce((s, i) => s + i.price, 0) * 1.08).toFixed(2)}</span>
+                <span className="text-[#d7ff7a] font-mono">${(subtotal * 1.08).toFixed(2)}</span>
               </div>
               <button
                 onClick={() => {
                   if (cart.length === 0) return;
                   alert("Proceeding to Kiosk payment station!");
-                  setCart([]);
+                  clearCart();
                 }}
                 disabled={cart.length === 0}
                 className={`w-full py-4 rounded-2xl font-bold text-center text-sm transition ${cart.length > 0

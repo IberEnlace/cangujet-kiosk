@@ -3,6 +3,7 @@ dist/
 .vite/
 *.local
 .env
+.env.local
 .env.*
 !.env.example
 *.log

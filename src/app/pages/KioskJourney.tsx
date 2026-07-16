@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Accessibility, ArrowRight, ChevronLeft, Globe2, Heart, Mic, QrCode, Search,
   Sparkles, Star, UtensilsCrossed, Volume2, X, Plus, Check, Info, Eye,
@@ -6,6 +6,7 @@ import {
   TrendingUp
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import type { NoriChatRequest, NoriChatResponse, NoriConversationState } from "../../server/types/noriChat";
 
 // Premium Unsplash Images for Kiosk Menu
 const burgerImg = "https://images.unsplash.com/photo-1606149059549-6042addafc5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=1080";
@@ -24,6 +25,12 @@ type KioskItem = {
   tag?: string;
   cal?: number;
   rating?: number;
+};
+
+type JourneyAIMessage = {
+  id: string;
+  sender: "user" | "bot";
+  text: string;
 };
 
 const fullMenu: KioskItem[] = [
@@ -50,7 +57,11 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
   const [searchQuery, setSearchQuery] = useState("");
   const [voiceListening, setVoiceListening] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
-  const [aiResponse, setAiResponse] = useState<string | null>(null);
+  const [aiMessages, setAiMessages] = useState<JourneyAIMessage[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiConversationState, setAiConversationState] = useState<NoriConversationState>();
+  const aiSendingRef = useRef(false);
+  const aiHistoryEndRef = useRef<HTMLDivElement | null>(null);
   const [favorites, setFavorites] = useState<string[]>(["1", "3"]);
   const [cart, setCart] = useState<KioskItem[]>([]);
 
@@ -62,6 +73,62 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
     setCart(prev => [...prev, item]);
     addSharedItem({ id: item.id, name: item.name, price: item.price, basePrice: item.price, image: item.image, category: "menu", calories: item.cal });
   };
+
+  const sendAIMessage = async () => {
+    const message = aiPrompt.trim();
+    if (!message || aiSendingRef.current) return;
+    aiSendingRef.current = true;
+
+    const userMessage: JourneyAIMessage = {
+      id: `user-${Date.now()}`,
+      sender: "user",
+      text: message,
+    };
+    setAiMessages(previous => [...previous, userMessage]);
+    setAiPrompt("");
+    setAiLoading(true);
+
+    const quantities = cart.reduce<Record<string, number>>((result, item) => {
+      result[item.id] = (result[item.id] ?? 0) + 1;
+      return result;
+    }, {});
+    const request: NoriChatRequest = {
+      message,
+      cart: Object.entries(quantities).map(([productId, quantity]) => ({ productId, quantity })),
+      activeAllergens: [],
+      language: lang === "العربية" ? "ar" : lang === "Türkçe" ? "tr" : "en",
+      conversationState: aiConversationState,
+    };
+
+    try {
+      const response = await fetch("/api/nori/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(request),
+      });
+      if (!response.ok) throw new Error("Nori API request failed.");
+      const result = await response.json() as NoriChatResponse;
+      setAiConversationState(result.conversationState);
+      setAiMessages(previous => [...previous, {
+        id: `bot-${Date.now()}`,
+        sender: "bot",
+        text: result.reply,
+      }]);
+    } catch {
+      setAiMessages(previous => [...previous, {
+        id: `bot-error-${Date.now()}`,
+        sender: "bot",
+        text: "I could not reach the Nori service. Please try again or ask a staff member for help.",
+      }]);
+    } finally {
+      aiSendingRef.current = false;
+      setAiLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    aiHistoryEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }, [aiMessages, aiLoading]);
 
   const screensList = [
     { key: "Splash", label: "01. Splash Screen" },
@@ -793,7 +860,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
             </div>
 
             {/* Chat History Box */}
-            <div className="border border-white/10 bg-white/[0.02] rounded-3xl p-6 min-h-[250px] flex flex-col justify-end space-y-4">
+            <div className="border border-white/10 bg-white/[0.02] rounded-3xl p-6 min-h-[250px] max-h-[360px] overflow-y-auto flex flex-col justify-end space-y-4">
               <div className="flex gap-3 items-start">
                 <span className="size-8 rounded-lg bg-[#d7ff7a]/15 text-[#d7ff7a] flex items-center justify-center shrink-0 mt-0.5"><Sparkles size={14} /></span>
                 <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-none p-4 max-w-[85%] text-xs md:text-sm text-white/80 leading-relaxed">
@@ -801,22 +868,27 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
                 </div>
               </div>
 
-              {aiPrompt && (
-                <div className="flex gap-3 items-start justify-end">
+              {aiMessages.map(message => message.sender === "user" ? (
+                <div key={message.id} className="flex gap-3 items-start justify-end">
                   <div className="bg-[#d7ff7a]/10 border border-[#d7ff7a]/20 rounded-2xl rounded-tr-none p-4 max-w-[85%] text-xs md:text-sm text-white/90 leading-relaxed">
-                    {aiPrompt}
+                    {message.text}
                   </div>
                 </div>
-              )}
-
-              {aiResponse && (
-                <div className="flex gap-3 items-start">
+              ) : (
+                <div key={message.id} className="flex gap-3 items-start">
                   <span className="size-8 rounded-lg bg-[#d7ff7a]/15 text-[#d7ff7a] flex items-center justify-center shrink-0 mt-0.5"><Sparkles size={14} /></span>
                   <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-none p-4 max-w-[85%] text-xs md:text-sm text-white/80 leading-relaxed">
-                    {aiResponse}
+                    {message.text}
                   </div>
                 </div>
+              ))}
+              {aiLoading && (
+                <div className="flex gap-3 items-start">
+                  <span className="size-8 rounded-lg bg-[#d7ff7a]/15 text-[#d7ff7a] flex items-center justify-center shrink-0 mt-0.5"><Sparkles size={14} /></span>
+                  <div className="bg-white/5 border border-white/10 rounded-2xl rounded-tl-none px-4 py-3 text-sm text-white/45 animate-pulse">Nori is checking the menu…</div>
+                </div>
               )}
+              <div ref={aiHistoryEndRef} />
             </div>
 
             {/* Input Form */}
@@ -827,15 +899,20 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
                 placeholder="Ask Nori: 'Find a lunch under $12, peanut-free'" 
                 value={aiPrompt}
                 onChange={e => setAiPrompt(e.target.value)}
+                onKeyDown={event => {
+                  if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                    event.preventDefault();
+                    void sendAIMessage();
+                  }
+                }}
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/35"
               />
               <button 
-                onClick={() => {
-                  setAiResponse("Based on your prompt, I recommend the Zen Garden Salad ($7.20) paired with an Iced Matcha Latte ($4.50) for a nutritious, peanut-free lunch under $12.");
-                }}
-                className="px-5 py-3 bg-[#d7ff7a] hover:bg-[#bce650] text-[#17200f] rounded-xl text-xs font-bold transition"
+                onClick={() => void sendAIMessage()}
+                disabled={!aiPrompt.trim() || aiLoading}
+                className="px-5 py-3 bg-[#d7ff7a] hover:bg-[#bce650] text-[#17200f] rounded-xl text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
-                Ask Nori
+                {aiLoading ? "Thinking…" : "Ask Nori"}
               </button>
             </div>
           </div>

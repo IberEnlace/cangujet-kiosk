@@ -90,6 +90,7 @@ type CartContextType = {
   addItem: (item: Omit<CartItem, "qty">) => void;
   removeItem: (id: string) => void;
   updateQty: (id: string, qty: number) => void;
+  updateCustomizations: (id: string, customizations: Record<string, string>, price: number, calories?: number) => void;
   saveForLater: (id: string) => void;
   moveToCart: (id: string) => void;
   clearCart: () => void;
@@ -243,6 +244,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setItems(prev => prev.map(i => i.id === id ? { ...i, qty } : i));
   }, [removeItem]);
 
+  const updateCustomizations = useCallback((id: string, customizations: Record<string, string>, price: number, calories?: number) => {
+    setItems(previous => previous.map(item => item.id === id
+      ? { ...item, customizations, price, calories: calories ?? item.calories }
+      : item));
+  }, []);
+
   const saveForLater = useCallback((id: string) => {
     const item = items.find(i => i.id === id);
     if (!item) return;
@@ -339,7 +346,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   return (
     <CartContext.Provider value={{
-      items, savedItems, addItem, removeItem, updateQty, saveForLater, moveToCart, clearCart,
+      items, savedItems, addItem, removeItem, updateQty, updateCustomizations, saveForLater, moveToCart, clearCart,
       orderType, setOrderType, orderNotes, setOrderNotes,
       coupon, applyCoupon, removeCoupon,
       giftCardBalance, applyGiftCard,
