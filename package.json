@@ -9,7 +9,7 @@
     "dev:web": "vite",
     "dev:server": "node --env-file=.env --watch --import tsx src/server/index.ts",
     "start:server": "node --env-file=.env --import tsx src/server/index.ts",
-    "test:agent": "tsx --test src/server/services/noriAgentService.test.ts src/server/services/noriRequestInterpreter.test.ts src/server/services/noriCustomizationService.test.ts src/server/services/noriResponseService.test.ts"
+    "test:agent": "tsx --test src/server/services/*.test.ts"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

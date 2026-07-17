@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ShoppingCart as CartIcon, Trash2, Plus, Minus, Tag, Gift, Award, Ticket,
   ChevronRight, ArrowLeft, Clock, FileText, Star, Heart, RefreshCw,
@@ -23,8 +23,9 @@ export default function ShoppingCart({ onNavigate }: Props) {
     giftCardBalance, applyGiftCard,
     rewardsApplied, applyRewards,
     subtotal, tax, discount, total, estimatedMinutes,
-    user, addItem,
+    user, addItem, providerInstanceId,
   } = useCart();
+  useEffect(() => { console.log("[CART][PROVIDER_INSTANCE]", providerInstanceId); }, [providerInstanceId]);
 
   const [couponInput, setCouponInput] = useState("");
   const [giftCardInput, setGiftCardInput] = useState("");

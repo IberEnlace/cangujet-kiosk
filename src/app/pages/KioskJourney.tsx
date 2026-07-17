@@ -6,7 +6,9 @@ import {
   TrendingUp
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
-import type { NoriChatRequest, NoriChatResponse, NoriConversationState } from "../../server/types/noriChat";
+import type { NoriChatRequest, NoriConversationState } from "../../server/types/noriChat";
+import { executeNoriCartActions, serializeNoriCart } from "../services/noriCartActions";
+import { postNoriChat, shouldSubmitNoriKey } from "../services/noriChatClient";
 
 // Premium Unsplash Images for Kiosk Menu
 const burgerImg = "https://images.unsplash.com/photo-1606149059549-6042addafc5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=1080";
@@ -43,7 +45,15 @@ const fullMenu: KioskItem[] = [
 ];
 
 export default function KioskJourney({ onBackToSelection, onCheckout }: { onBackToSelection?: () => void; onCheckout?: () => void }) {
-  const { addItem: addSharedItem, setOrderType } = useCart();
+  const {
+    items: sharedCart, addItem: addSharedItem, removeItem, updateQty,
+    updateCustomizations, clearCart, setOrderType, providerInstanceId,
+  } = useCart();
+  const cartRef = useRef(sharedCart);
+  useEffect(() => { cartRef.current = sharedCart; }, [sharedCart]);
+  useEffect(() => { console.log("[CART][PROVIDER_INSTANCE]", providerInstanceId); }, [providerInstanceId]);
+  const executedActionIdsRef = useRef(new Set<string>());
+  const actionResultsRef = useRef<NoriChatRequest["actionResults"]>([]);
   const [screen, setScreen] = useState("Splash");
   const [lang, setLang] = useState("English");
   const [accessibilitySettings, setAccessibilitySettings] = useState({
@@ -88,26 +98,24 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
     setAiPrompt("");
     setAiLoading(true);
 
-    const quantities = cart.reduce<Record<string, number>>((result, item) => {
-      result[item.id] = (result[item.id] ?? 0) + 1;
-      return result;
-    }, {});
+    const serializedCart = serializeNoriCart(cartRef.current);
+    console.log("[NORI][CART_BEFORE_REQUEST]", cartRef.current);
+    console.log("[NORI][SERIALIZED_CART]", serializedCart);
     const request: NoriChatRequest = {
       message,
-      cart: Object.entries(quantities).map(([productId, quantity]) => ({ productId, quantity })),
+      cart: serializedCart,
       activeAllergens: [],
       language: lang === "العربية" ? "ar" : lang === "Türkçe" ? "tr" : "en",
       conversationState: aiConversationState,
+      actionResults: actionResultsRef.current,
     };
 
     try {
-      const response = await fetch("/api/nori/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(request),
-      });
-      if (!response.ok) throw new Error("Nori API request failed.");
-      const result = await response.json() as NoriChatResponse;
+      const result = await postNoriChat(request);
+      const executionResults = executeNoriCartActions(result.actions, {
+        addItem: addSharedItem, removeItem, updateQty, updateCustomizations, clearCart,
+      }, { executedActionIds: executedActionIdsRef.current, cartRef });
+      actionResultsRef.current = executionResults.map(({ actionId, status }) => ({ actionId, status }));
       setAiConversationState(result.conversationState);
       setAiMessages(previous => [...previous, {
         id: `bot-${Date.now()}`,
@@ -892,7 +900,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
             </div>
 
             {/* Input Form */}
-            <div className="flex items-center gap-3 bg-white/[0.03] border border-white/10 rounded-[22px] p-2.5 pl-5">
+            <form className="flex items-center gap-3 bg-white/[0.03] border border-white/10 rounded-[22px] p-2.5 pl-5" onSubmit={event => { event.preventDefault(); void sendAIMessage(); }}>
               <Sparkles className="text-[#d7ff7a] shrink-0" size={20} />
               <input 
                 type="text" 
@@ -900,21 +908,21 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
                 value={aiPrompt}
                 onChange={e => setAiPrompt(e.target.value)}
                 onKeyDown={event => {
-                  if (event.key === "Enter" && !event.nativeEvent.isComposing) {
+                  if (shouldSubmitNoriKey({ key: event.key, shiftKey: event.shiftKey, isComposing: event.nativeEvent.isComposing })) {
                     event.preventDefault();
-                    void sendAIMessage();
+                    event.currentTarget.form?.requestSubmit();
                   }
                 }}
                 className="w-full bg-transparent text-sm text-white outline-none placeholder:text-white/35"
               />
               <button 
-                onClick={() => void sendAIMessage()}
+                type="submit"
                 disabled={!aiPrompt.trim() || aiLoading}
                 className="px-5 py-3 bg-[#d7ff7a] hover:bg-[#bce650] text-[#17200f] rounded-xl text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {aiLoading ? "Thinking…" : "Ask Nori"}
               </button>
-            </div>
+            </form>
           </div>
 
           <div className="mt-8 border-t border-white/5 pt-6 text-xs text-white/40 text-center">

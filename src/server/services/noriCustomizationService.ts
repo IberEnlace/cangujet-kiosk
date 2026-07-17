@@ -28,17 +28,22 @@ export type CustomizationMatch = {
 export function interpretCustomization(product: AIFoodItem, message: string): CustomizationMatch | null {
   const text = normalize(message);
   const terms = expandTerms(text);
+  const requestedConcept = Object.entries(SYNONYMS).find(([key, aliases]) => text.includes(key) || aliases.some(alias => text.includes(alias)))?.[0];
   if (!terms.length) return null;
   const requestedMode = modeWords(text);
+  const removesBaseCheese = /\b(remove|without|no)\s+(?:the\s+)?(?:base\s+)?cheese\b/.test(text) && !/\b(no extra|remove extra)\s+cheese\b/.test(text);
   const matches = product.customizationGroups.flatMap(group =>
     group.options.map(option => ({ group, option })))
     .filter(({ group, option }) => {
       const searchable = normalize(`${group.id} ${group.name} ${option.id} ${option.name}`);
+      if (requestedConcept && !conceptCompatible(requestedConcept, searchable)) return false;
+      if (removesBaseCheese && /\bno extra cheese\b/.test(searchable)) return false;
+      if (removesBaseCheese && searchable.includes("cheese") && !/\b(no cheese|without cheese|remove cheese)\b/.test(searchable)) return false;
       return terms.some(term => searchable.includes(term));
     })
     .sort((first, second) => optionScore(second.option, requestedMode, text) - optionScore(first.option, requestedMode, text));
   const match = matches[0];
-  if (!match) return null;
+  if (!match || optionScore(match.option, requestedMode, text) < 10) return null;
   const selection: NoriSelectedCustomization = {
     productId: product.id,
     groupId: match.group.id,
@@ -87,6 +92,9 @@ export function calculateCustomizedProduct(
 export function validateSelectedCustomizations(product: AIFoodItem, selections: NoriSelectedCustomization[]) {
   return selections.every(selection => {
     if (selection.productId !== product.id) return false;
+    if (selection.groupId === "removable-ingredients") {
+      return product.removableIngredients.some(ingredient => selection.optionId === `no-${normalize(ingredient).replace(/\s+/g, "-")}`);
+    }
     const group = product.customizationGroups.find(item => item.id === selection.groupId);
     return Boolean(group?.options.some(option => option.id === selection.optionId && option.available));
   });
@@ -129,6 +137,12 @@ function optionScore(option: AIProductCustomizationOption, modes: string[], requ
   if ((request.includes("remove") || request.includes("without") || request.startsWith("no ")) && text.includes("no ")) score += 25;
   if ((request.includes("mild") || request.includes("less spicy")) && text.includes("light sauce")) score += 30;
   return score;
+}
+function conceptCompatible(concept: string, searchable: string) {
+  if ([concept, ...(SYNONYMS[concept] ?? [])].some(term => searchable.includes(normalize(term)))) return true;
+  if (concept === "fries" && /\b(side|fruit|salad)\b/.test(searchable)) return true;
+  if (concept === "spicy" && /\b(sauce|mild|light)\b/.test(searchable)) return true;
+  return false;
 }
 function nonNegative(value: number) { return Math.max(0, value); }
 function normalize(value: string) { return value.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim(); }

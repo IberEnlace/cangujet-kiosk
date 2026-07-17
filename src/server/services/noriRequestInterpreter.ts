@@ -4,6 +4,13 @@ export type NoriRequestConstraints = {
   maxBudget: number | null;
   minProtein: number | null;
   maxCalories: number | null;
+  maxFat: number | null;
+  maxSugars: number | null;
+  minFiber: number | null;
+  maxSodium: number | null;
+  maxCarbohydrates: number | null;
+  partySize: number | null;
+  afterTax: boolean;
   categories: string[];
   dietaryTags: string[];
   excludedIngredients: string[];
@@ -36,19 +43,21 @@ export function interpretNoriRequest(message: string, state: NoriConversationSta
   const text = normalize(message);
   const isContinuation = CONTINUATION.test(text);
   const referencesPreviousProduct = REFERENCE.test(text);
+  const mergesClarification = Boolean(state.awaitingConstraintClarification && state.clarificationState?.status === "answered");
   const persistentDietary = state.persistentDietaryPreferences ?? [];
-  const dietaryTags = isContinuation ? [...state.dietaryPreferences] : [...persistentDietary];
+  const dietaryTags = isContinuation || mergesClarification ? [...state.dietaryPreferences] : [...persistentDietary];
   if (/\bvegan\b|\bfully plant based\b/.test(text)) add(dietaryTags, "vegan");
   else if (/\bplant based\b/.test(text)) add(dietaryTags, "vegan");
   if (/\bvegetarian\b|\b(i do not|i don't|dont) eat meat\b|\bdon't feel like eating meat\b/.test(text)) add(dietaryTags, "vegetarian");
 
-  const maxBudget = number(text, /(?:budget|have|with)\s*\$?\s*(\d+(?:\.\d+)?)/)
+  const maxBudget = number(text, /(?:budget(?:\s+is)?|have|with)\s*\$?\s*(\d+(?:\.\d+)?)/)
     ?? number(text, /(?:under|up to|max)\s*\$\s*(\d+(?:\.\d+)?)/)
     ?? (isContinuation ? state.maxBudget : state.maxBudget);
   const minProtein = number(text, /(?:at least|over|above|more than)?\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\s*(?:of\s*)?protein/)
-    ?? (/\b(after the gym|post workout|post-workout|high protein|high-protein)\b/.test(text) ? 20 : isContinuation ? state.minProtein : null);
+    ?? number(text, /actually,?\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?(?:\s*(?:of\s*)?protein)?\s+is enough/)
+    ?? (/\b(after the gym|post workout|post-workout|high protein|high-protein)\b/.test(text) ? 20 : isContinuation || mergesClarification ? state.minProtein : null);
   const maxCalories = number(text, /(?:under|max|below|less than)\s*(\d+(?:\.\d+)?)\s*(?:cal|calories)/)
-    ?? (isContinuation ? state.maxCalories : null);
+    ?? (isContinuation || mergesClarification ? state.maxCalories : null);
 
   const categories: string[] = [];
   if (/\b(beef|cheese).*\bbun\b|\bbun.*\b(beef|cheese|pickles?)\b|\bburger\b/.test(text)) categories.push("burger");
@@ -57,19 +66,21 @@ export function interpretNoriRequest(message: string, state: NoriConversationSta
   if (/\b(sweet|desserts?)\b/.test(text)) categories.push("dessert");
   if (/\b(light and fresh|light|fresh)\b/.test(text)) categories.push("salad", "healthy_bowl");
   if (/\b(kid|kids|child|children)\b/.test(text)) categories.push("kids_meal");
-  if (isContinuation && !categories.length && state.requestedCategory) categories.push(state.requestedCategory);
+  if ((isContinuation || mergesClarification) && !categories.length && state.requestedCategory) categories.push(state.requestedCategory);
 
-  const preferredIngredients = ["beef", "cheese", "pickles", "chicken", "avocado"].filter(value => text.includes(value));
-  const excludedIngredients = /\b(no|not|don't want|do not want|without|anything)\s+(?:anything\s+)?fried\b/.test(text) || text.includes("don't want anything fried")
-    ? ["fried"] : [];
+  const currentExclusions = ["beef", "cheese", "meat", "fried", "spicy"].filter(value =>
+    new RegExp(`(?:no|not|without|except|avoid|don't want|do not want|don't feel like eating|nothing)\\s+(?:anything\\s+)?${value}`).test(text),
+  );
+  const excludedIngredients = [...new Set([...(state.excludedIngredients ?? []), ...currentExclusions])];
+  const preferredIngredients = ["beef", "cheese", "pickles", "chicken", "avocado"].filter(value => text.includes(value) && !excludedIngredients.includes(value));
   const wantsHandheldFood = /\b(with my hands|handheld|hand held)\b/.test(text);
   const wantsFillingMeal = /\b(filling|hearty|substantial)\b/.test(text);
   if (wantsHandheldFood && wantsFillingMeal && !categories.length) categories.push("burger");
   const wantsLightMeal = /\b(light|fresh)\b/.test(text);
-  const kids = /\b(kid|kids|child|children)\b/.test(text) || (isContinuation && state.requestedKids);
-  const spicy = /\b(spicy|chili|jalapeno|hot food)\b/.test(text) || (isContinuation && state.requestedSpicy);
-  const wantsDrink = /\b(drinks?|beverages?|coffee|latte|juice|water)\b/.test(text) || (isContinuation && state.requestedDrink);
-  const wantsDessert = categories.includes("dessert") || (isContinuation && state.requestedDessert);
+  const kids = /\b(kid|kids|child|children)\b/.test(text) || ((isContinuation || mergesClarification) && state.requestedKids);
+  const spicy = /\b(spicy|chili|jalapeno|hot food)\b/.test(text) || ((isContinuation || mergesClarification) && state.requestedSpicy);
+  const wantsDrink = /\b(drinks?|beverages?|coffee|latte|juice|water)\b/.test(text) || ((isContinuation || mergesClarification) && state.requestedDrink);
+  const wantsDessert = categories.includes("dessert") || ((isContinuation || mergesClarification) && state.requestedDessert);
   const ambiguousFilling = wantsFillingMeal && !wantsHandheldFood && !preferredIngredients.length && !categories.length;
   const ambiguousDrink = wantsDrink
     && !categories.some(category => category === "hot_drink" || category === "cold_drink")
@@ -89,6 +100,13 @@ export function interpretNoriRequest(message: string, state: NoriConversationSta
       maxBudget,
       minProtein,
       maxCalories,
+      maxFat: number(text, /(?:under|below|less than|max)\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\s*(?:of\s*)?fat/),
+      maxSugars: number(text, /(?:under|below|less than|max)\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\s*(?:of\s*)?sugars?/) ?? (/low (?:in )?sugar/.test(text) ? Number.POSITIVE_INFINITY : null),
+      minFiber: number(text, /(?:at least|over|above|more than)\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\s*(?:of\s*)?fiber/) ?? (/high fiber/.test(text) ? 0 : null),
+      maxSodium: number(text, /(?:under|below|less than|max)\s*(\d+(?:\.\d+)?)\s*mg\s*(?:of\s*)?sodium/),
+      maxCarbohydrates: number(text, /(?:under|below|less than|max)\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\s*(?:of\s*)?(?:carbs?|carbohydrates?)/),
+      partySize: number(text.replace(/\b(two|three|four)\b/g, word => ({ two: "2", three: "3", four: "4" }[word] ?? word)), /(?:for|feed)\s+(\d+)\s*(?:people|persons?)/),
+      afterTax: /\b(after tax|including tax)\b/.test(text) || ((isContinuation || mergesClarification) && Boolean(state.afterTaxBudget)),
       categories,
       dietaryTags: [...new Set(dietaryTags)],
       excludedIngredients,

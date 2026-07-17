@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Sparkles, Mic, Send, AlertTriangle, ShieldCheck, ChevronRight,
   ShoppingCart, ArrowLeft, X, ShieldAlert, Award, RefreshCw
@@ -13,9 +13,10 @@ import {
   noriMenuProducts,
   noriSupportedAllergens,
 } from "../services/noriMenuEngine";
-import type { NoriChatRequest, NoriChatResponse, NoriConversationState } from "../../server/types/noriChat";
+import type { NoriChatRequest, NoriConversationState } from "../../server/types/noriChat";
 import { useCart } from "../context/CartContext";
-import { executeNoriCartActions } from "../services/noriCartActions";
+import { executeNoriCartActions, serializeNoriCart } from "../services/noriCartActions";
+import { postNoriChat, shouldSubmitNoriKey } from "../services/noriChatClient";
 
 type Message = {
   sender: "user" | "bot";
@@ -27,10 +28,13 @@ type Message = {
 };
 
 export default function AIAssistant({ onBackToSelection }: { onBackToSelection?: () => void }) {
-  const { items: cart, addItem, removeItem, updateQty, clearCart, subtotal, updateCustomizations } = useCart();
+  const { items: cart, addItem, removeItem, updateQty, clearCart, subtotal, updateCustomizations, providerInstanceId } = useCart();
   const cartRef = useRef(cart);
-  cartRef.current = cart;
+  useEffect(() => { cartRef.current = cart; }, [cart]);
+  useEffect(() => { console.log("[CART][PROVIDER_INSTANCE]", providerInstanceId); }, [providerInstanceId]);
+  const executedActionIdsRef = useRef<Set<string>>(new Set());
   const actionResultsRef = useRef<NoriChatRequest["actionResults"]>([]);
+  const isSendingRef = useRef(false);
   const [activeTab, setActiveTab] = useState<"chat" | "presets" | "allergies">("chat");
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -48,6 +52,7 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
   const resetConversation = () => {
     setConversationState(undefined);
     actionResultsRef.current = [];
+    executedActionIdsRef.current.clear();
     setSelectedAllergens([]);
     setMessages([{
       sender: "bot",
@@ -58,7 +63,8 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
   };
 
   const handleQuery = (queryText: string) => {
-    if (!queryText.trim()) return;
+    if (!queryText.trim() || isSendingRef.current) return;
+    isSendingRef.current = true;
 
     const newMsg: Message = {
       sender: "user",
@@ -69,52 +75,24 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
     setMessages(prev => [...prev, newMsg]);
     setInputVal("");
 
+    const currentCart = serializeNoriCart(cartRef.current);
+    console.log("[NORI][CART_BEFORE_REQUEST]", cartRef.current);
+    console.log("[NORI][SERIALIZED_CART]", currentCart);
     const request: NoriChatRequest = {
       message: queryText,
-      cart: cartRef.current.map(item => ({
-        productId: item.id,
-        quantity: item.qty,
-        customizations: item.customizations,
-      })),
+      cart: currentCart,
       activeAllergens: selectedAllergens,
       language: "en",
       conversationState,
       actionResults: actionResultsRef.current,
     };
-    void fetch("/api/nori/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(request),
-    })
-      .then(async response => {
-        if (!response.ok) throw new Error("Nori API request failed.");
-        return response.json() as Promise<NoriChatResponse>;
-      })
+    void postNoriChat(request)
       .then(result => {
         setConversationState(result.conversationState);
         const executionResults = executeNoriCartActions(result.actions, {
           addItem, updateCustomizations, removeItem, updateQty, clearCart,
-        });
+        }, { executedActionIds: executedActionIdsRef.current, cartRef });
         actionResultsRef.current = executionResults.map(({ actionId, status }) => ({ actionId, status }));
-        for (const execution of executionResults) {
-          if (execution.status !== "success") continue;
-          const action = result.actions.find(item => "actionId" in item && item.actionId === execution.actionId);
-          if (!action) continue;
-          if (action.type === "add_to_cart") {
-            const existing = cartRef.current.find(item => item.id === action.productId);
-            if (existing) {
-              cartRef.current = cartRef.current.map(item => item.id === action.productId
-                ? { ...item, qty: item.qty + action.quantity }
-                : item);
-            } else {
-              const product = noriMenuProducts.find(item => item.id === action.productId);
-              if (product) cartRef.current = [...cartRef.current, {
-                id: product.id, name: product.name, price: product.price, basePrice: product.price,
-                qty: action.quantity, image: product.image, category: product.category, calories: product.cal,
-              }];
-            }
-          }
-        }
         const cartExecutions = executionResults.filter(execution =>
           execution.status === "success"
           && result.actions.some(action => action.type === "add_to_cart" && action.actionId === execution.actionId),
@@ -146,7 +124,8 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
           text: "I could not reach the Nori service. Please try again or ask a staff member for help.",
           timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         }]);
-      });
+      })
+      .finally(() => { isSendingRef.current = false; });
   };
 
   // Keyboard simulator helper
@@ -436,7 +415,7 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
           </div>
 
           {/* Large Chat Input Bar / Voice Soundwave */}
-          <div className="p-4 border-t border-white/10 bg-white/[0.02] flex items-center gap-3">
+          <form className="p-4 border-t border-white/10 bg-white/[0.02] flex items-center gap-3" onSubmit={event => { event.preventDefault(); handleQuery(inputVal); }}>
             {isListening ? (
               <div className="flex-1 flex items-center gap-4 bg-white/5 border border-white/10 rounded-2xl p-3 px-5">
                 <span className="size-2.5 rounded-full bg-red-500 animate-ping shrink-0" />
@@ -453,6 +432,7 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
                   ))}
                 </div>
                 <button
+                  type="button"
                   onClick={() => {
                     setIsListening(false);
                     handleQuery("I want two spicy chicken burgers with fries.");
@@ -465,6 +445,7 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
             ) : (
               <>
                 <button
+                  type="button"
                   onClick={() => setIsListening(true)}
                   className="p-3.5 bg-white/5 border border-white/10 rounded-2xl hover:bg-white/10 text-[#d7ff7a] transition shrink-0"
                 >
@@ -476,19 +457,22 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
                   value={inputVal}
                   onChange={e => setInputVal(e.target.value)}
                   onKeyDown={e => {
-                    if (e.key === "Enter") handleQuery(inputVal);
+                    if (shouldSubmitNoriKey({ key: e.key, shiftKey: e.shiftKey, isComposing: e.nativeEvent.isComposing })) {
+                      e.preventDefault();
+                      e.currentTarget.form?.requestSubmit();
+                    }
                   }}
                   className="flex-1 bg-white/[0.03] border border-white/10 rounded-2xl px-5 py-3.5 text-sm text-white placeholder:text-white/30 outline-none focus:border-[#d7ff7a] transition"
                 />
                 <button
-                  onClick={() => handleQuery(inputVal)}
+                  type="submit"
                   className="p-3.5 bg-[#d7ff7a] hover:bg-[#bde650] text-[#17200f] rounded-2xl transition shrink-0"
                 >
                   <Send size={18} />
                 </button>
               </>
             )}
-          </div>
+          </form>
 
         </div>
 

@@ -6,13 +6,23 @@ export type NoriCartItem = {
   productId: string;
   quantity: number;
   customizations?: Record<string, string>;
+  name?: string;
+  unitPrice?: number;
+  customizationObjects?: NoriSelectedCustomization[];
+  actionId?: string;
 };
 
 export type NoriIntent =
   | "greeting" | "help" | "menu_search" | "recommendation" | "product_details"
   | "product_comparison" | "customization_question" | "allergen_check"
   | "nutrition_question" | "add_to_cart" | "remove_from_cart" | "update_quantity"
-  | "show_cart" | "clear_cart" | "undo" | "checkout" | "payment_methods" | "unknown";
+  | "show_cart" | "cart_total" | "clear_cart" | "undo" | "checkout" | "payment_methods"
+  | "ordering_help" | "healthy_recommendation" | "bundle_recommendation" | "review_order"
+  | "compare_products" | "comparison_follow_up" | "comparative_add"
+  | "highest_protein" | "lowest_calories" | "lowest_fat" | "lowest_sugar" | "lowest_sodium" | "highest_fiber"
+  | "restaurant_information" | "opening_hours" | "order_timing" | "staff_assistance"
+  | "confirmation" | "cancellation" | "clarification_answer" | "constraint_update" | "unsupported" | "unknown";
+  // Constraint-only turns update request context before a product is requested.
 
 export type NoriSelectedCustomization = {
   productId: string;
@@ -32,8 +42,30 @@ export type NoriCurrentRecommendation = {
   reason?: string;
 };
 
-export type NoriPendingActionStatus = "pending" | "confirmed" | "cancelled" | "executed" | "failed";
-type NoriPendingActionMeta = { id: string; createdAt: number; status: NoriPendingActionStatus };
+export type NoriRecentRecommendationContext = {
+  contextId: string;
+  createdAt: number;
+  queryType: "recommendation" | "healthy" | "budget" | "high_protein" | "lowest_calories" | "kids" | "bundle" | "comparison";
+  productIds: string[];
+  pairs?: Array<{ foodProductId: string; drinkProductId: string; totalPrice: number }>;
+  category?: string;
+};
+
+export type NoriComparisonContext = { productIds: [string, string]; createdAt: number };
+
+export type NoriClarificationStatus = "awaiting_answer" | "answered" | "superseded" | "cancelled" | "expired";
+export type NoriClarificationState = {
+  clarificationId: string;
+  clarificationType: "recommendation_kind" | "drink_temperature" | "product" | "other";
+  expectedAnswerTypes: string[];
+  relatedIntent: NoriIntent;
+  relatedConstraints: Record<string, unknown>;
+  createdAt: number;
+  status: NoriClarificationStatus;
+};
+
+export type NoriPendingActionStatus = "pending" | "proposed" | "awaiting_confirmation" | "modified_awaiting_confirmation" | "executing" | "confirmed" | "completed" | "cancelled" | "executed" | "expired" | "failed";
+type NoriPendingActionMeta = { id: string; createdAt: number; status: NoriPendingActionStatus; version?: number };
 
 export type NoriPendingAction = (
   | { type: "clarify_product"; topic: string }
@@ -41,12 +73,18 @@ export type NoriPendingAction = (
   | { type: "clarify_recommendation"; primaryProductId: string; companionProductIds: string[]; quantity: number }
   | { type: "confirm_checkout" }
   | { type: "confirm_clear_cart" }
+  | { type: "confirm_bundle"; productIds: string[]; quantity: number }
   | {
     type: "confirm_cart_change";
     operation: "add" | "remove" | "update";
     productId: string;
+    productName?: string;
     quantity: number;
     customizations: NoriSelectedCustomization[];
+    basePrice?: number;
+    unitPrice?: number;
+    adjustedNutrition?: AINutrition;
+    adjustedAllergens?: string[];
   }
 ) & NoriPendingActionMeta | null;
 
@@ -72,6 +110,20 @@ export type NoriConversationState = {
   executedActionIds: string[];
   recentlyRecommendedProductIds: string[];
   pendingAction: NoriPendingAction;
+  lastComparedProductIds?: string[];
+  selectedMealId?: string | null;
+  selectedDrinkId?: string | null;
+  lastReferencedCartItemId?: string | null;
+  lastRemovedCartItemSnapshot?: NoriCartItem | null;
+  lastExecutedActionId?: string | null;
+  excludedIngredients?: string[];
+  awaitingConstraintClarification?: boolean;
+  clarificationState?: NoriClarificationState | null;
+  afterTaxBudget?: boolean;
+  pendingActionHistory?: Array<Exclude<NoriPendingAction, null>>;
+  recentRecommendationContext?: NoriRecentRecommendationContext | null;
+  lastMultiOptionContext?: NoriRecentRecommendationContext | null;
+  comparisonContext?: NoriComparisonContext | null;
 };
 
 export type NoriChatRequest = {
@@ -90,6 +142,7 @@ export type NoriAction =
     productId: string;
     quantity: number;
     customizations: NoriSelectedCustomization[];
+    unitPrice?: number;
     label: string;
   }
   | {

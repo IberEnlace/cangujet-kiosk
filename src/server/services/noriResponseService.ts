@@ -30,6 +30,19 @@ export function buildRecommendationResponse(input: {
   const { interpretation, language, companion, warnings = [] } = input;
   const products = input.products.slice(0, 3);
   const arabic = isArabic(language);
+  if (!products.length && !arabic) {
+    const { minProtein, maxBudget, categories } = interpretation.constraints;
+    const reply = minProtein !== null && categories.includes("hot_drink")
+      ? `No documented hot drink provides at least ${minProtein}g of protein. Would you like a meal instead, or would you like to remove the protein requirement?`
+      : minProtein !== null && maxBudget !== null
+      ? `No documented item matches both at least ${minProtein}g of protein and a $${maxBudget} budget. Would you like to raise the budget or lower the protein target?`
+      : minProtein !== null
+        ? `No documented item matches at least ${minProtein}g of protein. Would you like to lower the protein target or choose another priority?`
+        : maxBudget !== null
+          ? `No documented item matches all of those conditions within a $${maxBudget} budget. Would you like to raise the budget or change another condition?`
+          : "No documented item matches all of those conditions. Which condition would you like to change?";
+    return logResponse("recommendation", "no_match", [], language, reply);
+  }
   if (!products.length) {
     const reason = input.noMatchReason
       ? arabic
@@ -54,8 +67,8 @@ export function buildRecommendationResponse(input: {
     : englishOpening(best, template, interpretation);
   const reasons = reasonParts(best, interpretation, arabic, template).slice(0, 3);
   const explanation = reasons.length
-    ? ` ${reasons.join(arabic ? "، و" : ", and ")}.`
-    : ".";
+    ? `${/[.!?؟]$/.test(opening) ? " " : ". "}${capitalizeSentence(reasons.join(arabic ? "، و" : ", and "))}.`
+    : /[.!?؟]$/.test(opening) ? "" : ".";
   const alternativeText = alternatives.length
     ? arabic
       ? ` ومن البدائل ${alternatives.map(product => `${product.name} بسعر $${money(product.price)}`).join(" أو ")}.`
@@ -139,9 +152,11 @@ export function buildCustomizationResponse(
     : arabic
       ? `يتغير السعر بمقدار ${signedMoney(customization.priceAdjustment)} ليصبح $${money(calculation.adjustedPrice)}`
       : `the price changes by ${signedMoney(customization.priceAdjustment)} to $${money(calculation.adjustedPrice)}`;
-  const nutritionText = arabic
-    ? `وتتغير السعرات من ${product.cal} إلى ${calculation.adjustedNutrition.calories} والبروتين من ${product.proteinGrams}غ إلى ${calculation.adjustedNutrition.proteinGrams}غ`
-    : `calories change from ${product.cal} to ${calculation.adjustedNutrition.calories}, and protein changes from ${product.proteinGrams}g to ${calculation.adjustedNutrition.proteinGrams}g`;
+  const nutritionChanges = [
+    calculation.adjustedNutrition.calories !== product.cal ? `calories change from ${product.cal} to ${calculation.adjustedNutrition.calories}` : "",
+    calculation.adjustedNutrition.proteinGrams !== product.proteinGrams ? `protein changes from ${product.proteinGrams}g to ${calculation.adjustedNutrition.proteinGrams}g` : "",
+  ].filter(Boolean);
+  const nutritionText = nutritionChanges.length ? `, ${nutritionChanges.join(", and ")}` : "";
   const allergenText = customization.allergensRemoved.length
     ? arabic
       ? `، وتُزال ${join(customization.allergensRemoved)} من الوصفة الموثقة`
@@ -153,7 +168,7 @@ export function buildCustomizationResponse(
       : "";
   const reply = arabic
     ? `نعم. خيار ${customization.optionName} موثق لـ ${product.name}. ${priceText}، ${nutritionText}${allergenText}. يبقى خطر التلامس المتبادل قائمًا.`
-    : `Yes. ${customization.optionName} is documented for ${product.name}; ${priceText}, ${nutritionText}${allergenText}. Cross-contact risk still remains.`;
+    : `Yes. ${customization.optionName} is documented for ${product.name}; ${priceText}${nutritionText}${allergenText}. Cross-contact risk still remains.`;
 
   return logResponse(
     "customization_question",
@@ -277,7 +292,7 @@ function englishOpening(
     case "spicy":
       return `If you enjoy some heat, ${product.name} is a strong spicy choice`;
     default:
-      return `${product.name} is my leading recommendation`;
+      return `${product.name} is my leading recommendation.`;
   }
 }
 
@@ -313,7 +328,7 @@ function reasonParts(
   const constraints = interpretation.constraints;
   const reasons: string[] = [];
   if (constraints.maxBudget !== null && template !== "budget") {
-    reasons.push(arabic ? `سعره $${money(product.price)}` : `it costs $${money(product.price)}`);
+    reasons.push(arabic ? `سعره $${money(product.price)}` : `It costs $${money(product.price)}`);
   }
   if (constraints.minProtein !== null && template !== "high_protein") {
     reasons.push(arabic ? `يحتوي ${product.proteinGrams}غ بروتين` : `it provides ${product.proteinGrams}g protein`);
@@ -333,7 +348,7 @@ function reasonParts(
     reasons.push(arabic ? `مستوى التوابل الموثق ${product.spiceLevel}` : `its documented spice level is ${product.spiceLevel}`);
   }
   if (!reasons.length && template === "general") {
-    reasons.push(arabic ? `سعره $${money(product.price)}` : `it costs $${money(product.price)}`);
+    reasons.push(arabic ? `سعره $${money(product.price)}` : `It costs $${money(product.price)}`);
   }
   return reasons;
 }
@@ -351,6 +366,10 @@ function logResponse(
   console.log("products:", products.map(product => product.id));
   console.log("language:", language);
   return reply;
+}
+
+function capitalizeSentence(value: string) {
+  return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
 }
 
 function isArabic(language: NoriLanguage) {

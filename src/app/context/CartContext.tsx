@@ -1,4 +1,5 @@
-import { createContext, useContext, useState, useCallback, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
+import type { NoriSelectedCustomization } from "../../server/types/noriChat";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -11,6 +12,9 @@ export type CartItem = {
   image: string;
   category: string;
   customizations?: Record<string, string>;
+  noriCustomizations?: NoriSelectedCustomization[];
+  noriActionId?: string;
+  adjustedNutrition?: NoriSelectedCustomization["nutritionAdjustment"];
   savedForLater?: boolean;
   calories?: number;
 };
@@ -84,6 +88,7 @@ export type CouponResult = {
 // ─── Context Shape ───────────────────────────────────────────────────────────
 
 type CartContextType = {
+  providerInstanceId: string;
   // Cart
   items: CartItem[];
   savedItems: CartItem[];
@@ -190,6 +195,7 @@ function readStored<T>(key: string, fallback: T): T {
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  const providerInstanceId = useRef(crypto.randomUUID()).current;
   const [items, setItems] = useState<CartItem[]>(() => readStored("morrow_cart", [
     { id: "b1", name: "Spicy Nori Burger", price: 8.90, basePrice: 8.90, qty: 2, image: "https://images.unsplash.com/photo-1606149059549-6042addafc5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", category: "burger", calories: 520 },
     { id: "s1", name: "Rosemary Fries", price: 3.50, basePrice: 3.50, qty: 1, image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", category: "side", calories: 320 },
@@ -230,7 +236,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const addItem = useCallback((item: Omit<CartItem, "qty">) => {
     setItems(prev => {
       const existing = prev.find(i => i.id === item.id);
-      if (existing) return prev.map(i => i.id === item.id ? { ...i, qty: i.qty + 1 } : i);
+      if (existing) return prev.map(i => i.id === item.id ? { ...i, ...item, qty: i.qty + 1 } : i);
       return [...prev, { ...item, qty: 1 }];
     });
   }, []);
@@ -346,6 +352,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   return (
     <CartContext.Provider value={{
+      providerInstanceId,
       items, savedItems, addItem, removeItem, updateQty, updateCustomizations, saveForLater, moveToCart, clearCart,
       orderType, setOrderType, orderNotes, setOrderNotes,
       coupon, applyCoupon, removeCoupon,
