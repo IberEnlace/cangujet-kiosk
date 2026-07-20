@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { MOCK_CREDENTIALS } from "./mockCredentials";
-import { AUTH_FLAG_KEY, AUTH_ROLE_KEY, DEVICE_MODE_KEY, getHomeRouteForRole, isDeviceMode, isStaffRole, type AppRoute, type DeviceMode, type StaffRole, type UserRole } from "./roleConfig";
+import { AUTH_FLAG_KEY, AUTH_ROLE_KEY, DEVICE_MODE_KEY, ROUTES, getHomeRouteForRole, isDeviceMode, isStaffRole, type AppRoute, type DeviceMode, type StaffRole, type UserRole } from "./roleConfig";
 import { canRoleAccess } from "./routeGuards";
 
 interface AuthContextValue {
@@ -80,5 +80,5 @@ export function useAuth() {
 export function getDefaultRouteForDevice(mode: DeviceMode, role: UserRole | null, authenticated: boolean): AppRoute {
   if (mode === "unassigned") return "/select-role";
   if (isStaffRole(mode)) return authenticated && role === mode ? getHomeRouteForRole(mode) : `/${mode}/login` as AppRoute;
-  return getHomeRouteForRole(mode);
+  return mode === "customer" ? ROUTES.idle : getHomeRouteForRole(mode);
 }

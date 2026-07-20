@@ -3,6 +3,10 @@ export type StaffRole = Extract<UserRole, "admin" | "cashier" | "kitchen">;
 export type DeviceMode = "unassigned" | Exclude<UserRole, "developer">;
 
 export const ROUTES = {
+  idle: "/idle",
+  language: "/language",
+  service: "/service",
+  categories: "/categories",
   selectRole: "/select-role",
   kiosk: "/kiosk",
   cart: "/cart",
@@ -35,7 +39,7 @@ export function getLoginRouteForRole(role: StaffRole): AppRoute {
 
 export function getHomeRouteForRole(role: UserRole): AppRoute {
   const routes: Record<UserRole, AppRoute> = {
-    customer: ROUTES.kiosk, admin: ROUTES.admin, cashier: ROUTES.cashier,
+    customer: ROUTES.idle, admin: ROUTES.admin, cashier: ROUTES.cashier,
     kitchen: ROUTES.kitchen, display: ROUTES.display, developer: ROUTES.dev,
   };
   return routes[role];

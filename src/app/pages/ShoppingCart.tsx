@@ -68,7 +68,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
   const isCartEmpty = items.length === 0;
 
   return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#080b08]/90 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center justify-between">
         <button
@@ -93,18 +93,18 @@ export default function ShoppingCart({ onNavigate }: Props) {
         </div>
       </header>
 
-      <div className="flex flex-1 gap-0 max-w-[1600px] mx-auto w-full px-6 py-8">
+      <div className="flex flex-1 flex-col gap-6 lg:flex-row lg:gap-0 max-w-[1080px] mx-auto w-full px-4 sm:px-6 py-6 sm:py-8">
         {/* Left: Cart Items */}
-        <div className="flex-1 pr-8 flex flex-col gap-6">
+        <div className="flex-1 lg:pr-8 flex flex-col gap-6">
 
           {/* Order Type Pill */}
           <div className="flex items-center gap-2 p-1 bg-white/[0.04] border border-white/10 rounded-2xl w-fit">
-            {(["eat-here", "take-away"] as const).map(type => (
+            {(["dine_in", "take_away"] as const).map(type => (
               <button
                 key={type}
                 className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all ${orderType === type ? "bg-[#d7ff7a] text-[#17200f]" : "text-white/50 hover:text-white"}`}
               >
-                {type === "eat-here" ? "🍽 Eat Here" : "🛍 Take Away"}
+                {type === "dine_in" ? "🍽 Eat Here" : "🛍 Take Away"}
               </button>
             ))}
           </div>
@@ -299,7 +299,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
         </div>
 
         {/* Right: Order Summary */}
-        <div className="w-[420px] flex-shrink-0 flex flex-col gap-4">
+        <div className="w-full lg:w-[420px] flex-shrink-0 flex flex-col gap-4">
 
           {/* Coupon / Promo */}
           <div className="rounded-2xl bg-white/[0.04] border border-white/8 overflow-hidden">

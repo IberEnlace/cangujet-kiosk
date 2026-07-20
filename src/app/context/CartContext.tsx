@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
 import type { NoriSelectedCustomization } from "../../server/types/noriChat";
+import { isOrderType } from "../config/serviceOptions";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -19,7 +20,7 @@ export type CartItem = {
   calories?: number;
 };
 
-export type OrderType = "eat-here" | "take-away";
+export type OrderType = "dine_in" | "take_away";
 
 export type PaymentMethod =
   | "cash" | "cashier" | "credit" | "debit"
@@ -101,8 +102,9 @@ type CartContextType = {
   clearCart: () => void;
 
   // Order
-  orderType: OrderType;
+  orderType: OrderType | null;
   setOrderType: (t: OrderType) => void;
+  resetOrderType: () => void;
   orderNotes: string;
   setOrderNotes: (n: string) => void;
   coupon: CouponResult | null;
@@ -149,12 +151,12 @@ const VALID_COUPONS: Record<string, CouponResult> = {
 };
 
 const initialKitchenOrders: KitchenOrder[] = [
-  { id: "ko1", number: 42, items: [{ name: "Spicy Nori Burger", qty: 2 }, { name: "Rosemary Fries", qty: 2 }], status: "cooking", priority: true, delayed: false, startTime: Date.now() - 420000, estimatedMinutes: 8, type: "eat-here", customer: "Ahmed" },
-  { id: "ko2", number: 43, items: [{ name: "Smoky Truffle Beef", qty: 1 }, { name: "Iced Matcha Latte", qty: 2 }], status: "preparing", priority: false, delayed: false, startTime: Date.now() - 120000, estimatedMinutes: 12, type: "take-away", customer: "Sara" },
-  { id: "ko3", number: 44, items: [{ name: "Zen Garden Bowl", qty: 3 }], status: "received", priority: false, delayed: true, startTime: Date.now() - 900000, estimatedMinutes: 15, type: "eat-here", customer: "Mike" },
-  { id: "ko4", number: 41, items: [{ name: "Tiny Tenders Combo", qty: 2 }, { name: "Rosemary Fries", qty: 1 }], status: "ready", priority: false, delayed: false, startTime: Date.now() - 600000, estimatedMinutes: 10, type: "take-away", customer: "Lena" },
-  { id: "ko5", number: 40, items: [{ name: "Spicy Nori Burger", qty: 1 }], status: "completed", priority: false, delayed: false, startTime: Date.now() - 1200000, estimatedMinutes: 9, type: "eat-here", customer: "Omar" },
-  { id: "ko6", number: 45, items: [{ name: "Smoky Truffle Beef", qty: 2 }, { name: "Iced Matcha Latte", qty: 1 }], status: "received", priority: true, delayed: false, startTime: Date.now() - 60000, estimatedMinutes: 11, type: "eat-here", customer: "Nora" },
+  { id: "ko1", number: 42, items: [{ name: "Spicy Nori Burger", qty: 2 }, { name: "Rosemary Fries", qty: 2 }], status: "cooking", priority: true, delayed: false, startTime: Date.now() - 420000, estimatedMinutes: 8, type: "dine_in", customer: "Ahmed" },
+  { id: "ko2", number: 43, items: [{ name: "Smoky Truffle Beef", qty: 1 }, { name: "Iced Matcha Latte", qty: 2 }], status: "preparing", priority: false, delayed: false, startTime: Date.now() - 120000, estimatedMinutes: 12, type: "take_away", customer: "Sara" },
+  { id: "ko3", number: 44, items: [{ name: "Zen Garden Bowl", qty: 3 }], status: "received", priority: false, delayed: true, startTime: Date.now() - 900000, estimatedMinutes: 15, type: "dine_in", customer: "Mike" },
+  { id: "ko4", number: 41, items: [{ name: "Tiny Tenders Combo", qty: 2 }, { name: "Rosemary Fries", qty: 1 }], status: "ready", priority: false, delayed: false, startTime: Date.now() - 600000, estimatedMinutes: 10, type: "take_away", customer: "Lena" },
+  { id: "ko5", number: 40, items: [{ name: "Spicy Nori Burger", qty: 1 }], status: "completed", priority: false, delayed: false, startTime: Date.now() - 1200000, estimatedMinutes: 9, type: "dine_in", customer: "Omar" },
+  { id: "ko6", number: 45, items: [{ name: "Smoky Truffle Beef", qty: 2 }, { name: "Iced Matcha Latte", qty: 1 }], status: "received", priority: true, delayed: false, startTime: Date.now() - 60000, estimatedMinutes: 11, type: "dine_in", customer: "Nora" },
 ];
 
 const initialUser: UserProfile = {
@@ -194,6 +196,21 @@ function readStored<T>(key: string, fallback: T): T {
   catch { return fallback; }
 }
 
+function readSessionOrderType(): OrderType | null {
+  try {
+    const value = sessionStorage.getItem("morrow_customer_order_type");
+    return isOrderType(value) ? value : null;
+  } catch { return null; }
+}
+
+function readKitchenOrders(): KitchenOrder[] {
+  const stored = readStored<Array<Omit<KitchenOrder, "type"> & { type: string }>>("morrow_kitchen_orders", initialKitchenOrders);
+  return stored.map(order => ({
+    ...order,
+    type: isOrderType(order.type) ? order.type : order.type === "take-away" ? "take_away" : "dine_in",
+  }));
+}
+
 export function CartProvider({ children }: { children: ReactNode }) {
   const providerInstanceId = useRef(crypto.randomUUID()).current;
   const [items, setItems] = useState<CartItem[]>(() => readStored("morrow_cart", [
@@ -202,7 +219,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     { id: "d1", name: "Iced Matcha Latte", price: 4.50, basePrice: 4.50, qty: 1, image: "https://images.unsplash.com/photo-1543007630-9710e4a00a20?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", category: "drink", calories: 150 },
   ]));
   const [savedItems, setSavedItems] = useState<CartItem[]>([]);
-  const [orderType, setOrderType] = useState<OrderType>("eat-here");
+  const [orderType, setOrderTypeState] = useState<OrderType | null>(readSessionOrderType);
   const [orderNotes, setOrderNotes] = useState("");
   const [coupon, setCoupon] = useState<CouponResult | null>(null);
   const [giftCardBalance, setGiftCardBalance] = useState(0);
@@ -211,8 +228,18 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [orderStatus, setOrderStatus] = useState<OrderStatus>("idle");
   const [queueNumber, setQueueNumber] = useState(0);
   const [currentOrderId, setCurrentOrderId] = useState("");
-  const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>(() => readStored("morrow_kitchen_orders", initialKitchenOrders));
+  const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>(readKitchenOrders);
   const [user, setUser] = useState<UserProfile>(() => readStored("morrow_user_profile", initialUser));
+
+  const setOrderType = useCallback((type: OrderType) => {
+    setOrderTypeState(type);
+    try { sessionStorage.setItem("morrow_customer_order_type", type); } catch { /* Session storage may be unavailable. */ }
+  }, []);
+
+  const resetOrderType = useCallback(() => {
+    setOrderTypeState(null);
+    try { sessionStorage.removeItem("morrow_customer_order_type"); } catch { /* Session storage may be unavailable. */ }
+  }, []);
 
   useEffect(() => { localStorage.setItem("morrow_cart", JSON.stringify(items)); }, [items]);
   useEffect(() => { localStorage.setItem("morrow_kitchen_orders", JSON.stringify(kitchenOrders)); }, [kitchenOrders]);
@@ -313,7 +340,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       delayed: false,
       startTime: Date.now(),
       estimatedMinutes,
-      type: orderType,
+      type: orderType ?? "dine_in",
     };
     setKitchenOrders(prev => [newOrder, ...prev]);
 
@@ -354,7 +381,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     <CartContext.Provider value={{
       providerInstanceId,
       items, savedItems, addItem, removeItem, updateQty, updateCustomizations, saveForLater, moveToCart, clearCart,
-      orderType, setOrderType, orderNotes, setOrderNotes,
+      orderType, setOrderType, resetOrderType, orderNotes, setOrderNotes,
       coupon, applyCoupon, removeCoupon,
       giftCardBalance, applyGiftCard,
       rewardsApplied, applyRewards,

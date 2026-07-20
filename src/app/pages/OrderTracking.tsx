@@ -65,7 +65,7 @@ export default function OrderTracking({ onNavigate }: Props) {
   };
 
   return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
       {/* Notification Toast */}
       {showNotif && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 bg-[#d7ff7a] text-[#17200f] px-6 py-3 rounded-2xl font-bold text-sm flex items-center gap-3 shadow-2xl animate-bounce">

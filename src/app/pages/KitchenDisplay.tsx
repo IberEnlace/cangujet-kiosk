@@ -82,7 +82,7 @@ function OrderCard({ order, onAdvance }: { order: KitchenOrder; onAdvance: (id: 
           <ElapsedTimer startTime={order.startTime} />
           <span className="text-white/20">·</span>
           <span className={`text-xs ${isOverdue ? "text-red-400" : "text-white/30"}`}>
-            {order.type === "eat-here" ? "🍽" : "🛍"}
+            {order.type === "dine_in" ? "🍽" : "🛍"}
           </span>
         </div>
       </div>

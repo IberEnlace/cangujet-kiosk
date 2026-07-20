@@ -137,7 +137,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
   // ─── Screens ──────────────────────────────────────────────────────────────
 
   if (screen === "select") return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
       <header className="sticky top-0 z-40 bg-[#080b08]/90 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center justify-between">
         <button onClick={() => onNavigate("cart")} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors group">
           <span className="size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></span>
@@ -152,7 +152,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
         </div>
       </header>
 
-      <div className="max-w-5xl mx-auto w-full px-6 py-8 flex gap-8">
+      <div className="max-w-4xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6 lg:flex-row lg:gap-8">
         {/* Payment Methods Grid */}
         <div className="flex-1">
           <div className="mb-6">
@@ -186,7 +186,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
         </div>
 
         {/* Order Summary Sidebar */}
-        <div className="w-[320px] flex-shrink-0">
+        <div className="w-full lg:w-[320px] flex-shrink-0">
           <div className="rounded-2xl bg-white/[0.04] border border-white/8 p-5 sticky top-24">
             <h3 className="font-bold text-sm mb-4 text-white/70 flex items-center gap-2"><Receipt size={14} /> Order Summary</h3>
             <div className="flex flex-col gap-2.5 text-sm">
@@ -217,14 +217,14 @@ export default function PaymentFlow({ onNavigate }: Props) {
   );
 
   if (screen === "card") return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
       <header className="sticky top-0 z-40 bg-[#080b08]/90 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center gap-4">
         <button onClick={() => setScreen("select")} className="size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></button>
         <h1 className="font-bold text-lg">{selectedMethod === "debit" ? "Debit" : "Credit"} Card Payment</h1>
         <div className="ml-auto flex items-center gap-1.5 text-xs text-white/40"><Lock size={14} /> Secure</div>
       </header>
 
-      <div className="max-w-3xl mx-auto w-full px-6 py-8 flex gap-8">
+      <div className="max-w-3xl mx-auto w-full px-4 sm:px-6 py-6 sm:py-8 flex flex-col gap-6 lg:flex-row lg:gap-8">
         <div className="flex-1 flex flex-col gap-6">
           {/* Card Visual */}
           <div
@@ -336,7 +336,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
           </button>
         </div>
 
-        <div className="w-[260px] flex-shrink-0 flex flex-col gap-4">
+        <div className="w-full lg:w-[260px] flex-shrink-0 flex flex-col gap-4">
           <div className="rounded-2xl bg-white/[0.04] border border-white/8 p-4">
             <p className="text-xs text-white/40 mb-3 font-semibold uppercase tracking-wider">Amount Due</p>
             <p className="text-3xl font-bold text-[#d7ff7a]">${total.toFixed(2)}</p>
@@ -354,7 +354,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
   );
 
   if (screen === "qr") return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
       <button onClick={() => setScreen("select")} className="absolute top-6 left-6 size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></button>
       <div className="text-center">
         <h2 className="text-2xl font-bold">Scan to Pay</h2>
@@ -377,7 +377,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
   );
 
   if (screen === "split") return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
       <header className="sticky top-0 z-40 bg-[#080b08]/90 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center gap-4">
         <button onClick={() => setScreen("select")} className="size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></button>
         <h1 className="font-bold text-lg">Split Payment</h1>
@@ -432,7 +432,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
   );
 
   if (screen === "wallet") return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-6 p-8">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-6 p-6 sm:p-8">
       <button onClick={() => setScreen("select")} className="absolute top-6 left-6 size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></button>
       <h2 className="text-2xl font-bold">Digital Wallet</h2>
       <div className="grid grid-cols-3 gap-4 w-full max-w-lg">
@@ -448,7 +448,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
   );
 
   if (screen === "processing") return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
       <div className="relative">
         <div className="size-28 rounded-full border-4 border-white/10 flex items-center justify-center">
           <div className="absolute inset-0 rounded-full border-4 border-t-[#d7ff7a] animate-spin" />
@@ -474,7 +474,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
   );
 
   if (screen === "success") return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
       <div className="relative">
         <div className="size-32 rounded-full bg-[#d7ff7a]/10 border border-[#d7ff7a]/30 flex items-center justify-center">
           <div className="size-20 rounded-full bg-[#d7ff7a] flex items-center justify-center animate-[bounce_0.5s_ease-in-out]">
@@ -526,7 +526,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
   );
 
   if (screen === "failed") return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
       <div className="size-32 rounded-full bg-red-500/10 border border-red-500/30 flex items-center justify-center">
         <div className="size-20 rounded-full bg-red-500 flex items-center justify-center">
           <X size={36} className="text-white" />
@@ -558,7 +558,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
   );
 
   if (screen === "receipt") return (
-    <div className="min-h-screen bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-6 p-8">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-6 p-6 sm:p-8">
       <div className="size-16 rounded-2xl bg-[#d7ff7a]/10 border border-[#d7ff7a]/20 flex items-center justify-center">
         <Receipt size={28} className="text-[#d7ff7a]" />
       </div>

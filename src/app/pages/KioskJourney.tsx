@@ -6,6 +6,7 @@ import {
   TrendingUp
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import { useLanguage } from "../context/LanguageContext";
 import type { NoriChatRequest, NoriConversationState } from "../../server/types/noriChat";
 import { executeNoriCartActions, serializeNoriCart } from "../services/noriCartActions";
 import { postNoriChat, shouldSubmitNoriKey } from "../services/noriChatClient";
@@ -44,7 +45,8 @@ const fullMenu: KioskItem[] = [
   { id: "6", name: "Choco Lava Souffle", price: 5.80, image: dessertImg, desc: "Warm Belgian chocolate cake, melting chocolate center, Madagascar vanilla cream.", cal: 410, rating: 4.8 }
 ];
 
-export default function KioskJourney({ onBackToSelection, onCheckout }: { onBackToSelection?: () => void; onCheckout?: () => void }) {
+export default function KioskJourney({ onBackToSelection, onCheckout, initialScreen = "Splash" }: { onBackToSelection?: () => void; onCheckout?: () => void; initialScreen?: string }) {
+  const { language, setLanguage } = useLanguage();
   const {
     items: sharedCart, addItem: addSharedItem, removeItem, updateQty,
     updateCustomizations, clearCart, setOrderType, providerInstanceId,
@@ -54,8 +56,8 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
   useEffect(() => { console.log("[CART][PROVIDER_INSTANCE]", providerInstanceId); }, [providerInstanceId]);
   const executedActionIdsRef = useRef(new Set<string>());
   const actionResultsRef = useRef<NoriChatRequest["actionResults"]>([]);
-  const [screen, setScreen] = useState("Splash");
-  const [lang, setLang] = useState("English");
+  const [screen, setScreen] = useState(initialScreen);
+  const [lang, setLang] = useState(language === "ar" ? "العربية" : language === "tr" ? "Türkçe" : "English");
   const [accessibilitySettings, setAccessibilitySettings] = useState({
     largeText: false,
     highContrast: false,
@@ -105,7 +107,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
       message,
       cart: serializedCart,
       activeAllergens: [],
-      language: lang === "العربية" ? "ar" : lang === "Türkçe" ? "tr" : "en",
+      language,
       conversationState: aiConversationState,
       actionResults: actionResultsRef.current,
     };
@@ -296,6 +298,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
                   key={x.code}
                   onClick={() => {
                     setLang(x.name);
+                    setLanguage(x.name === "العربية" ? "ar" : x.name === "Türkçe" ? "tr" : "en");
                     setScreen("Access");
                   }}
                   className={`flex items-center justify-between p-6 rounded-2xl border text-left transition-all ${
@@ -404,7 +407,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
               <button 
                 onClick={() => {
                   setSelectedDining("here");
-                  setOrderType("eat-here");
+                  setOrderType("dine_in");
                   setScreen("Guest login");
                 }}
                 className={`group p-8 rounded-[28px] border text-center transition-all ${
@@ -426,7 +429,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
               <button 
                 onClick={() => {
                   setSelectedDining("away");
-                  setOrderType("take-away");
+                  setOrderType("take_away");
                   setScreen("Guest login");
                 }}
                 className={`group p-8 rounded-[28px] border text-center transition-all ${
@@ -1202,10 +1205,10 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
 
   return (
     <main className="min-h-screen bg-[#0f120e] font-['DM_Sans'] text-[#f8f8f3] overflow-x-hidden">
-      <div className="mx-auto grid min-h-screen max-w-[1900px] lg:grid-cols-[260px_1fr]">
+      <div className="mx-auto grid min-h-[100dvh] w-full max-w-[1080px]">
         
         {/* Simulator Controls Sidebar */}
-        <aside className="hidden border-r border-white/10 bg-[#10130f] p-5 lg:block h-screen sticky top-0 overflow-y-auto">
+        <aside className="hidden" aria-hidden="true">
           <div className="flex items-center gap-2 mb-6">
             <span className="grid size-8 place-items-center rounded-lg bg-[#d7ff7a] text-black">
               <UtensilsCrossed size={16} />
@@ -1247,7 +1250,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout }: { onBack
         </aside>
 
         {/* Live Simulator View */}
-        <section className="relative min-h-screen p-6 md:p-8 flex flex-col justify-center">
+        <section className="relative min-h-[100dvh] p-4 sm:p-6 md:p-8 flex flex-col justify-center">
           <div className="w-full max-w-6xl mx-auto">
             {currentScreenContent}
           </div>

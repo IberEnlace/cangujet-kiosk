@@ -1,6 +1,6 @@
 import { ROUTES, type AppRoute, type StaffRole, type UserRole, getHomeRouteForRole, getLoginRouteForRole, isStaffRole } from "./roleConfig";
 
-const CUSTOMER_ROUTES: AppRoute[] = [ROUTES.kiosk, ROUTES.cart, ROUTES.payment, ROUTES.tracking];
+const CUSTOMER_ROUTES: AppRoute[] = [ROUTES.idle, ROUTES.language, ROUTES.service, ROUTES.categories, ROUTES.kiosk, ROUTES.cart, ROUTES.payment, ROUTES.tracking];
 const LOGIN_ROLE: Partial<Record<AppRoute, StaffRole>> = {
   [ROUTES.adminLogin]: "admin", [ROUTES.cashierLogin]: "cashier", [ROUTES.kitchenLogin]: "kitchen",
 };
