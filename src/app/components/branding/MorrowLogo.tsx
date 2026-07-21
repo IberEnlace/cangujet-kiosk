@@ -12,5 +12,5 @@ type MorrowLogoProps = {
 
 export default function MorrowLogo({ variant = "full", className = "", alt, priority = false }: MorrowLogoProps) {
   const meaningfulAlt = alt ?? (variant === "full" ? "MORROW" : "MORROW logo");
-  return <img src={variant === "full" ? fullLogo : symbolLogo} alt={meaningfulAlt} loading={priority ? "eager" : "lazy"} decoding="async" className={`${className}`} />;
+  return <img src={variant === "full" ? fullLogo : symbolLogo} alt={meaningfulAlt} loading={priority ? "eager" : "lazy"} decoding="async" className={`block max-w-full object-contain  ${className}`} />;
 }
