@@ -27,8 +27,7 @@ export default function IdleScreen({ onStart }: { onStart: () => void }) {
   const enter = (delay: number) => reducedMotion ? {} : { initial: { opacity: 0, y: 18 }, animate: { opacity: 1, y: 0 }, transition: { duration: .7, delay } };
   return (
     <main className="relative isolate min-h-[100dvh] w-full cursor-pointer overflow-hidden bg-[#0b1009] font-['DM_Sans'] text-white selection:bg-transparent" onClick={handleStart}>
-      <BackgroundVideo videos={config.videos} intervalMs={config.videoIntervalMs} transitionDurationMs={config.transitionDurationMs} minimumPlaybackBeforeTransitionMs={config.minimumPlaybackBeforeTransitionMs} />
-      <div className="absolute inset-0 bg-black/50" aria-hidden="true" />
+      <BackgroundVideo videos={config.videos} intervalMs={config.videoIntervalMs} minimumPlaybackBeforeTransitionMs={config.minimumPlaybackBeforeTransitionMs} />
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_20%,rgba(0,0,0,.48)_100%),linear-gradient(to_top,rgba(5,8,4,.92),transparent_58%)]" aria-hidden="true" />
 
       <motion.section animate={{ opacity: isStarting ? 0 : 1, scale: isStarting && !reducedMotion ? .985 : 1 }} transition={{ duration: reducedMotion ? .1 : .45 }}
