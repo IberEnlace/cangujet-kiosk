@@ -7,10 +7,15 @@ export const ROUTES = {
   language: "/language",
   service: "/service",
   categories: "/categories",
+  nori: "/nori",
+  noriChat: "/nori/chat",
+  noriVoice: "/nori/voice",
   selectRole: "/select-role",
   kiosk: "/kiosk",
   cart: "/cart",
   payment: "/payment",
+  cardPayment: "/payment/card",
+  orderConfirmation: "/order-confirmation",
   tracking: "/tracking",
   adminLogin: "/admin/login",
   admin: "/admin",
@@ -20,6 +25,7 @@ export const ROUTES = {
   kitchen: "/kitchen",
   display: "/display",
   deviceSetup: "/device-setup",
+  deviceInfo: "/device-info",
   dev: "/dev",
 } as const;
 

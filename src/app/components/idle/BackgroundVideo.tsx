@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 interface BackgroundVideoProps {
   videos: readonly string[];
@@ -12,7 +12,7 @@ type Layer = 0 | 1;
 
 const otherLayer = (layer: Layer): Layer => layer === 0 ? 1 : 0;
 
-export default function BackgroundVideo({
+function BackgroundVideo({
   videos,
   intervalMs = 9000,
   transitionDurationMs = 1200,
@@ -26,6 +26,7 @@ export default function BackgroundVideo({
   const [layerSources, setLayerSources] = useState<[string, string]>([sources[0] ?? "", sources[1] ?? ""]);
   const [activeLayer, setActiveLayer] = useState<Layer>(0);
   const [hasVisibleVideo, setHasVisibleVideo] = useState(false);
+  const hasVisibleVideoRef = useRef(false);
   const activeLayerRef = useRef<Layer>(0);
   const activeIndexRef = useRef(0);
   const layerSourcesRef = useRef<[string, string]>(layerSources);
@@ -37,9 +38,18 @@ export default function BackgroundVideo({
   const transitionTimerRef = useRef<number>();
   const mountedRef = useRef(true);
 
-  const debug = useCallback((message: string, details?: object) => {
-    if (import.meta.env.DEV) console.debug(`[IdleVideo] ${message}`, details ?? "");
-  }, []);
+  const waitForPaintedFrame = useCallback((video: HTMLVideoElement) => new Promise<void>(resolve => {
+    let settled = false;
+    const finish = () => { if (settled) return; settled = true; window.clearTimeout(timeout); resolve(); };
+    const timeout = window.setTimeout(finish, 700);
+    if (typeof video.requestVideoFrameCallback === "function") {
+      video.requestVideoFrameCallback(() => finish());
+      return;
+    }
+    const afterPaint = () => window.requestAnimationFrame(() => window.requestAnimationFrame(finish));
+    if (video.currentTime > 0 && video.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) afterPaint();
+    else video.addEventListener("timeupdate", afterPaint, { once: true });
+  }), []);
 
   const getNextIndex = useCallback((afterIndex: number) => {
     for (let offset = 1; offset <= sources.length; offset += 1) {
@@ -50,23 +60,21 @@ export default function BackgroundVideo({
   }, [sources]);
 
   const assignSource = useCallback((layer: Layer, source: string) => {
+    if (layerSourcesRef.current[layer] === source) return;
+
     readyRef.current[layer] = false;
     layerSourcesRef.current = layer === 0
       ? [source, layerSourcesRef.current[1]]
       : [layerSourcesRef.current[0], source];
-    setLayerSources([...layerSourcesRef.current]);
-    window.requestAnimationFrame(() => {
-      const video = videoRefs.current[layer].current;
-      if (!video || !mountedRef.current) return;
-      video.muted = true;
-      video.defaultMuted = true;
-      video.load();
-    });
+    setLayerSources(layerSourcesRef.current);
   }, []);
 
   const scheduleRotation = useCallback((requestTransition: () => void) => {
     if (rotationTimerRef.current) window.clearTimeout(rotationTimerRef.current);
-    rotationTimerRef.current = window.setTimeout(requestTransition, Math.max(intervalMs, minimumPlaybackBeforeTransitionMs));
+    rotationTimerRef.current = window.setTimeout(() => {
+      rotationTimerRef.current = undefined;
+      requestTransition();
+    }, Math.max(intervalMs, minimumPlaybackBeforeTransitionMs));
   }, [intervalMs, minimumPlaybackBeforeTransitionMs]);
 
   const beginTransitionRef = useRef<() => void>(() => undefined);
@@ -77,7 +85,6 @@ export default function BackgroundVideo({
     const nextVideo = videoRefs.current[toLayer].current;
     if (!nextVideo || !readyRef.current[toLayer]) {
       transitionRequestedRef.current = true;
-      debug("transition waiting for preload", { nextLayer: toLayer, readyState: nextVideo?.readyState ?? 0 });
       return;
     }
 
@@ -88,8 +95,9 @@ export default function BackgroundVideo({
     nextVideo.defaultMuted = true;
     try {
       await nextVideo.play();
+      await waitForPaintedFrame(nextVideo);
     } catch (error) {
-      debug("playback error", { source: layerSourcesRef.current[toLayer], error });
+      void error;
       isTransitioningRef.current = false;
       failedRef.current.add(layerSourcesRef.current[toLayer]);
       const replacementIndex = getNextIndex(activeIndexRef.current);
@@ -99,11 +107,9 @@ export default function BackgroundVideo({
       return;
     }
     if (!mountedRef.current) return;
-
-    debug("transition start", { activeIndex: activeIndexRef.current, nextIndex: sources.indexOf(layerSourcesRef.current[toLayer]), readyState: nextVideo.readyState });
-    setHasVisibleVideo(true);
     setActiveLayer(toLayer);
     transitionTimerRef.current = window.setTimeout(() => {
+      transitionTimerRef.current = undefined;
       if (!mountedRef.current) return;
       const oldVideo = videoRefs.current[fromLayer].current;
       oldVideo?.pause();
@@ -111,29 +117,30 @@ export default function BackgroundVideo({
       activeLayerRef.current = toLayer;
       activeIndexRef.current = Math.max(0, sources.indexOf(layerSourcesRef.current[toLayer]));
       isTransitioningRef.current = false;
-      debug("transition complete", { activeIndex: activeIndexRef.current });
-
       const followingIndex = getNextIndex(activeIndexRef.current);
       if (followingIndex >= 0 && sources[followingIndex] !== layerSourcesRef.current[toLayer]) {
         assignSource(fromLayer, sources[followingIndex]);
       }
       scheduleRotation(() => beginTransitionRef.current());
     }, transitionDurationMs);
-  }, [assignSource, debug, getNextIndex, scheduleRotation, sources, transitionDurationMs]);
+  }, [assignSource, getNextIndex, scheduleRotation, sources, transitionDurationMs, waitForPaintedFrame]);
 
   useEffect(() => { beginTransitionRef.current = () => { void beginTransition(); }; }, [beginTransition]);
 
   const handleCanPlay = (layer: Layer) => {
     readyRef.current[layer] = true;
     const video = videoRefs.current[layer].current;
-    debug("video ready", { layer, readyState: video?.readyState ?? 0, source: layerSourcesRef.current[layer] });
-    if (layer === activeLayerRef.current && !hasVisibleVideo && video) {
+    if (layer === activeLayerRef.current && !hasVisibleVideoRef.current && video) {
+      hasVisibleVideoRef.current = true;
       video.muted = true;
       video.defaultMuted = true;
       void video.play().then(() => {
         if (!mountedRef.current) return;
-        setHasVisibleVideo(true);
-        scheduleRotation(() => beginTransitionRef.current());
+        void waitForPaintedFrame(video).then(() => {
+          if (!mountedRef.current) return;
+          setHasVisibleVideo(true);
+          scheduleRotation(() => beginTransitionRef.current());
+        });
       }).catch(error => handleError(layer, error));
     } else if (transitionRequestedRef.current && layer === otherLayer(activeLayerRef.current)) {
       void beginTransition();
@@ -145,7 +152,7 @@ export default function BackgroundVideo({
     if (!failedSource) return;
     failedRef.current.add(failedSource);
     readyRef.current[layer] = false;
-    debug("playback error", { layer, source: failedSource, error });
+    void error;
     const replacementIndex = getNextIndex(activeIndexRef.current);
     if (replacementIndex < 0) { if (layer === activeLayerRef.current) setHasVisibleVideo(false); return; }
     if (layer === activeLayerRef.current) {
@@ -187,9 +194,11 @@ export default function BackgroundVideo({
     <div className={`absolute inset-0 overflow-hidden bg-black ${className}`} aria-hidden="true">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(215,255,122,.18),transparent_34%),radial-gradient(circle_at_80%_75%,rgba(126,85,45,.25),transparent_38%),linear-gradient(135deg,#12190f,#080b08_68%,#17200f)]" />
       <video ref={video0Ref} src={layerSources[0]} className={`absolute inset-0 size-full object-cover transition-opacity ease-in-out ${hasVisibleVideo && activeLayer === 0 ? "opacity-100" : "opacity-0"}`} style={layerStyle}
-        autoPlay muted playsInline controls={false} disablePictureInPicture preload="auto" onCanPlay={() => handleCanPlay(0)} onCanPlayThrough={() => handleCanPlay(0)} onEnded={() => { if (!isTransitioningRef.current) void beginTransition(); }} onError={event => handleError(0, event)} onContextMenu={event => event.preventDefault()} />
+        muted playsInline loop controls={false} disablePictureInPicture preload="auto" onCanPlay={() => handleCanPlay(0)} onError={event => handleError(0, event)} onContextMenu={event => event.preventDefault()} />
       <video ref={video1Ref} src={layerSources[1]} className={`absolute inset-0 size-full object-cover transition-opacity ease-in-out ${hasVisibleVideo && activeLayer === 1 ? "opacity-100" : "opacity-0"}`} style={layerStyle}
-        muted playsInline controls={false} disablePictureInPicture preload="auto" onCanPlay={() => handleCanPlay(1)} onCanPlayThrough={() => handleCanPlay(1)} onEnded={() => { if (!isTransitioningRef.current && activeLayerRef.current === 1) void beginTransition(); }} onError={event => handleError(1, event)} onContextMenu={event => event.preventDefault()} />
+        muted playsInline loop controls={false} disablePictureInPicture preload="auto" onCanPlay={() => handleCanPlay(1)} onError={event => handleError(1, event)} onContextMenu={event => event.preventDefault()} />
     </div>
   );
 }
+
+export default memo(BackgroundVideo);

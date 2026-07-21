@@ -5,6 +5,7 @@ import {
   Timer, Users, Zap
 } from "lucide-react";
 import { useCart, type KitchenOrder, type OrderStatus } from "../context/CartContext";
+import MorrowLogo from "../components/branding/MorrowLogo";
 
 type Props = { onNavigate: (route: string) => void };
 
@@ -167,9 +168,7 @@ export default function KitchenDisplay({ onNavigate: _onNavigate }: Props) {
       {/* Header */}
       <header className="bg-[#07090a]/95 backdrop-blur-xl border-b border-white/5 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="size-10 rounded-xl bg-orange-500/20 border border-orange-500/30 flex items-center justify-center">
-            <ChefHat size={18} className="text-orange-400" />
-          </div>
+          <MorrowLogo variant="symbol" priority className="size-10 object-contain" />
           <div>
             <h1 className="font-bold text-base">Kitchen Display</h1>
             <p className="text-xs text-white/40">Morrow Restaurant · {currentTime.toLocaleTimeString()}</p>

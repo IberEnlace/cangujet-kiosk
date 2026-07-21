@@ -6,6 +6,7 @@ import {
   ArrowDownRight, Download, MoreHorizontal, AlertTriangle,
   ArrowLeft, Coffee
 } from "lucide-react";
+import MorrowLogo from "../components/branding/MorrowLogo";
 
 type Props = { onNavigate: (route: string) => void };
 
@@ -564,12 +565,9 @@ export default function Dashboard({ onNavigate }: Props) {
       {/* Sidebar */}
       <aside className="w-56 flex-shrink-0 bg-[#09090b] border-r border-white/5 flex flex-col h-screen sticky top-0">
         {/* Logo */}
-        <div className="px-5 py-5 border-b border-white/5 flex items-center gap-3">
-          <div className="size-8 rounded-xl bg-[#d7ff7a]/20 border border-[#d7ff7a]/30 flex items-center justify-center text-[#d7ff7a] text-sm font-black">M</div>
-          <div>
-            <p className="font-black text-sm tracking-tight">Morrow</p>
-            <p className="text-[10px] text-white/30">Enterprise Admin</p>
-          </div>
+        <div className="border-b border-white/5 px-5 py-5">
+          <MorrowLogo variant="full" priority className="h-auto w-36" />
+          <p className="mt-1 text-[10px] text-white/30">Enterprise Admin</p>
         </div>
 
         {/* Nav */}

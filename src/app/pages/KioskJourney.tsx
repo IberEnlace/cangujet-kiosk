@@ -10,6 +10,7 @@ import { useLanguage } from "../context/LanguageContext";
 import type { NoriChatRequest, NoriConversationState } from "../../server/types/noriChat";
 import { executeNoriCartActions, serializeNoriCart } from "../services/noriCartActions";
 import { postNoriChat, shouldSubmitNoriKey } from "../services/noriChatClient";
+import MorrowLogo from "../components/branding/MorrowLogo";
 
 // Premium Unsplash Images for Kiosk Menu
 const burgerImg = "https://images.unsplash.com/photo-1606149059549-6042addafc5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=1080";
@@ -209,10 +210,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
           </div>
 
           <div className="text-center relative z-10 max-w-xl mx-auto">
-            <div className="mx-auto grid size-28 place-items-center rounded-[38px] bg-[#d7ff7a] text-[#17200f] shadow-[0_0_100px_rgba(215,255,122,.25)] mb-10">
-              <UtensilsCrossed size={48} />
-            </div>
-            <h1 className="text-6xl md:text-7xl font-bold tracking-tight text-white">Morrow</h1>
+            <MorrowLogo variant="full" priority className="mx-auto mb-10 h-auto w-[clamp(15rem,38vw,22rem)]" />
             <p className="mt-4 font-['Space_Mono'] text-xs tracking-[0.4em] text-[#d7ff7a] uppercase">
               Thoughtfully Crafted · Quietly Fast
             </p>

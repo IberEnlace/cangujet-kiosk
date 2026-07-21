@@ -1,8 +1,10 @@
 import { useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Coffee, CupSoda, IceCreamBowl, Pizza, Plus, Salad, Sandwich, ShoppingBag, Sparkles, Soup, UtensilsCrossed } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Coffee, CupSoda, IceCreamBowl, Pizza, Plus, Salad, Sandwich, ShoppingBag, Soup, UtensilsCrossed } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCart } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
+import MorrowLogo from "../../components/branding/MorrowLogo";
+import { useDevice } from "../../context/DeviceContext";
 
 type Product = { id: string; name: string; description: string; price: number; calories: number; badge?: string; symbol: string; image?: string };
 type Category = { name: string; icon: LucideIcon; image: string };
@@ -65,12 +67,13 @@ function createProductImage(symbol: string) {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-interface MenuCatalogProps { onBack: () => void; onCheckout: () => void; onLanguage: () => void; }
+interface MenuCatalogProps { onBack: () => void; onCheckout: () => void; onLanguage: () => void; onNori: () => void; }
 
-export default function MenuCatalog({ onBack, onCheckout, onLanguage }: MenuCatalogProps) {
+export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori }: MenuCatalogProps) {
+  const { config } = useDevice();
   const { language, direction } = useLanguage();
   const { items, addItem } = useCart();
-  const [category, setCategory] = useState("Pizza");
+  const [category, setCategory] = useState(() => sessionStorage.getItem("morrow:nori-entry-category") ?? "Pizza");
   const [view, setView] = useState<"categories" | "products">("categories");
   const [toast, setToast] = useState("");
   const toastTimerRef = useRef<number>();
@@ -79,7 +82,7 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage }: MenuCata
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const currency = useMemo(() => new Intl.NumberFormat(language === "tr" ? "tr-TR" : language === "ar" ? "ar-SA" : "en-US", { style: "currency", currency: "EUR" }), [language]);
 
-  const chooseCategory = (name: string) => { setCategory(name); setView("products"); };
+  const chooseCategory = (name: string) => { setCategory(name); sessionStorage.setItem("morrow:nori-entry-category", name); setView("products"); };
   const addProduct = (product: Product) => {
     addItem({ id: `menu-${product.id}`, name: product.name, price: product.price, basePrice: product.price, calories: product.calories, category, image: product.image ?? createProductImage(product.symbol) });
     setToast(`${product.name} added`);
@@ -94,8 +97,8 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage }: MenuCata
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_10%,rgba(215,255,122,.08),transparent_28%),linear-gradient(145deg,#10160d,#080b08_70%)]" aria-hidden="true" />
         <header className="sticky top-0 z-30 flex h-[clamp(4.6rem,7vh,6rem)] items-center justify-between border-b border-white/10 bg-[#0b1009]/92 px-3 backdrop-blur-xl sm:px-5">
           <button type="button" onClick={onBack} aria-label="Back to service selection" className="grid size-12 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/10 active:scale-95 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]"><BackIcon size={23} aria-hidden="true" /></button>
-          <div className="text-center" dir="ltr"><div className="flex items-center justify-center gap-2"><span className="grid size-8 place-items-center rounded-xl bg-[#d7ff7a] text-[#17200f]"><Sparkles size={15} aria-hidden="true" /></span><b>Morrow</b></div><p className="mt-0.5 text-[10px] text-white/40">{language === "ar" ? "طلبك الجديد" : language === "tr" ? "Yeni siparişiniz" : "Your new order"}</p></div>
-          <div className="flex items-center gap-2"><button type="button" onClick={onLanguage} className="min-h-11 min-w-11 rounded-xl border border-white/10 bg-white/5 px-2 text-xs font-bold uppercase text-white/70 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]">{language}</button><button type="button" onClick={onCheckout} aria-label={`Open cart with ${count} items`} className="relative grid size-12 place-items-center rounded-2xl bg-[#d7ff7a] text-[#17200f] focus-visible:outline focus-visible:outline-4 focus-visible:outline-white"><ShoppingBag size={20} aria-hidden="true" />{count > 0 && <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ffb86c] text-[10px] font-bold text-[#34240e]">{count}</span>}</button></div>
+          <div className="text-center" dir="ltr"><MorrowLogo variant="full" className="hidden h-auto w-28 sm:block" /><MorrowLogo variant="symbol" className="mx-auto size-9 object-contain sm:hidden" alt="" /><p className="mt-0.5 text-[10px] text-white/40">{language === "ar" ? "طلبك الجديد" : language === "tr" ? "Yeni siparişiniz" : "Your new order"}</p></div>
+          <div className="flex items-center gap-2">{config?.settings.aiAssistantEnabled && <button type="button" onClick={onNori} className="hidden min-h-11 rounded-xl border border-[#D7FB69]/25 bg-[#D7FB69]/8 px-3 text-xs font-bold text-[#D7FB69] min-[560px]:block">Ask Nori</button>}<button type="button" onClick={onLanguage} className="min-h-11 min-w-11 rounded-xl border border-white/10 bg-white/5 px-2 text-xs font-bold uppercase text-white/70 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]">{language}</button><button type="button" onClick={onCheckout} aria-label={`Open cart with ${count} items`} className="relative grid size-12 place-items-center rounded-2xl bg-[#d7ff7a] text-[#17200f] focus-visible:outline focus-visible:outline-4 focus-visible:outline-white"><ShoppingBag size={20} aria-hidden="true" />{count > 0 && <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ffb86c] text-[10px] font-bold text-[#34240e]">{count}</span>}</button></div>
         </header>
 
         <div className="grid min-h-[calc(100dvh-5rem)] grid-cols-[88px_minmax(0,1fr)] sm:grid-cols-[120px_minmax(0,1fr)]">

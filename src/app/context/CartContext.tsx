@@ -29,6 +29,7 @@ export type PaymentMethod =
 
 export type OrderStatus =
   | "idle" | "received" | "preparing" | "cooking" | "ready" | "completed";
+export type PaymentStatus = "pending" | "paid";
 
 export type KitchenOrder = {
   id: string;
@@ -124,6 +125,7 @@ type CartContextType = {
 
   // Payment
   paymentMethod: PaymentMethod | null;
+  paymentStatus: PaymentStatus | null;
   setPaymentMethod: (m: PaymentMethod) => void;
   orderStatus: OrderStatus;
   setOrderStatus: (s: OrderStatus) => void;
@@ -225,6 +227,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [giftCardBalance, setGiftCardBalance] = useState(0);
   const [rewardsApplied, setRewardsApplied] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
   const [orderStatus, setOrderStatus] = useState<OrderStatus>("idle");
   const [queueNumber, setQueueNumber] = useState(0);
   const [currentOrderId, setCurrentOrderId] = useState("");
@@ -303,6 +306,11 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setCoupon(null);
     setGiftCardBalance(0);
     setRewardsApplied(0);
+    setPaymentMethod(null);
+    setPaymentStatus(null);
+    setOrderStatus("idle");
+    setQueueNumber(0);
+    setCurrentOrderId("");
   }, []);
 
   const applyCoupon = useCallback((code: string): boolean => {
@@ -329,6 +337,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setQueueNumber(num);
     setCurrentOrderId(id);
     setOrderStatus("received");
+    setPaymentStatus(paymentMethod === "cashier" ? "pending" : "paid");
 
     // Add to kitchen
     const newOrder: KitchenOrder = {
@@ -386,7 +395,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       giftCardBalance, applyGiftCard,
       rewardsApplied, applyRewards,
       subtotal, tax, discount, total, estimatedMinutes,
-      paymentMethod, setPaymentMethod, orderStatus, setOrderStatus,
+      paymentMethod, paymentStatus, setPaymentMethod, orderStatus, setOrderStatus,
       queueNumber, currentOrderId, placeOrder,
       kitchenOrders, updateKitchenOrderStatus,
       user, updateUser, toggleFavorite,

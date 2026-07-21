@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ArrowRight, Hand, UtensilsCrossed } from "lucide-react";
+import { ArrowRight, Hand } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import BackgroundVideo from "../components/idle/BackgroundVideo";
+import MorrowLogo from "../components/branding/MorrowLogo";
 import { idleScreenConfig as config } from "../config/idleScreenConfig";
 
 export default function IdleScreen({ onStart }: { onStart: () => void }) {
@@ -32,11 +33,10 @@ export default function IdleScreen({ onStart }: { onStart: () => void }) {
 
       <motion.section animate={{ opacity: isStarting ? 0 : 1, scale: isStarting && !reducedMotion ? .985 : 1 }} transition={{ duration: reducedMotion ? .1 : .45 }}
         className="relative z-10 mx-auto flex min-h-[100dvh] max-w-5xl flex-col items-center justify-center px-6 py-12 text-center sm:px-10">
-        <motion.div {...enter(0)} className="mb-7 grid size-20 place-items-center rounded-[1.7rem] border border-white/15 bg-white/10 text-[#d7ff7a] shadow-[0_0_60px_rgba(215,255,122,.18)] backdrop-blur-md sm:size-24">
-          <UtensilsCrossed className="size-9 sm:size-11" strokeWidth={1.7} />
+        <motion.div {...enter(0)} className="mb-7">
+          <MorrowLogo variant="full" priority className="h-auto w-[clamp(15rem,42vw,24rem)]" />
         </motion.div>
         <motion.p {...enter(.08)} className="mb-3 font-['Space_Mono'] text-[11px] font-bold uppercase tracking-[.45em] text-[#d7ff7a] sm:text-xs">Restaurant kiosk</motion.p>
-        <motion.h1 {...enter(.16)} className="text-[clamp(3.8rem,11vw,7rem)] font-bold leading-none tracking-[-.07em] drop-shadow-2xl">{config.title}</motion.h1>
         <motion.p {...enter(.25)} className="mt-5 text-[clamp(1.15rem,2.8vw,1.8rem)] font-medium tracking-wide text-white/90">{config.slogan}</motion.p>
         <motion.p {...enter(.32)} className="mt-3 text-base text-white/55 sm:text-lg">{config.description}</motion.p>
         <motion.button {...enter(.4)} animate={reducedMotion ? undefined : { scale: [1, 1.025, 1] }} transition={reducedMotion ? undefined : { duration: 2.8, repeat: Infinity, ease: "easeInOut", delay: 1.2 }}
@@ -44,7 +44,7 @@ export default function IdleScreen({ onStart }: { onStart: () => void }) {
           className="group mt-10 flex min-h-20 w-full max-w-[430px] items-center justify-center gap-4 rounded-3xl bg-[#d7ff7a] px-8 text-lg font-extrabold tracking-[.12em] text-[#17200f] shadow-[0_22px_70px_rgba(215,255,122,.22)] transition hover:bg-[#e2ff9d] focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-4 focus-visible:outline-white active:scale-[.98] disabled:pointer-events-none sm:min-h-24 sm:text-xl">
           {config.buttonLabel}<ArrowRight className="transition-transform group-hover:translate-x-1" />
         </motion.button>
-        <motion.div {...enter(.52)} animate={reducedMotion ? undefined : { opacity: [.45, 1, .45] }} transition={reducedMotion ? undefined : { duration: 2.4, repeat: Infinity }} className="mt-8 flex items-center gap-3 text-sm font-medium tracking-wide text-white/55">
+        <motion.div {...enter(.52)} className="mt-8 flex items-center gap-3 text-sm font-medium tracking-wide text-white/55">
           <Hand size={18} /> {config.touchLabel}
         </motion.div>
       </motion.section>

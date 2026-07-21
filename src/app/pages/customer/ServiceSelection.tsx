@@ -5,11 +5,15 @@ import { serviceOptions } from "../../config/serviceOptions";
 import { useCart, type OrderType } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCustomerTranslation } from "../../hooks/useCustomerTranslation";
+import MorrowLogo from "../../components/branding/MorrowLogo";
+import { useDevice } from "../../context/DeviceContext";
 
 interface ServiceSelectionProps { onBack: () => void; onContinue: () => void; }
 
 export default function ServiceSelection({ onBack, onContinue }: ServiceSelectionProps) {
   const { orderType, setOrderType } = useCart();
+  const { config } = useDevice();
+  const availableServiceOptions = serviceOptions.filter(option => config?.settings.allowedOrderTypes.includes(option.id));
   const { language, direction } = useLanguage();
   const translation = useCustomerTranslation().serviceSelection;
   const reducedMotion = useReducedMotion();
@@ -46,9 +50,8 @@ export default function ServiceSelection({ onBack, onContinue }: ServiceSelectio
           <button type="button" onClick={handleBack} aria-label={translation.back} className="flex min-h-12 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/70 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#d7ff7a] sm:px-5">
             <BackArrow size={19} aria-hidden="true" /><span>{translation.back}</span>
           </button>
-          <motion.div initial={reducedMotion ? undefined : { opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3" dir="ltr">
-            <div className="text-end"><b className="block text-lg tracking-tight">MORROW</b><span className="font-['Space_Mono'] text-[9px] uppercase tracking-[.22em] text-white/40">Kiosk</span></div>
-            <span className="grid size-12 place-items-center rounded-2xl bg-[#d7ff7a] text-[#17200f] shadow-lg shadow-[#d7ff7a]/15"><UtensilsCrossed size={23} aria-hidden="true" /></span>
+          <motion.div initial={reducedMotion ? undefined : { opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} dir="ltr">
+            <MorrowLogo variant="full" priority className="h-auto w-[clamp(8.5rem,22vw,12rem)]" />
           </motion.div>
         </header>
 
@@ -60,7 +63,7 @@ export default function ServiceSelection({ onBack, onContinue }: ServiceSelectio
           </motion.div>
 
           <div className="mx-auto mt-[clamp(2rem,5vh,4.5rem)] grid w-full max-w-3xl gap-[clamp(1rem,2.2vh,2rem)] landscape:max-w-4xl landscape:grid-cols-2">
-            {serviceOptions.map((option, index) => {
+            {availableServiceOptions.map((option, index) => {
               const isSelected = selected === option.id;
               const wasRestored = !selected && orderType === option.id;
               const Icon = option.id === "dine_in" ? UtensilsCrossed : Package;

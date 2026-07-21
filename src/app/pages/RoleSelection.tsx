@@ -1,6 +1,7 @@
-import { BarChart3, ChefHat, Monitor, ShoppingBag, Store, Utensils, Check } from "lucide-react";
+import { BarChart3, ChefHat, Monitor, Store, Utensils, Check } from "lucide-react";
 import { useState } from "react";
 import type { DeviceMode } from "../auth/roleConfig";
+import MorrowLogo from "../components/branding/MorrowLogo";
 
 type Props = { onSelect: (mode: Exclude<DeviceMode, "unassigned">, remember: boolean) => void };
 
@@ -19,9 +20,9 @@ export default function RoleSelection({ onSelect }: Props) {
 
   return <main className="min-h-screen bg-[#07090a] text-[#f0f0eb] font-['DM_Sans'] px-6 py-8 flex flex-col relative overflow-hidden">
     <div className="absolute inset-0 pointer-events-none"><div className="absolute -top-40 left-1/3 size-[600px] bg-[#d7ff7a]/5 rounded-full blur-[140px]" /><div className="absolute -bottom-40 right-0 size-[520px] bg-blue-500/5 rounded-full blur-[130px]" /></div>
-    <header className="relative max-w-7xl w-full mx-auto flex items-center gap-3">
-      <div className="size-12 rounded-2xl bg-[#d7ff7a] text-[#17200f] grid place-items-center shadow-lg shadow-[#d7ff7a]/20"><ShoppingBag size={21} /></div>
-      <div><h1 className="font-black text-xl">Morrow</h1><p className="text-xs text-white/35">Restaurant Operating Platform</p></div>
+    <header className="relative max-w-7xl w-full mx-auto">
+      <MorrowLogo variant="full" priority className="h-auto w-44" />
+      <p className="mt-1 text-xs text-white/35">Restaurant Operating Platform</p>
     </header>
     <section className="relative flex-1 flex flex-col justify-center max-w-7xl w-full mx-auto py-10">
       <div className="mb-8"><span className="text-xs font-bold tracking-widest uppercase text-[#d7ff7a]">Device setup</span><h2 className="text-4xl md:text-5xl font-black mt-3 tracking-tight">How will this device be used?</h2><p className="text-white/45 mt-3 max-w-2xl">Choose one workspace. Each role opens a focused application with only the tools it needs.</p></div>

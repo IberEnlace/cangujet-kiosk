@@ -1,16 +1,20 @@
 import { useEffect, useState } from "react";
 import {
-  ShoppingCart as CartIcon, Trash2, Plus, Minus, Tag, Gift, Award, Ticket,
-  ChevronRight, ArrowLeft, Clock, FileText, Star, Heart, RefreshCw,
+  ShoppingCart as CartIcon, Trash2, Plus, Minus, Tag, Ticket,
+  ChevronRight, ArrowLeft, Clock, FileText, Heart, RefreshCw,
   Check, X, AlertCircle, Package, Sparkles, ChevronDown, ChevronUp
 } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import MorrowLogo from "../components/branding/MorrowLogo";
+
+const addonPlaceholderImage =
+  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=";
 
 const ADDON_SUGGESTIONS = [
-  { id: "a1", name: "Truffle Sauce", price: 1.50, image: "https://images.unsplash.com/photo-1625944230945-1b7dd3b949ab?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400", cal: 80 },
-  { id: "a2", name: "Extra Cheese", price: 1.00, image: "https://images.unsplash.com/photo-1486297678162-eb2a19b0a2d4?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400", cal: 120 },
-  { id: "a3", name: "Onion Rings", price: 2.50, image: "https://images.unsplash.com/photo-1639024471283-03518883512d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400", cal: 290 },
-  { id: "a4", name: "Coleslaw", price: 2.00, image: "https://images.unsplash.com/photo-1607532941433-304659e8198a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=400", cal: 160 },
+  { id: "a1", name: "Truffle Sauce", price: 1.50, image: "/images/addons/truffle-sauce.png", cal: 80 },
+  { id: "a2", name: "Extra Cheese", price: 1.00, image: "/images/addons/mozzarella.png", cal: 120 },
+  { id: "a3", name: "Onion Rings", price: 2.50, image: "/images/addons/onion-rings.png", cal: 290 },
+  { id: "a4", name: "Coleslaw", price: 2.00, image: "/images/addons/coleslaw.png", cal: 160 },
 ];
 
 type Props = { onNavigate: (route: string) => void };
@@ -20,19 +24,14 @@ export default function ShoppingCart({ onNavigate }: Props) {
     items, savedItems, updateQty, removeItem, saveForLater, moveToCart, clearCart,
     orderType, orderNotes, setOrderNotes,
     coupon, applyCoupon, removeCoupon,
-    giftCardBalance, applyGiftCard,
-    rewardsApplied, applyRewards,
     subtotal, tax, discount, total, estimatedMinutes,
-    user, addItem, providerInstanceId,
+    addItem, providerInstanceId,
   } = useCart();
   useEffect(() => { console.log("[CART][PROVIDER_INSTANCE]", providerInstanceId); }, [providerInstanceId]);
 
   const [couponInput, setCouponInput] = useState("");
-  const [giftCardInput, setGiftCardInput] = useState("");
   const [couponError, setCouponError] = useState("");
   const [couponSuccess, setCouponSuccess] = useState(false);
-  const [giftError, setGiftError] = useState("");
-  const [giftSuccess, setGiftSuccess] = useState(false);
   const [showSaved, setShowSaved] = useState(savedItems.length > 0);
   const [expandedSection, setExpandedSection] = useState<string | null>("coupon");
   const [addedAddons, setAddedAddons] = useState<string[]>([]);
@@ -47,22 +46,35 @@ export default function ShoppingCart({ onNavigate }: Props) {
     else { setCouponError("Invalid or expired coupon code"); }
   };
 
-  const handleGiftCard = () => {
-    setGiftError("");
-    if (giftCardInput.length < 8) { setGiftError("Gift card code must be at least 8 characters"); return; }
-    const ok = applyGiftCard(giftCardInput);
-    if (ok) { setGiftSuccess(true); setGiftCardInput(""); setTimeout(() => setGiftSuccess(false), 3000); }
-    else { setGiftError("Invalid gift card code"); }
-  };
-
   const handleDeleteItem = (id: string) => {
     setDeletingId(id);
     setTimeout(() => { removeItem(id); setDeletingId(null); }, 300);
   };
 
   const handleAddAddon = (addon: typeof ADDON_SUGGESTIONS[0]) => {
-    addItem({ ...addon, basePrice: addon.price, category: "addon" });
+    addItem({ ...addon, image: addon.image ?? addonPlaceholderImage, basePrice: addon.price, category: "addon" });
     setAddedAddons(prev => [...prev, addon.id]);
+  };
+
+  const renderAddonImage = (addon: typeof ADDON_SUGGESTIONS[0]) => {
+    if (!addon.image) {
+      return (
+        <div className="flex h-28 items-center justify-center px-3 text-center">
+          <div className="space-y-1">
+            <div className="mx-auto size-10 rounded-full border border-white/10 bg-white/[0.03]" />
+            <p className="text-[10px] uppercase tracking-[0.24em] text-white/25">Image unavailable</p>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <img
+        src={addon.image}
+        alt={addon.name}
+        className="h-28 w-full object-contain object-center p-3"
+      />
+    );
   };
 
   const isCartEmpty = items.length === 0;
@@ -81,6 +93,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
           <span className="text-sm">Continue Shopping</span>
         </button>
         <div className="flex items-center gap-3">
+          <MorrowLogo variant="symbol" className="size-8 object-contain" alt="" />
           <CartIcon size={20} className="text-[#d7ff7a]" />
           <h1 className="font-bold text-lg tracking-tight">Your Cart</h1>
           <span className="bg-[#d7ff7a] text-[#17200f] text-xs font-bold rounded-full size-6 flex items-center justify-center">
@@ -275,11 +288,15 @@ export default function ShoppingCart({ onNavigate }: Props) {
                 {ADDON_SUGGESTIONS.map(addon => {
                   const added = addedAddons.includes(addon.id);
                   return (
-                    <div key={addon.id} className="rounded-2xl bg-white/[0.04] border border-white/8 overflow-hidden hover:border-[#d7ff7a]/20 transition-all group">
-                      <img src={addon.image} alt={addon.name} className="w-full h-20 object-cover" />
-                      <div className="p-3">
+                    <div key={addon.id} className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/8 bg-white/[0.04] transition-all hover:border-[#d7ff7a]/20 group">
+                      <div className="flex-1">
+                        {renderAddonImage(addon)}
+                      </div>
+                      <div className="p-3 pt-0">
                         <p className="text-xs font-medium truncate">{addon.name}</p>
-                        <p className="text-[10px] text-white/40 mt-0.5">{addon.cal} cal</p>
+                        {addon.cal !== undefined && (
+                          <p className="text-[10px] text-white/40 mt-0.5">{addon.cal} cal</p>
+                        )}
                         <div className="flex items-center justify-between mt-2">
                           <span className="text-xs font-bold text-[#d7ff7a]">+${addon.price.toFixed(2)}</span>
                           <button
@@ -374,101 +391,6 @@ export default function ShoppingCart({ onNavigate }: Props) {
             )}
           </div>
 
-          {/* Rewards */}
-          <div className="rounded-2xl bg-white/[0.04] border border-white/8 overflow-hidden">
-            <button
-              onClick={() => setExpandedSection(expandedSection === "rewards" ? null : "rewards")}
-              className="w-full flex items-center justify-between p-4 hover:bg-white/[0.02] transition-colors"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="size-8 rounded-xl bg-amber-500/10 flex items-center justify-center">
-                  <Award size={15} className="text-amber-400" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-semibold">Loyalty Rewards</p>
-                  <p className="text-xs text-amber-400/70">{user.loyaltyPoints.toLocaleString()} pts available</p>
-                </div>
-              </div>
-              {expandedSection === "rewards" ? <ChevronUp size={14} className="text-white/40" /> : <ChevronDown size={14} className="text-white/40" />}
-            </button>
-            {expandedSection === "rewards" && (
-              <div className="px-4 pb-4 flex flex-col gap-3">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-white/50">Your points</span>
-                  <span className="font-bold text-amber-400">{user.loyaltyPoints.toLocaleString()} pts</span>
-                </div>
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-white/50">Points value</span>
-                  <span className="text-white/70">${(user.loyaltyPoints * 0.01).toFixed(2)}</span>
-                </div>
-                {rewardsApplied > 0 ? (
-                  <div className="flex items-center justify-between bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
-                    <div>
-                      <p className="text-sm font-bold text-amber-400">{rewardsApplied} pts applied</p>
-                      <p className="text-xs text-white/40">-${(rewardsApplied * 0.01).toFixed(2)} discount</p>
-                    </div>
-                    <button onClick={() => applyRewards(0)} className="size-6 rounded-lg bg-white/10 hover:bg-red-500/20 flex items-center justify-center transition-colors">
-                      <X size={12} className="text-white/60" />
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex flex-col gap-2">
-                    <div className="flex gap-2 flex-wrap">
-                      {[100, 250, 500, Math.min(user.loyaltyPoints, 1000)].filter((v, i, arr) => arr.indexOf(v) === i && v <= user.loyaltyPoints).map(pts => (
-                        <button
-                          key={pts}
-                          onClick={() => applyRewards(pts)}
-                          className="flex-1 py-2 text-xs bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 rounded-xl font-semibold transition-all"
-                        >
-                          {pts} pts<br /><span className="text-[10px] text-white/40">-${(pts * 0.01).toFixed(2)}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Gift Card */}
-          <div className="rounded-2xl bg-white/[0.04] border border-white/8 overflow-hidden">
-            <button
-              onClick={() => setExpandedSection(expandedSection === "gift" ? null : "gift")}
-              className="w-full flex items-center justify-between p-4 hover:bg-white/[0.02] transition-colors"
-            >
-              <div className="flex items-center gap-2.5">
-                <div className="size-8 rounded-xl bg-purple-500/10 flex items-center justify-center">
-                  <Gift size={15} className="text-purple-400" />
-                </div>
-                <div className="text-left">
-                  <p className="text-sm font-semibold">Gift Card</p>
-                  {giftCardBalance > 0 && <p className="text-xs text-purple-400">${giftCardBalance.toFixed(2)} applied</p>}
-                </div>
-              </div>
-              {expandedSection === "gift" ? <ChevronUp size={14} className="text-white/40" /> : <ChevronDown size={14} className="text-white/40" />}
-            </button>
-            {expandedSection === "gift" && (
-              <div className="px-4 pb-4 flex flex-col gap-3">
-                <div className="flex gap-2">
-                  <input
-                    value={giftCardInput}
-                    onChange={e => setGiftCardInput(e.target.value.toUpperCase())}
-                    placeholder="Gift card number"
-                    className="flex-1 bg-white/5 border border-white/10 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-purple-400/30 placeholder:text-white/25 font-mono tracking-wider"
-                  />
-                  <button
-                    onClick={handleGiftCard}
-                    className="px-4 py-2.5 bg-purple-500/20 text-purple-300 border border-purple-500/20 font-bold text-sm rounded-xl hover:bg-purple-500/30 transition-all"
-                  >
-                    Redeem
-                  </button>
-                </div>
-                {giftError && <p className="flex items-center gap-1.5 text-xs text-red-400"><AlertCircle size={12} /> {giftError}</p>}
-                {giftSuccess && <p className="flex items-center gap-1.5 text-xs text-purple-400"><Check size={12} /> $25.00 gift card applied!</p>}
-              </div>
-            )}
-          </div>
-
           {/* Order Summary */}
           <div className="rounded-2xl bg-white/[0.04] border border-white/8 p-5 flex flex-col gap-3">
             <div className="flex items-center gap-2 mb-1">
@@ -486,20 +408,6 @@ export default function ShoppingCart({ onNavigate }: Props) {
                 <div className="flex justify-between text-[#d7ff7a]">
                   <span className="flex items-center gap-1.5"><Ticket size={12} /> {coupon.code}</span>
                   <span>-${(coupon.type === "percent" ? subtotal * coupon.discount / 100 : coupon.discount).toFixed(2)}</span>
-                </div>
-              )}
-
-              {rewardsApplied > 0 && (
-                <div className="flex justify-between text-amber-400">
-                  <span className="flex items-center gap-1.5"><Star size={12} /> Rewards ({rewardsApplied} pts)</span>
-                  <span>-${(rewardsApplied * 0.01).toFixed(2)}</span>
-                </div>
-              )}
-
-              {giftCardBalance > 0 && (
-                <div className="flex justify-between text-purple-400">
-                  <span className="flex items-center gap-1.5"><Gift size={12} /> Gift Card</span>
-                  <span>-${giftCardBalance.toFixed(2)}</span>
                 </div>
               )}
 
@@ -529,14 +437,6 @@ export default function ShoppingCart({ onNavigate }: Props) {
                 </div>
               )}
             </div>
-          </div>
-
-          {/* Loyalty Points Earn */}
-          <div className="rounded-xl bg-amber-500/5 border border-amber-500/15 px-4 py-3 flex items-center gap-3">
-            <Star size={16} className="text-amber-400" />
-            <p className="text-xs text-white/50">
-              You'll earn <span className="text-amber-400 font-bold">{Math.floor(total * 10)} points</span> on this order
-            </p>
           </div>
 
           {/* Checkout Button */}

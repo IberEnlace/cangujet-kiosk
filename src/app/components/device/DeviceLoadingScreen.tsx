@@ -1,0 +1,2 @@
+import MorrowLogo from "../branding/MorrowLogo";
+export default function DeviceLoadingScreen() { return <main className="grid min-h-[100dvh] place-items-center bg-[#080b08]"><div className="text-center"><MorrowLogo variant="symbol" priority className="mx-auto size-20 object-contain" /><div className="mx-auto mt-6 h-1 w-28 overflow-hidden rounded-full bg-white/10"><div className="h-full w-1/2 animate-pulse rounded-full bg-[#D7FB69]" /></div></div></main>; }

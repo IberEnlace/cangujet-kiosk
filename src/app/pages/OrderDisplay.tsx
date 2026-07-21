@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Clock } from "lucide-react";
 import { useCart } from "../context/CartContext";
+import MorrowLogo from "../components/branding/MorrowLogo";
 
 type Props = { onNavigate: (route: string) => void };
 
@@ -77,12 +78,9 @@ export default function OrderDisplay({ onNavigate: _onNavigate }: Props) {
 
       {/* Header Brand Bar */}
       <div className="bg-[#0a0d0f] border-b border-white/5 px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="size-10 rounded-xl bg-[#d7ff7a]/20 border border-[#d7ff7a]/30 flex items-center justify-center text-[#d7ff7a] text-lg font-black">M</div>
-          <div>
-            <h1 className="font-black text-xl tracking-tight text-white">MORROW</h1>
-            <p className="text-[10px] text-white/30 uppercase tracking-[0.2em]">Order Status Display</p>
-          </div>
+        <div>
+          <MorrowLogo variant="full" priority className="h-auto w-36" />
+          <p className="mt-1 text-[10px] text-white/30 uppercase tracking-[0.2em]">Order Status Display</p>
         </div>
         <div className="flex items-center gap-2 text-white/40">
           <Clock size={16} />

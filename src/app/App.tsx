@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { AuthProvider, getDefaultRouteForDevice, useAuth } from "./auth/AuthContext";
+import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { CUSTOMER_IDLE_TIMEOUT_MS } from "./auth/mockCredentials";
 import { ROUTES, getHomeRouteForRole, getLoginRouteForRole, isStaffRole, type AppRoute, type StaffRole } from "./auth/roleConfig";
 import { guardRoute, isKnownRoute } from "./auth/routeGuards";
@@ -7,14 +7,15 @@ import { CartProvider, useCart } from "./context/CartContext";
 import { LanguageProvider, useLanguage } from "./context/LanguageContext";
 import RoleSelection from "./pages/RoleSelection";
 import StaffLogin from "./components/auth/StaffLogin";
-import DeviceSetup from "./pages/DeviceSetup";
+import DeviceSetup from "./pages/device/DeviceSetup";
 import DeveloperPortal from "./pages/DeveloperPortal";
 import CashierDashboard from "./pages/CashierDashboard";
 import StaffLayout from "./layouts/StaffLayout";
 import KioskJourney from "./pages/KioskJourney";
 import ShoppingCart from "./pages/ShoppingCart";
 import PaymentFlow from "./pages/PaymentFlow";
-import OrderTracking from "./pages/OrderTracking";
+import CardTerminalPayment from "./pages/customer/CardTerminalPayment";
+import OrderConfirmation from "./pages/customer/OrderConfirmation";
 import Dashboard from "./pages/Dashboard";
 import KitchenDisplay from "./pages/KitchenDisplay";
 import OrderDisplay from "./pages/OrderDisplay";
@@ -23,6 +24,13 @@ import { useKioskIdleReset } from "./hooks/useKioskIdleReset";
 import LanguageSelection from "./pages/customer/LanguageSelection";
 import ServiceSelection from "./pages/customer/ServiceSelection";
 import MenuCatalog from "./pages/customer/MenuCatalog";
+import { DeviceProvider, useDevice } from "./context/DeviceContext";
+import DeviceInfo from "./pages/device/DeviceInfo";
+import DeviceLoadingScreen from "./components/device/DeviceLoadingScreen";
+import { NoriConversationProvider, useNoriConversation } from "./context/NoriConversationContext";
+import NoriModeSelection from "./pages/nori/NoriModeSelection";
+import NoriTextChat from "./pages/nori/NoriTextChat";
+import NoriVoiceConversation from "./pages/nori/NoriVoiceConversation";
 
 function getCurrentRoute(): AppRoute {
   const path = window.location.hash.replace(/^#/, "") || ROUTES.idle;
@@ -41,12 +49,20 @@ const LOGIN_COPY: Record<StaffRole, { title: string; description: string }> = {
   kitchen: { title: "Kitchen sign in", description: "Access incoming tickets and preparation workflows." },
 };
 
+const CUSTOMER_ROUTES: AppRoute[] = [ROUTES.language, ROUTES.service, ROUTES.categories, ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice, ROUTES.kiosk, ROUTES.cart, ROUTES.payment, ROUTES.cardPayment, ROUTES.orderConfirmation, ROUTES.tracking];
+const PROTECTED_CUSTOMER_ROUTES: AppRoute[] = [ROUTES.idle, ...CUSTOMER_ROUTES];
+const ORDER_SESSION_ROUTES: AppRoute[] = [ROUTES.cart, ROUTES.payment, ROUTES.cardPayment, ROUTES.orderConfirmation, ROUTES.tracking];
+const NORI_ROUTES: AppRoute[] = [ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice];
+
 function Application() {
   const auth = useAuth();
-  const { clearCart, orderType, resetOrderType, setOrderStatus } = useCart();
+  const device = useDevice();
+  const { resetConversation } = useNoriConversation();
+  const { clearCart, items, orderType, resetOrderType, setOrderType, setOrderStatus } = useCart();
   const { resetLanguage } = useLanguage();
   const [route, setRoute] = useState<AppRoute>(getCurrentRoute);
   const [kioskSession, setKioskSession] = useState(0);
+  const [noriReturnRoute, setNoriReturnRoute] = useState<AppRoute>(ROUTES.categories);
 
   useEffect(() => {
     const initialHash = window.location.hash;
@@ -61,11 +77,10 @@ function Application() {
   useEffect(() => { if (route === ROUTES.categories && !orderType) navigateTo(ROUTES.service); }, [orderType, route]);
 
   const resetKiosk = useCallback(() => {
-    clearCart(); setOrderStatus("idle"); resetOrderType(); resetLanguage(); setKioskSession(v => v + 1); navigateTo(ROUTES.idle);
-  }, [clearCart, resetLanguage, resetOrderType, setOrderStatus]);
+    clearCart(); setOrderStatus("idle"); resetOrderType(); resetLanguage(); resetConversation(); sessionStorage.removeItem("morrow:nori-entry-category"); sessionStorage.removeItem("morrow:nori-voice-responses"); setKioskSession(v => v + 1); navigateTo(ROUTES.idle);
+  }, [clearCart, resetConversation, resetLanguage, resetOrderType, setOrderStatus]);
 
-  const customerRoutes: AppRoute[] = [ROUTES.language, ROUTES.service, ROUTES.categories, ROUTES.kiosk, ROUTES.cart, ROUTES.payment, ROUTES.tracking];
-  useKioskIdleReset({ timeoutMs: CUSTOMER_IDLE_TIMEOUT_MS, enabled: customerRoutes.includes(route), onIdle: resetKiosk });
+  useKioskIdleReset({ timeoutMs: CUSTOMER_IDLE_TIMEOUT_MS, enabled: CUSTOMER_ROUTES.includes(route), onIdle: resetKiosk });
 
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => { if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "m") { event.preventDefault(); navigateTo(ROUTES.deviceSetup); } };
@@ -73,24 +88,58 @@ function Application() {
   }, []);
 
   const customerNavigate = (target: string) => {
-    const map: Record<string, AppRoute> = { portal: ROUTES.kiosk, main: ROUTES.categories, cart: ROUTES.cart, payment: ROUTES.payment, tracking: ROUTES.tracking };
+    const map: Record<string, AppRoute> = { portal: ROUTES.kiosk, main: ROUTES.categories, cart: ROUTES.cart, payment: ROUTES.payment, paymentCard: ROUTES.cardPayment, tracking: ROUTES.orderConfirmation, confirmation: ROUTES.orderConfirmation };
     navigateTo(map[target] ?? ROUTES.kiosk);
   };
+  const cardPaymentBack = useCallback(() => navigateTo(ROUTES.payment), []);
+  const cardPaymentApproved = useCallback(() => navigateTo(ROUTES.orderConfirmation), []);
+  const startOrder = useCallback(() => navigateTo(ROUTES.language), []);
+  const finishOrder = useCallback(() => {
+    clearCart(); setOrderStatus("idle"); resetOrderType(); resetConversation(); sessionStorage.removeItem("morrow:nori-entry-category"); sessionStorage.removeItem("morrow:nori-voice-responses"); setKioskSession(value => value + 1);
+    window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle);
+  }, [clearCart, resetConversation, resetOrderType, setOrderStatus]);
   const customerViewport = (child: ReactNode) => <div className="min-h-[100dvh] bg-[#050705]"><div className="mx-auto min-h-[100dvh] w-full max-w-[1080px] shadow-[0_0_80px_rgba(0,0,0,.35)]">{child}</div></div>;
   const staffPage = (role: StaffRole, child: ReactNode) => <StaffLayout role={role} onLoggedOut={() => navigateTo(getLoginRouteForRole(role))} onChangeMode={() => navigateTo(ROUTES.selectRole)}>{child}</StaffLayout>;
 
+  useEffect(() => {
+    if (device.status === "checking") return;
+    if (!device.config && PROTECTED_CUSTOMER_ROUTES.includes(route)) navigateTo(ROUTES.deviceSetup);
+  }, [device.config, device.status, route]);
+  useEffect(() => {
+    if (items.length > 0 || !ORDER_SESSION_ROUTES.includes(route)) return;
+    window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle);
+  }, [items.length, route]);
+  useEffect(() => {
+    if (!NORI_ROUTES.includes(route)) return;
+    if (!device.config?.settings.aiAssistantEnabled) navigateTo(ROUTES.categories);
+    else if (route === ROUTES.noriVoice && device.config.settings.voiceAssistantEnabled === false) navigateTo(ROUTES.noriChat);
+  }, [device.config, route]);
+
+  if (device.status === "checking") return <DeviceLoadingScreen />;
+  if (!device.config && PROTECTED_CUSTOMER_ROUTES.includes(route)) return <DeviceLoadingScreen />;
+  if ([ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice].includes(route as "/nori" | "/nori/chat" | "/nori/voice") && !device.config?.settings.aiAssistantEnabled) return null;
+  if (route === ROUTES.noriVoice && device.config?.settings.voiceAssistantEnabled === false) return null;
   if (guardedRoute !== route) return null;
   if (route === ROUTES.selectRole) return <RoleSelection onSelect={(mode, remember) => { auth.selectDeviceMode(mode, remember); navigateTo(isStaffRole(mode) ? getLoginRouteForRole(mode) : getHomeRouteForRole(mode)); }} />;
-  if (route === ROUTES.deviceSetup) return <DeviceSetup onClose={() => navigateTo(getDefaultRouteForDevice(auth.selectedDeviceMode, auth.currentRole, auth.isAuthenticated))} onSelectRole={() => navigateTo(ROUTES.selectRole)} />;
+  if (route === ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => { window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle); }} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
+  if (route === ROUTES.deviceInfo) return <DeviceInfo onBack={() => navigateTo(ROUTES.deviceSetup)} onCleared={() => navigateTo(ROUTES.deviceSetup)} />;
   if (route === ROUTES.dev) return <DeveloperPortal navigate={navigateTo} />;
-  if (route === ROUTES.idle) return <IdleScreen onStart={() => navigateTo(ROUTES.language)} />;
-  if (route === ROUTES.language) return <LanguageSelection onBack={() => navigateTo(ROUTES.idle)} onContinue={() => navigateTo(ROUTES.service)} />;
+  if (route === ROUTES.idle) return <IdleScreen onStart={startOrder} />;
+  if (route === ROUTES.language) return <LanguageSelection onBack={() => navigateTo(ROUTES.idle)} onContinue={() => {
+    const allowed = device.config?.settings.allowedOrderTypes ?? [];
+    if (allowed.length === 1) setOrderType(allowed[0]);
+    navigateTo(allowed.length === 1 ? ROUTES.categories : ROUTES.service);
+  }} />;
   if (route === ROUTES.service) return <ServiceSelection onBack={() => navigateTo(ROUTES.language)} onContinue={() => navigateTo(ROUTES.categories)} />;
-  if (route === ROUTES.categories) return orderType ? <MenuCatalog onBack={() => navigateTo(ROUTES.service)} onLanguage={() => navigateTo(ROUTES.language)} onCheckout={() => navigateTo(ROUTES.cart)} /> : null;
+  if (route === ROUTES.categories) return orderType ? <MenuCatalog onBack={() => navigateTo(ROUTES.service)} onLanguage={() => navigateTo(ROUTES.language)} onCheckout={() => navigateTo(ROUTES.cart)} onNori={() => { setNoriReturnRoute(ROUTES.categories); navigateTo(ROUTES.nori); }} /> : null;
+  if (route === ROUTES.nori) return customerViewport(<NoriModeSelection onBack={() => navigateTo(noriReturnRoute)} onChat={() => navigateTo(ROUTES.noriChat)} onVoice={() => navigateTo(ROUTES.noriVoice)} />);
+  if (route === ROUTES.noriChat) return customerViewport(<NoriTextChat onBack={() => navigateTo(ROUTES.nori)} onVoice={() => navigateTo(ROUTES.noriVoice)} onEnd={() => navigateTo(noriReturnRoute)} />);
+  if (route === ROUTES.noriVoice) return customerViewport(<NoriVoiceConversation onBack={() => navigateTo(ROUTES.nori)} onText={() => navigateTo(ROUTES.noriChat)} onEnd={() => navigateTo(noriReturnRoute)} />);
   if (route === ROUTES.kiosk) return customerViewport(<KioskJourney key={kioskSession} onCheckout={() => navigateTo(ROUTES.cart)} />);
   if (route === ROUTES.cart) return customerViewport(<ShoppingCart onNavigate={customerNavigate} />);
   if (route === ROUTES.payment) return customerViewport(<PaymentFlow onNavigate={customerNavigate} />);
-  if (route === ROUTES.tracking) return customerViewport(<OrderTracking onNavigate={target => target === "portal" ? resetKiosk() : customerNavigate(target)} />);
+  if (route === ROUTES.cardPayment) return customerViewport(<CardTerminalPayment onBack={cardPaymentBack} onApproved={cardPaymentApproved} />);
+  if (route === ROUTES.orderConfirmation || route === ROUTES.tracking) return customerViewport(<OrderConfirmation onReset={finishOrder} />);
   if (route === ROUTES.display) return <OrderDisplay onNavigate={() => undefined} />;
 
   const loginRole = (["admin", "cashier", "kitchen"] as StaffRole[]).find(role => route === getLoginRouteForRole(role));
@@ -102,5 +151,5 @@ function Application() {
 }
 
 export default function App() {
-  return <AuthProvider><CartProvider><LanguageProvider><Application /></LanguageProvider></CartProvider></AuthProvider>;
+  return <DeviceProvider><AuthProvider><CartProvider><LanguageProvider><NoriConversationProvider><Application /></NoriConversationProvider></LanguageProvider></CartProvider></AuthProvider></DeviceProvider>;
 }

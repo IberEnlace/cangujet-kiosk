@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getLanguageOption, isSupportedLanguage, type SupportedLanguage } from "../config/languages";
+import { useDevice } from "./DeviceContext";
 
 const LANGUAGE_STORAGE_KEY = "morrow_customer_language";
 
@@ -12,15 +13,17 @@ interface LanguageContextValue {
 
 const LanguageContext = createContext<LanguageContextValue | null>(null);
 
-function restoreLanguage(): SupportedLanguage {
+function restoreLanguage(fallback: SupportedLanguage): SupportedLanguage {
   try {
     const stored = sessionStorage.getItem(LANGUAGE_STORAGE_KEY);
-    return isSupportedLanguage(stored) ? stored : "en";
-  } catch { return "en"; }
+    return isSupportedLanguage(stored) ? stored : fallback;
+  } catch { return fallback; }
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<SupportedLanguage>(restoreLanguage);
+  const { config } = useDevice();
+  const defaultLanguage = config?.settings.defaultLanguage ?? "en";
+  const [language, setLanguageState] = useState<SupportedLanguage>(() => restoreLanguage(defaultLanguage));
   const direction = getLanguageOption(language).direction;
 
   const setLanguage = useCallback((nextLanguage: SupportedLanguage) => {
@@ -29,9 +32,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetLanguage = useCallback(() => {
-    setLanguageState("en");
+    setLanguageState(defaultLanguage);
     try { sessionStorage.removeItem(LANGUAGE_STORAGE_KEY); } catch { /* Storage may be disabled in kiosk privacy mode. */ }
-  }, []);
+  }, [defaultLanguage]);
+
+  useEffect(() => { if (config && !config.settings.enabledLanguages.includes(language)) setLanguage(defaultLanguage); }, [config, defaultLanguage, language, setLanguage]);
 
   useEffect(() => {
     document.documentElement.lang = language;

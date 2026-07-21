@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Globe2, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Globe2 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { supportedLanguages, type SupportedLanguage } from "../../config/languages";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCustomerTranslation } from "../../hooks/useCustomerTranslation";
+import MorrowLogo from "../../components/branding/MorrowLogo";
+import { useDevice } from "../../context/DeviceContext";
 
 interface LanguageSelectionProps {
   onBack: () => void;
@@ -12,6 +14,8 @@ interface LanguageSelectionProps {
 
 export default function LanguageSelection({ onBack, onContinue }: LanguageSelectionProps) {
   const { language, direction, setLanguage, resetLanguage } = useLanguage();
+  const { config } = useDevice();
+  const availableLanguages = supportedLanguages.filter(option => config?.settings.enabledLanguages.includes(option.code));
   const translation = useCustomerTranslation().languageSelection;
   const reducedMotion = useReducedMotion();
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage | null>(null);
@@ -45,9 +49,8 @@ export default function LanguageSelection({ onBack, onContinue }: LanguageSelect
 
       <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1080px] flex-col px-5 py-[clamp(1.5rem,4vh,4rem)] sm:px-9 lg:px-14">
         <header className="flex items-center justify-between">
-          <motion.div initial={reducedMotion ? undefined : { opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="flex items-center gap-3">
-            <span className="grid size-12 place-items-center rounded-2xl bg-[#d7ff7a] text-[#17200f] shadow-lg shadow-[#d7ff7a]/15"><UtensilsCrossed size={23} aria-hidden="true" /></span>
-            <div><b className="block text-lg tracking-tight">MORROW</b><span className="font-['Space_Mono'] text-[9px] uppercase tracking-[.25em] text-white/40">Fresh · Fast · Delicious</span></div>
+          <motion.div initial={reducedMotion ? undefined : { opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
+            <MorrowLogo variant="full" priority className="h-auto w-[clamp(8.5rem,22vw,12rem)]" />
           </motion.div>
           <button type="button" onClick={handleBack} className="flex min-h-12 items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/70 transition hover:bg-white/10 focus-visible:outline focus-visible:outline-4 focus-visible:outline-offset-2 focus-visible:outline-[#d7ff7a] sm:px-5" aria-label={translation.back}>
             <BackArrow size={19} aria-hidden="true" /><span className="hidden sm:inline">{translation.back}</span>
@@ -62,7 +65,7 @@ export default function LanguageSelection({ onBack, onContinue }: LanguageSelect
           </motion.div>
 
           <div className="mx-auto mt-[clamp(2rem,5vh,4rem)] grid w-full max-w-3xl gap-[clamp(.75rem,1.8vh,1.5rem)]">
-            {supportedLanguages.map((option, index) => {
+            {availableLanguages.map((option, index) => {
               const isSelected = selectedLanguage === option.code;
               const wasRestored = !selectedLanguage && language === option.code;
               return (

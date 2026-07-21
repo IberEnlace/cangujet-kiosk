@@ -1,6 +1,6 @@
 import { ROUTES, type AppRoute, type StaffRole, type UserRole, getHomeRouteForRole, getLoginRouteForRole, isStaffRole } from "./roleConfig";
 
-const CUSTOMER_ROUTES: AppRoute[] = [ROUTES.idle, ROUTES.language, ROUTES.service, ROUTES.categories, ROUTES.kiosk, ROUTES.cart, ROUTES.payment, ROUTES.tracking];
+const CUSTOMER_ROUTES: AppRoute[] = [ROUTES.idle, ROUTES.language, ROUTES.service, ROUTES.categories, ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice, ROUTES.kiosk, ROUTES.cart, ROUTES.payment, ROUTES.cardPayment, ROUTES.orderConfirmation, ROUTES.tracking];
 const LOGIN_ROLE: Partial<Record<AppRoute, StaffRole>> = {
   [ROUTES.adminLogin]: "admin", [ROUTES.cashierLogin]: "cashier", [ROUTES.kitchenLogin]: "kitchen",
 };
@@ -13,7 +13,7 @@ export function isKnownRoute(route: string): route is AppRoute {
 }
 
 export function guardRoute(route: AppRoute, role: UserRole | null, authenticated: boolean): AppRoute {
-  const publicUtilityRoutes: AppRoute[] = [ROUTES.selectRole, ROUTES.deviceSetup, ROUTES.dev];
+  const publicUtilityRoutes: AppRoute[] = [ROUTES.selectRole, ROUTES.deviceSetup, ROUTES.deviceInfo, ROUTES.dev];
   if (publicUtilityRoutes.includes(route)) return route;
   if (CUSTOMER_ROUTES.includes(route)) return route;
   const loginRole = LOGIN_ROLE[route];

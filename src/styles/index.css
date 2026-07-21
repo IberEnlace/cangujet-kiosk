@@ -1,3 +1,19 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+@keyframes receipt-slide {
+  from { transform: translate(-50%, 4rem); }
+  to { transform: translate(-50%, 0); }
+}
+
+@media (max-width: 679px), (max-height: 900px) {
+  .confirmation-printer-visual { display: none; }
+  .confirmation-receipt-grid { gap: 0.4rem; }
+}
+
+@media (max-height: 760px) {
+  .confirmation-layout { padding-top: 0.5rem; }
+  .confirmation-layout header h1 { margin-top: 0.35rem; }
+  .confirmation-layout footer { padding-top: 0.45rem; }
+}
