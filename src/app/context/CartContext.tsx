@@ -30,15 +30,17 @@ export type PaymentMethod =
 export type OrderStatus =
   | "idle" | "received" | "preparing" | "cooking" | "ready" | "completed";
 export type PaymentStatus = "pending" | "paid";
+export type PreparationStation = "kitchen" | "grill" | "drinks" | "dessert" | "no_preparation";
 
 export type KitchenOrder = {
   id: string;
   number: number;
-  items: { name: string; qty: number; notes?: string }[];
+  items: { name: string; qty: number; notes?: string; station?: PreparationStation; customizations?: string[]; allergenWarnings?: string[] }[];
   status: OrderStatus;
   priority: boolean;
   delayed: boolean;
   startTime: number;
+  completedAt?: number;
   estimatedMinutes: number;
   type: OrderType;
   customer?: string;
@@ -205,6 +207,14 @@ function readSessionOrderType(): OrderType | null {
   } catch { return null; }
 }
 
+function preparationStationForCategory(category: string): PreparationStation {
+  const normalized = category.toLowerCase();
+  if (normalized.includes("burger")) return "grill";
+  if (normalized.includes("drink") || normalized.includes("coffee")) return "drinks";
+  if (normalized.includes("dessert")) return "dessert";
+  return "kitchen";
+}
+
 function readKitchenOrders(): KitchenOrder[] {
   const stored = readStored<Array<Omit<KitchenOrder, "type"> & { type: string }>>("morrow_kitchen_orders", initialKitchenOrders);
   return stored.map(order => ({
@@ -343,7 +353,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     const newOrder: KitchenOrder = {
       id,
       number: num,
-      items: items.map(i => ({ name: i.name, qty: i.qty, notes: orderNotes || undefined })),
+      items: items.map(i => ({ name: i.name, qty: i.qty, notes: orderNotes || undefined, customizations: i.customizations ? Object.values(i.customizations) : undefined, station: preparationStationForCategory(i.category) })),
       status: "received",
       priority: false,
       delayed: false,
@@ -370,7 +380,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, [items, orderNotes, estimatedMinutes, orderType, total, paymentMethod]);
 
   const updateKitchenOrderStatus = useCallback((id: string, status: OrderStatus) => {
-    setKitchenOrders(prev => prev.map(o => o.id === id ? { ...o, status } : o));
+    setKitchenOrders(prev => prev.map(o => o.id === id ? { ...o, status, completedAt: status === "completed" ? Date.now() : undefined } : o));
   }, []);
 
   const updateUser = useCallback((updates: Partial<UserProfile>) => {

@@ -1,311 +1,63 @@
-import { useState, useEffect } from "react";
-import {
-  ChefHat, Flame, Check, Clock, AlertTriangle, ArrowRight,
-  Search, Filter, Bell, TrendingUp, Package, Star, RefreshCw,
-  Timer, Users, Zap
-} from "lucide-react";
-import { useCart, type KitchenOrder, type OrderStatus } from "../context/CartContext";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { AlertTriangle, ArrowRight, Bell, Check, ChefHat, Clock, Flame, Package, RefreshCw, Search, Users, X, Zap } from "lucide-react";
+import { toast, Toaster } from "sonner";
+import { useCart, type KitchenOrder, type OrderStatus, type PreparationStation } from "../context/CartContext";
 import MorrowLogo from "../components/branding/MorrowLogo";
 
 type Props = { onNavigate: (route: string) => void };
-
-type Column = { id: OrderStatus; label: string; color: string; icon: React.ReactNode };
-
-const COLUMNS: Column[] = [
-  { id: "received",  label: "Incoming",  color: "blue",   icon: <Package size={16} />   },
-  { id: "preparing", label: "Preparing", color: "violet", icon: <Clock size={16} />      },
-  { id: "cooking",   label: "Cooking",   color: "orange", icon: <Flame size={16} />      },
-  { id: "ready",     label: "Ready",     color: "lime",   icon: <ChefHat size={16} />   },
-  { id: "completed", label: "Completed", color: "green",  icon: <Check size={16} />     },
+type Column = { id: OrderStatus; label: string; color: string; icon: ReactNode; empty: string };
+type Severity = "normal" | "approaching" | "delayed" | "severe";
+const STAGES:OrderStatus[]=["received","preparing","cooking","ready","completed"];
+const COLUMNS:Column[]=[
+  {id:"received",label:"Incoming",color:"blue",icon:<Package size={16}/>,empty:"No incoming orders."},
+  {id:"preparing",label:"Preparing",color:"violet",icon:<Clock size={16}/>,empty:"No orders being prepared."},
+  {id:"cooking",label:"Cooking",color:"orange",icon:<Flame size={16}/>,empty:"No orders cooking."},
+  {id:"ready",label:"Ready",color:"lime",icon:<ChefHat size={16}/>,empty:"No orders ready."},
+  {id:"completed",label:"Completed",color:"green",icon:<Check size={16}/>,empty:"No recently completed orders."},
 ];
+const colorBg:Record<string,string>={blue:"bg-blue-500/10 border-blue-500/20 text-blue-400",violet:"bg-violet-500/10 border-violet-500/20 text-violet-400",orange:"bg-orange-500/10 border-orange-500/20 text-orange-400",lime:"bg-[#d7ff7a]/10 border-[#d7ff7a]/20 text-[#d7ff7a]",green:"bg-emerald-500/10 border-emerald-500/20 text-emerald-400"};
+const colBorder:Record<string,string>={blue:"border-t-blue-500",violet:"border-t-violet-500",orange:"border-t-orange-500",lime:"border-t-[#d7ff7a]",green:"border-t-emerald-500"};
 
-const colorBg: Record<string, string> = {
-  blue:   "bg-blue-500/10 border-blue-500/20 text-blue-400",
-  violet: "bg-violet-500/10 border-violet-500/20 text-violet-400",
-  orange: "bg-orange-500/10 border-orange-500/20 text-orange-400",
-  lime:   "bg-[#d7ff7a]/10 border-[#d7ff7a]/20 text-[#d7ff7a]",
-  green:  "bg-emerald-500/10 border-emerald-500/20 text-emerald-400",
-};
+export function formatElapsedDuration(totalMinutes:number){const minutes=Math.max(0,Math.floor(totalMinutes));if(minutes<60)return `${minutes}m`;const hours=Math.floor(minutes/60);const remainder=minutes%60;if(hours<24)return `${hours}h${remainder?` ${remainder}m`:""}`;const days=Math.floor(hours/24);const remainingHours=hours%24;return `${days}d${remainingHours?` ${remainingHours}h`:""}`;}
+function formatAverage(seconds:number){if(seconds<60)return `${Math.round(seconds)}s`;const minutes=Math.floor(seconds/60),remaining=Math.round(seconds%60);if(minutes<60)return `${minutes}m${remaining?` ${remaining}s`:""}`;const hours=Math.floor(minutes/60),rest=minutes%60;return `${hours}h${rest?` ${rest}m`:""}`;}
+function elapsedMinutes(order:KitchenOrder,now=Date.now()){return Math.max(0,(now-order.startTime)/60000)}
+function severity(order:KitchenOrder,now=Date.now()):Severity{const ratio=elapsedMinutes(order,now)/Math.max(1,order.estimatedMinutes);return ratio>=2?"severe":ratio>1?"delayed":ratio>=.8?"approaching":"normal"}
+function inferredStation(name:string):PreparationStation{const value=name.toLowerCase();if(/burger|beef|chicken/.test(value))return "grill";if(/drink|coffee|tea|water|cola|juice|latte|ayran/.test(value))return "drinks";if(/cake|dessert|brownie|cookie|cheesecake/.test(value))return "dessert";return "kitchen"}
+function kitchenItems(order:KitchenOrder){return order.items.filter(item=>{const station=item.station??inferredStation(item.name);return station==="kitchen"||station==="grill";});}
 
-const colBorder: Record<string, string> = {
-  blue:   "border-t-blue-500",
-  violet: "border-t-violet-500",
-  orange: "border-t-orange-500",
-  lime:   "border-t-[#d7ff7a]",
-  green:  "border-t-emerald-500",
-};
+function Modal({title,children,onClose}:{title:string;children:ReactNode;onClose:()=>void}){return <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label={title} onMouseDown={event=>{if(event.target===event.currentTarget)onClose()}}><div className="max-h-[85vh] w-full max-w-3xl overflow-y-auto rounded-2xl border border-white/10 bg-[#111511] p-5"><div className="mb-5 flex items-center"><h2 className="text-lg font-black">{title}</h2><button onClick={onClose} aria-label="Close" className="ml-auto rounded-lg p-2 text-white/40 hover:bg-white/10"><X size={18}/></button></div>{children}</div></div>}
+function ElapsedTimer({order,now}:{order:KitchenOrder;now:number}){const state=severity(order,now);return <span className={`font-mono text-xs ${state==="severe"?"font-black text-red-300":state==="delayed"?"text-red-400":state==="approaching"?"text-amber-300":"text-white/45"}`}>{formatElapsedDuration(elapsedMinutes(order,now))}</span>}
 
-function ElapsedTimer({ startTime }: { startTime: number }) {
-  const [elapsed, setElapsed] = useState(Math.floor((Date.now() - startTime) / 1000));
-  useEffect(() => {
-    const t = setInterval(() => setElapsed(Math.floor((Date.now() - startTime) / 1000)), 1000);
-    return () => clearInterval(t);
-  }, [startTime]);
-  const m = Math.floor(elapsed / 60);
-  const s = elapsed % 60;
-  const isLate = m >= 12;
-  return (
-    <span className={`font-mono text-xs ${isLate ? "text-red-400 animate-pulse" : "text-white/40"}`}>
-      {m}:{s.toString().padStart(2, "0")}
-    </span>
-  );
+function OrderCard({order,now,isNew,onAdvance}:{order:KitchenOrder;now:number;isNew:boolean;onAdvance:(order:KitchenOrder,status:OrderStatus)=>void}){
+  const current=STAGES.indexOf(order.status),next=current<STAGES.length-1?STAGES[current+1]:null;
+  const minutes=elapsedMinutes(order,now),state=severity(order,now),late=Math.max(0,minutes-order.estimatedMinutes),items=kitchenItems(order);
+  const border=order.priority?"border-[#d7ff7a]/45":state==="severe"?"border-red-400/70":state==="delayed"?"border-red-500/40":state==="approaching"?"border-amber-400/35":"border-white/8";
+  return <article className={`flex flex-col gap-3 rounded-2xl border bg-white/[0.03] p-4 transition-colors ${border} ${isNew?"ring-2 ring-[#d7ff7a]/60":""}`}>
+    <div className="flex items-start justify-between gap-2"><div className="flex flex-wrap items-center gap-1.5">{isNew&&<span className="rounded-md bg-blue-400/15 px-1.5 py-0.5 text-[9px] font-black text-blue-300">New</span>}{order.priority&&<span className="flex items-center gap-1 rounded-md bg-[#d7ff7a] px-1.5 py-0.5 text-[9px] font-black uppercase text-[#17200f]"><Zap size={8}/>Priority</span>}{state!=="normal"&&state!=="approaching"&&<span className="flex items-center gap-1 rounded-md border border-red-500/20 bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold text-red-300"><AlertTriangle size={8}/>{state==="severe"?"Severely delayed":"Delayed"}</span>}<strong className="text-xl">#{order.number}</strong></div><ElapsedTimer order={order} now={now}/></div>
+    {order.customer&&<p className="flex items-center gap-1 text-xs text-white/40"><Users size={10}/>{order.customer}</p>}
+    <div className="space-y-2">{items.map((item,index)=><div key={`${item.name}-${index}`}><div className="flex items-start gap-2"><span className="grid size-6 shrink-0 place-items-center rounded-lg bg-white/10 text-[10px] font-bold">{item.qty}</span><span className="min-w-0 text-sm font-semibold">{item.name}</span></div>{item.customizations?.map(value=><p key={value} className="ml-8 mt-1 text-[11px] text-amber-300">• {value}</p>)}{item.notes&&<p className="ml-8 mt-1 text-[11px] text-amber-300">• {item.notes}</p>}{item.allergenWarnings?.map(value=><p key={value} className="ml-8 mt-1 rounded-md bg-red-500/15 px-2 py-1 text-[11px] font-bold text-red-300">Allergy: {value}</p>)}</div>)}</div>
+    <div><div className="h-1 overflow-hidden rounded-full bg-white/5"><div className={`h-full rounded-full ${state==="severe"||state==="delayed"?"bg-red-500":state==="approaching"?"bg-amber-400":"bg-[#d7ff7a]"}`} style={{width:`${Math.min(100,(minutes/Math.max(1,order.estimatedMinutes))*100)}%`}}/></div><div className="mt-1 flex justify-between text-[10px] text-white/30"><span>Est. {formatElapsedDuration(order.estimatedMinutes)}</span>{late>0&&<span className={state==="severe"?"font-bold text-red-300":"text-red-400"}>{formatElapsedDuration(late)} late</span>}</div></div>
+    {next&&order.status!=="completed"&&<button onClick={()=>onAdvance(order,next)} className={`flex min-h-11 w-full items-center justify-center gap-1.5 rounded-xl border text-xs font-bold transition focus:outline-none focus:ring-2 focus:ring-[#d7ff7a]/50 ${next==="ready"?"border-[#d7ff7a]/20 bg-[#d7ff7a]/15 text-[#d7ff7a]":"border-white/8 bg-white/5 text-white/65 hover:bg-white/10 hover:text-white"}`}>Mark as {COLUMNS.find(column=>column.id===next)?.label}<ArrowRight size={12}/></button>}
+  </article>;
 }
 
-function OrderCard({ order, onAdvance }: { order: KitchenOrder; onAdvance: (id: string, status: OrderStatus) => void }) {
-  const stageIds: OrderStatus[] = ["received", "preparing", "cooking", "ready", "completed"];
-  const currentIdx = stageIds.indexOf(order.status);
-  const nextStage = currentIdx < stageIds.length - 1 ? stageIds[currentIdx + 1] : null;
-  const elapsed = Math.floor((Date.now() - order.startTime) / 1000 / 60);
-  const isOverdue = elapsed > order.estimatedMinutes;
-
-  return (
-    <div className={`rounded-2xl border bg-white/[0.03] p-4 flex flex-col gap-3 transition-all ${
-      order.priority ? "border-[#d7ff7a]/30 shadow-lg shadow-[#d7ff7a]/5" :
-      order.delayed ? "border-red-500/30" :
-      "border-white/8"
-    }`}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {order.priority && (
-            <span className="bg-[#d7ff7a] text-[#17200f] text-[9px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-wide flex items-center gap-0.5">
-              <Zap size={8} /> Priority
-            </span>
-          )}
-          {order.delayed && (
-            <span className="bg-red-500/20 text-red-400 text-[9px] font-bold px-1.5 py-0.5 rounded-md border border-red-500/20 flex items-center gap-0.5">
-              <AlertTriangle size={8} /> Delayed
-            </span>
-          )}
-          <span className="font-black text-xl text-white">#{order.number}</span>
-        </div>
-        <div className="flex items-center gap-1.5 text-right">
-          <ElapsedTimer startTime={order.startTime} />
-          <span className="text-white/20">·</span>
-          <span className={`text-xs ${isOverdue ? "text-red-400" : "text-white/30"}`}>
-            {order.type === "dine_in" ? "🍽" : "🛍"}
-          </span>
-        </div>
-      </div>
-
-      {/* Customer */}
-      {order.customer && (
-        <p className="text-xs text-white/40 flex items-center gap-1">
-          <Users size={10} /> {order.customer}
-        </p>
-      )}
-
-      {/* Items */}
-      <div className="flex flex-col gap-1.5">
-        {order.items.map((item, i) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="size-5 rounded-lg bg-white/10 flex items-center justify-center text-[10px] font-bold text-white/60 flex-shrink-0">{item.qty}</span>
-            <span className="text-sm font-medium truncate">{item.name}</span>
-            {item.notes && <span className="text-[10px] text-amber-400 truncate">· {item.notes}</span>}
-          </div>
-        ))}
-      </div>
-
-      {/* Timer bar */}
-      <div className="flex flex-col gap-1">
-        <div className="h-1 rounded-full bg-white/5 overflow-hidden">
-          <div
-            className={`h-full rounded-full transition-all duration-1000 ${isOverdue ? "bg-red-500" : "bg-gradient-to-r from-[#d7ff7a] to-[#a9cc50]"}`}
-            style={{ width: `${Math.min(100, (elapsed / order.estimatedMinutes) * 100)}%` }}
-          />
-        </div>
-        <div className="flex justify-between text-[10px] text-white/25">
-          <span>Est. {order.estimatedMinutes}m</span>
-          {isOverdue && <span className="text-red-400">+{elapsed - order.estimatedMinutes}m late</span>}
-        </div>
-      </div>
-
-      {/* Advance Button */}
-      {nextStage && order.status !== "completed" && (
-        <button
-          onClick={() => onAdvance(order.id, nextStage)}
-          className={`w-full py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-            nextStage === "ready"
-              ? "bg-[#d7ff7a]/15 hover:bg-[#d7ff7a]/25 text-[#d7ff7a] border border-[#d7ff7a]/20"
-              : "bg-white/5 hover:bg-white/10 text-white/60 hover:text-white border border-white/8"
-          }`}
-        >
-          Mark as {COLUMNS.find(c => c.id === nextStage)?.label} <ArrowRight size={12} />
-        </button>
-      )}
-    </div>
-  );
-}
-
-export default function KitchenDisplay({ onNavigate: _onNavigate }: Props) {
-  const { kitchenOrders, updateKitchenOrderStatus } = useCart();
-  const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | "priority" | "delayed">("all");
-  const [view, setView] = useState<"board" | "analytics">("board");
-  const [currentTime, setCurrentTime] = useState(new Date());
-
-  useEffect(() => {
-    const t = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
-
-  const filteredOrders = kitchenOrders.filter(o => {
-    const matchSearch = !search || o.items.some(i => i.name.toLowerCase().includes(search.toLowerCase())) || String(o.number).includes(search) || (o.customer || "").toLowerCase().includes(search.toLowerCase());
-    const matchFilter = filter === "all" || (filter === "priority" && o.priority) || (filter === "delayed" && o.delayed);
-    return matchSearch && matchFilter;
-  });
-
-  const getColumnOrders = (status: OrderStatus) => filteredOrders.filter(o => o.status === status);
-
-  // Analytics data
-  const completedToday = kitchenOrders.filter(o => o.status === "completed").length;
-  const avgTime = 9.4;
-  const pending = kitchenOrders.filter(o => o.status !== "completed").length;
-  const delayed = kitchenOrders.filter(o => o.delayed).length;
-
-  return (
-    <div className="min-h-screen bg-[#07090a] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
-      {/* Header */}
-      <header className="bg-[#07090a]/95 backdrop-blur-xl border-b border-white/5 px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <MorrowLogo variant="symbol" priority className="size-10 object-contain" />
-          <div>
-            <h1 className="font-bold text-base">Kitchen Display</h1>
-            <p className="text-xs text-white/40">Morrow Restaurant · {currentTime.toLocaleTimeString()}</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-3">
-          {/* Stats row */}
-          {[
-            { label: "Active", val: pending, color: "text-orange-400" },
-            { label: "Done Today", val: completedToday, color: "text-emerald-400" },
-            { label: "Delayed", val: delayed, color: delayed > 0 ? "text-red-400" : "text-white/30" },
-            { label: "Avg Time", val: `${avgTime}m`, color: "text-[#d7ff7a]" },
-          ].map(s => (
-            <div key={s.label} className="text-center px-4 border-l border-white/5 first:border-l-0">
-              <p className={`text-lg font-black ${s.color}`}>{s.val}</p>
-              <p className="text-[10px] text-white/30">{s.label}</p>
-            </div>
-          ))}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <button onClick={() => setView(view === "board" ? "analytics" : "board")} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-sm text-white/60 hover:text-white transition-all">
-            {view === "board" ? <><TrendingUp size={14} /> Analytics</> : <><Filter size={14} /> Board</>}
-          </button>
-        </div>
-      </header>
-
-      {/* Toolbar */}
-      <div className="bg-[#09090b] border-b border-white/5 px-6 py-2.5 flex items-center gap-3">
-        <div className="flex items-center gap-2 bg-white/5 border border-white/8 rounded-xl px-3 py-2 flex-1 max-w-xs">
-          <Search size={14} className="text-white/30" />
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search orders, items, customer..." className="bg-transparent text-sm flex-1 focus:outline-none placeholder:text-white/25" />
-        </div>
-        <div className="flex gap-1.5">
-          {(["all", "priority", "delayed"] as const).map(f => (
-            <button
-              key={f}
-              onClick={() => setFilter(f)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all capitalize ${filter === f ? "bg-[#d7ff7a] text-[#17200f]" : "bg-white/5 text-white/50 hover:text-white border border-white/8"}`}
-            >
-              {f === "priority" && <Zap size={10} className="inline mr-1" />}
-              {f === "delayed" && <AlertTriangle size={10} className="inline mr-1" />}
-              {f}
-            </button>
-          ))}
-        </div>
-        <div className="ml-auto flex items-center gap-1.5 text-xs text-white/30">
-          <RefreshCw size={12} className="animate-spin" style={{ animationDuration: "3s" }} />
-          Live
-        </div>
-      </div>
-
-      {view === "analytics" ? (
-        <div className="flex-1 p-6 grid grid-cols-4 gap-4">
-          {[
-            { label: "Orders Today",       val: "47",   sub: "+12% vs yesterday",    color: "text-[#d7ff7a]",  icon: <Package size={20} /> },
-            { label: "Avg Prep Time",      val: "9.4m", sub: "Target: 10m ✓",        color: "text-emerald-400", icon: <Timer size={20} /> },
-            { label: "Delayed Orders",     val: "3",    sub: "6.4% of total",        color: "text-red-400",    icon: <AlertTriangle size={20} /> },
-            { label: "Customer Rating",    val: "4.8★", sub: "Based on 32 reviews",  color: "text-amber-400",  icon: <Star size={20} /> },
-            { label: "Peak Hour",          val: "12:30",sub: "Last 30 days avg",     color: "text-blue-400",   icon: <TrendingUp size={20} /> },
-            { label: "Items Per Order",    val: "2.8",  sub: "Avg item count",       color: "text-violet-400", icon: <Users size={20} /> },
-            { label: "Burger Count",       val: "28",   sub: "Most popular today",   color: "text-orange-400", icon: <Flame size={20} /> },
-            { label: "Revenue Today",      val: "$842", sub: "Est. from orders",     color: "text-[#d7ff7a]",  icon: <TrendingUp size={20} /> },
-          ].map(s => (
-            <div key={s.label} className="rounded-2xl bg-white/[0.04] border border-white/8 p-5 flex flex-col gap-3">
-              <div className={`size-10 rounded-xl bg-white/5 flex items-center justify-center ${s.color}`}>{s.icon}</div>
-              <div>
-                <p className={`text-2xl font-black ${s.color}`}>{s.val}</p>
-                <p className="text-sm text-white/70 font-semibold mt-0.5">{s.label}</p>
-                <p className="text-xs text-white/30 mt-0.5">{s.sub}</p>
-              </div>
-            </div>
-          ))}
-
-          {/* Hourly chart */}
-          <div className="col-span-4 rounded-2xl bg-white/[0.04] border border-white/8 p-5">
-            <h3 className="font-semibold text-sm text-white/70 mb-4">Orders per Hour Today</h3>
-            <div className="flex items-end gap-2 h-32">
-              {[2, 1, 3, 5, 8, 12, 15, 18, 14, 11, 9, 7].map((val, i) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1">
-                  <div
-                    className="w-full rounded-t-lg bg-gradient-to-t from-[#d7ff7a]/30 to-[#d7ff7a]/70 hover:from-[#d7ff7a]/50 hover:to-[#d7ff7a] transition-all cursor-pointer"
-                    style={{ height: `${(val / 18) * 100}%` }}
-                  />
-                  <span className="text-[9px] text-white/25">{8 + i}h</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : (
-        /* Kanban Board */
-        <div className="flex-1 overflow-x-auto">
-          <div className="flex gap-3 p-4 min-w-max h-full">
-            {COLUMNS.map(col => {
-              const orders = getColumnOrders(col.id);
-              return (
-                <div key={col.id} className={`flex flex-col w-[280px] rounded-2xl bg-white/[0.02] border-t-2 border border-white/6 ${colBorder[col.color]} overflow-hidden flex-shrink-0`}>
-                  {/* Column Header */}
-                  <div className="flex items-center justify-between px-4 py-3 border-b border-white/5">
-                    <div className="flex items-center gap-2">
-                      <span className={`flex items-center gap-1 px-2.5 py-1 rounded-lg border text-xs font-semibold ${colorBg[col.color]}`}>
-                        {col.icon} {col.label}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="size-5 rounded-full bg-white/10 flex items-center justify-center text-[10px] font-bold">{orders.length}</span>
-                      {orders.some(o => o.priority) && <Bell size={12} className="text-[#d7ff7a]" />}
-                    </div>
-                  </div>
-
-                  {/* Cards */}
-                  <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-2.5 max-h-[calc(100vh-200px)]">
-                    {orders.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-10 text-center">
-                        <div className="size-10 rounded-xl bg-white/5 flex items-center justify-center mb-2">
-                          {col.icon}
-                        </div>
-                        <p className="text-xs text-white/20">No orders</p>
-                      </div>
-                    ) : (
-                      orders.map(order => (
-                        <OrderCard
-                          key={order.id}
-                          order={order}
-                          onAdvance={updateKitchenOrderStatus}
-                        />
-                      ))
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-    </div>
-  );
+export default function KitchenDisplay({onNavigate:_onNavigate}:Props){
+  const {kitchenOrders,updateKitchenOrderStatus}=useCart();
+  const [search,setSearch]=useState("");const [filter,setFilter]=useState<"all"|"priority"|"delayed">("all");const [now,setNow]=useState(Date.now());const [historyOpen,setHistoryOpen]=useState(false);const [newIds,setNewIds]=useState<Set<string>>(new Set());
+  const previousIds=useRef<Set<string>|null>(null);const ordersRef=useRef(kitchenOrders);const undoTokens=useRef(new Map<string,number>());ordersRef.current=kitchenOrders;
+  useEffect(()=>{const timer=window.setInterval(()=>setNow(Date.now()),1000);return()=>window.clearInterval(timer)},[]);
+  useEffect(()=>{const ids=new Set(kitchenOrders.map(order=>order.id));if(previousIds.current){const incoming=kitchenOrders.filter(order=>!previousIds.current?.has(order.id)&&order.status==="received").map(order=>order.id);if(incoming.length){setNewIds(current=>new Set([...current,...incoming]));toast.info(`${incoming.length} new kitchen order${incoming.length>1?"s":""}.`);try{const AudioContextClass=window.AudioContext;const context=new AudioContextClass();const oscillator=context.createOscillator();const gain=context.createGain();oscillator.frequency.value=660;gain.gain.value=.025;oscillator.connect(gain);gain.connect(context.destination);oscillator.start();oscillator.stop(context.currentTime+.12);oscillator.addEventListener("ended",()=>context.close(),{once:true});}catch{/* Sound may be blocked or unavailable; visual feedback remains. */}window.setTimeout(()=>setNewIds(current=>{const next=new Set(current);incoming.forEach(id=>next.delete(id));return next}),6000)}}previousIds.current=ids},[kitchenOrders]);
+  const activeOrders=useMemo(()=>kitchenOrders.filter(order=>order.status!=="completed"&&kitchenItems(order).length>0),[kitchenOrders]);
+  const completedOrders=useMemo(()=>kitchenOrders.filter(order=>order.status==="completed"&&kitchenItems(order).length>0).sort((a,b)=>(b.completedAt??b.startTime)-(a.completedAt??a.startTime)),[kitchenOrders]);
+  const recentCompleted=completedOrders.filter(order=>now-(order.completedAt??order.startTime)<=15*60_000).slice(0,8);
+  const hiddenCompleted=completedOrders.filter(order=>!recentCompleted.some(recent=>recent.id===order.id));
+  const matches=(order:KitchenOrder)=>{const query=search.trim().toLowerCase();const delayed=severity(order,now)==="delayed"||severity(order,now)==="severe";return(!query||String(order.number).includes(query)||order.id.toLowerCase().includes(query)||(order.customer??"").toLowerCase().includes(query)||kitchenItems(order).some(item=>item.name.toLowerCase().includes(query)))&&(filter==="all"||filter==="priority"&&order.priority||filter==="delayed"&&delayed)};
+  const getColumn=(status:OrderStatus)=>(status==="completed"?recentCompleted:activeOrders.filter(order=>order.status===status)).filter(matches).sort((a,b)=>Number(b.priority)-Number(a.priority)||(a.startTime-b.startTime));
+  const today=new Date(now);today.setHours(0,0,0,0);const completedToday=completedOrders.filter(order=>(order.completedAt??order.startTime)>=today.getTime());const completedWithTime=completedToday.filter(order=>order.completedAt!==undefined);const averageSeconds=completedWithTime.length?completedWithTime.reduce((sum,order)=>sum+((order.completedAt??order.startTime)-order.startTime)/1000,0)/completedWithTime.length:0;const delayedCount=activeOrders.filter(order=>["delayed","severe"].includes(severity(order,now))).length;
+  const advance=(order:KitchenOrder,status:OrderStatus)=>{const previous=order.status;const token=(undoTokens.current.get(order.id)??0)+1;undoTokens.current.set(order.id,token);updateKitchenOrderStatus(order.id,status);toast.success(`Order #${order.number} marked as ${COLUMNS.find(column=>column.id===status)?.label}.`,{duration:5000,action:{label:"Undo",onClick:()=>{const current=ordersRef.current.find(item=>item.id===order.id);if(current?.status===status&&undoTokens.current.get(order.id)===token){undoTokens.current.set(order.id,token+1);updateKitchenOrderStatus(order.id,previous);toast.success(`Order #${order.number} returned to ${COLUMNS.find(column=>column.id===previous)?.label}.`);}}}});};
+  return <div className="flex min-h-screen flex-col bg-[#07090a] font-['DM_Sans'] text-[#f0f0eb]"><Toaster theme="dark" position="top-right"/><header className="flex flex-wrap items-center gap-4 border-b border-white/5 bg-[#07090a]/95 px-4 py-3 lg:px-6"><div className="flex items-center gap-3"><MorrowLogo variant="symbol" priority className="size-10 object-contain"/><div><h1 className="font-bold">Kitchen Display</h1><p className="text-xs text-white/40">Morrow Restaurant · {new Date(now).toLocaleTimeString()}</p></div></div><div className="ml-auto flex items-center">{[["Active",activeOrders.length,"text-orange-400"],["Done Today",completedToday.length,"text-emerald-400"],["Delayed",delayedCount,delayedCount?"text-red-400":"text-white/30"],["Average Time",completedWithTime.length?formatAverage(averageSeconds):"—","text-[#d7ff7a]"]].map(([label,value,color])=><div key={label} className="border-l border-white/5 px-3 text-center first:border-0 lg:px-4"><p className={`text-lg font-black ${color}`}>{value}</p><p className="text-[10px] text-white/30">{label}</p></div>)}</div></header>
+    <div className="flex items-center gap-3 border-b border-white/5 bg-[#09090b] px-4 py-2.5 lg:px-6"><div className="flex max-w-xs flex-1 items-center gap-2 rounded-xl border border-white/8 bg-white/5 px-3 py-2"><Search size={14} className="text-white/30"/><input value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search orders or items…" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/25"/></div><div className="flex gap-1.5">{(["all","priority","delayed"] as const).map(value=><button key={value} onClick={()=>setFilter(value)} className={`rounded-xl px-3 py-2 text-xs font-semibold capitalize ${filter===value?"bg-[#d7ff7a] text-[#17200f]":"border border-white/8 bg-white/5 text-white/50"}`}>{value==="priority"&&<Zap size={10} className="mr-1 inline"/>}{value==="delayed"&&<AlertTriangle size={10} className="mr-1 inline"/>}{value}</button>)}</div><div className="ml-auto flex items-center gap-1.5 text-xs text-white/35"><RefreshCw size={12} className="animate-spin [animation-duration:3s]"/>Live</div></div>
+    <div className="flex-1 overflow-x-auto"><div className="flex h-full min-w-max gap-3 p-4">{COLUMNS.map(column=>{const orders=getColumn(column.id);return <section key={column.id} className={`flex w-[290px] shrink-0 flex-col overflow-hidden rounded-2xl border border-t-2 border-white/6 bg-white/[0.02] ${colBorder[column.color]}`}><header className="sticky top-0 z-10 flex items-center justify-between border-b border-white/5 bg-[#0a0c0b] px-4 py-3"><span className={`flex items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold ${colorBg[column.color]}`}>{column.icon}{column.label}</span><div className="flex items-center gap-2"><span className="grid size-5 place-items-center rounded-full bg-white/10 text-[10px] font-bold">{orders.length}</span>{orders.some(order=>order.priority)&&<Bell size={12} className="text-[#d7ff7a]"/>}</div></header><div className="flex max-h-[calc(100vh-176px)] flex-1 flex-col gap-2.5 overflow-y-auto p-3">{orders.length?orders.map(order=><OrderCard key={order.id} order={order} now={now} isNew={newIds.has(order.id)} onAdvance={advance}/>):<div className="py-12 text-center text-xs text-white/25">{column.empty}</div>}{column.id==="completed"&&hiddenCompleted.length>0&&<button onClick={()=>setHistoryOpen(true)} className="mt-auto min-h-10 rounded-xl border border-white/10 bg-white/5 text-xs font-bold text-white/55 hover:bg-white/10">View Completed History ({hiddenCompleted.length})</button>}</div></section>})}</div></div>
+    {historyOpen&&<Modal title="Completed History" onClose={()=>setHistoryOpen(false)}><div className="space-y-2">{completedOrders.map(order=><div key={order.id} className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.03] p-3"><div><strong>#{order.number}</strong><p className="text-xs text-white/35">{order.items.reduce((sum,item)=>sum+item.qty,0)} items · completed {new Date(order.completedAt??order.startTime).toLocaleString()}</p></div><span className="text-xs text-emerald-300">Completed</span></div>)}</div></Modal>}
+  </div>;
 }

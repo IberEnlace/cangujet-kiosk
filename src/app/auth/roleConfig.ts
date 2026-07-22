@@ -1,6 +1,6 @@
-export type UserRole = "customer" | "admin" | "cashier" | "kitchen" | "display" | "developer";
+export type UserRole = "customer" | "admin" | "cashier" | "kitchen" | "display";
 export type StaffRole = Extract<UserRole, "admin" | "cashier" | "kitchen">;
-export type DeviceMode = "unassigned" | Exclude<UserRole, "developer">;
+export type DeviceMode = "unassigned" | UserRole;
 
 export const ROUTES = {
   idle: "/idle",
@@ -19,6 +19,11 @@ export const ROUTES = {
   tracking: "/tracking",
   adminLogin: "/admin/login",
   admin: "/admin",
+  adminDashboard: "/admin/dashboard",
+  adminMenu: "/admin/menu",
+  adminCategories: "/admin/categories",
+  adminNotifications: "/admin/notifications",
+  adminSettings: "/admin/settings",
   cashierLogin: "/cashier/login",
   cashier: "/cashier",
   kitchenLogin: "/kitchen/login",
@@ -26,7 +31,6 @@ export const ROUTES = {
   display: "/display",
   deviceSetup: "/device-setup",
   deviceInfo: "/device-info",
-  dev: "/dev",
 } as const;
 
 export type AppRoute = typeof ROUTES[keyof typeof ROUTES];
@@ -45,8 +49,8 @@ export function getLoginRouteForRole(role: StaffRole): AppRoute {
 
 export function getHomeRouteForRole(role: UserRole): AppRoute {
   const routes: Record<UserRole, AppRoute> = {
-    customer: ROUTES.idle, admin: ROUTES.admin, cashier: ROUTES.cashier,
-    kitchen: ROUTES.kitchen, display: ROUTES.display, developer: ROUTES.dev,
+    customer: ROUTES.idle, admin: ROUTES.adminDashboard, cashier: ROUTES.cashier,
+    kitchen: ROUTES.kitchen, display: ROUTES.display,
   };
   return routes[role];
 }

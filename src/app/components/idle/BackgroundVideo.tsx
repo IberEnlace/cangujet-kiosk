@@ -3,6 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 interface BackgroundVideoProps {
   videos: readonly string[];
   intervalMs?: number;
+  transitionDurationMs?: number;
   minimumPlaybackBeforeTransitionMs?: number;
   className?: string;
 }
@@ -14,6 +15,7 @@ const otherLayer = (layer: Layer): Layer => layer === 0 ? 1 : 0;
 function BackgroundVideo({
   videos,
   intervalMs = 9000,
+  transitionDurationMs = 1200,
   minimumPlaybackBeforeTransitionMs = 4000,
   className = "",
 }: BackgroundVideoProps) {
@@ -35,6 +37,7 @@ function BackgroundVideo({
   const isTransitioningRef = useRef(false);
   const transitionRequestedRef = useRef(false);
   const rotationTimerRef = useRef<number>();
+  const transitionTimerRef = useRef<number>();
   const transitionFrameRef = useRef<number>();
   const mountedRef = useRef(true);
 
@@ -88,13 +91,11 @@ function BackgroundVideo({
     isTransitioningRef.current = true;
     transitionRequestedRef.current = false;
     if (rotationTimerRef.current) window.clearTimeout(rotationTimerRef.current);
-    console.debug("[BackgroundVideo] transition start", { fromLayer, toLayer });
     nextVideo.muted = true;
     nextVideo.defaultMuted = true;
     try {
       await nextVideo.play();
       await waitForPaintedFrame(nextVideo);
-      console.debug("[BackgroundVideo] next frame ready");
     } catch (error) {
       void error;
       isTransitioningRef.current = false;
@@ -107,29 +108,34 @@ function BackgroundVideo({
     }
     if (!mountedRef.current) return;
     setIncomingLayer(toLayer);
-    setIncomingVisible(true);
-    console.debug("[BackgroundVideo] fade start");
+    setIncomingVisible(false);
     transitionFrameRef.current = window.requestAnimationFrame(() => {
-      transitionFrameRef.current = undefined;
-      if (!mountedRef.current) return;
-      console.debug("[BackgroundVideo] fade complete");
-      setActiveLayer(toLayer);
-      activeLayerRef.current = toLayer;
-      setIncomingLayer(null);
-      setIncomingVisible(false);
+      transitionFrameRef.current = window.requestAnimationFrame(() => {
+        transitionFrameRef.current = undefined;
+        if (!mountedRef.current) return;
+        setIncomingVisible(true);
+        transitionTimerRef.current = window.setTimeout(() => {
+          transitionTimerRef.current = undefined;
+          if (!mountedRef.current) return;
+          setActiveLayer(toLayer);
+          activeLayerRef.current = toLayer;
+          setIncomingLayer(null);
+          setIncomingVisible(false);
 
-      const oldVideo = videoRefs.current[fromLayer].current;
-      oldVideo?.pause();
-      if (oldVideo) oldVideo.currentTime = 0;
-      activeIndexRef.current = Math.max(0, sources.indexOf(layerSourcesRef.current[toLayer]));
-      isTransitioningRef.current = false;
-      const followingIndex = getNextIndex(activeIndexRef.current);
-      if (followingIndex >= 0 && sources[followingIndex] !== layerSourcesRef.current[toLayer]) {
-        assignSource(fromLayer, sources[followingIndex]);
-      }
-      scheduleRotation(() => beginTransitionRef.current());
+          const oldVideo = videoRefs.current[fromLayer].current;
+          oldVideo?.pause();
+          if (oldVideo) oldVideo.currentTime = 0;
+          activeIndexRef.current = Math.max(0, sources.indexOf(layerSourcesRef.current[toLayer]));
+          isTransitioningRef.current = false;
+          const followingIndex = getNextIndex(activeIndexRef.current);
+          if (followingIndex >= 0 && sources[followingIndex] !== layerSourcesRef.current[toLayer]) {
+            assignSource(fromLayer, sources[followingIndex]);
+          }
+          scheduleRotation(() => beginTransitionRef.current());
+        }, transitionDurationMs);
+      });
     });
-  }, [assignSource, getNextIndex, scheduleRotation, sources, waitForPaintedFrame]);
+  }, [assignSource, getNextIndex, scheduleRotation, sources, transitionDurationMs, waitForPaintedFrame]);
 
   useEffect(() => { beginTransitionRef.current = () => { void beginTransition(); }; }, [beginTransition]);
 
@@ -189,6 +195,7 @@ function BackgroundVideo({
     return () => {
       mountedRef.current = false;
       if (rotationTimerRef.current) window.clearTimeout(rotationTimerRef.current);
+      if (transitionTimerRef.current) window.clearTimeout(transitionTimerRef.current);
       if (transitionFrameRef.current) window.cancelAnimationFrame(transitionFrameRef.current);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       videoRefs.current.forEach(ref => ref.current?.pause());
@@ -202,13 +209,14 @@ function BackgroundVideo({
     return {
       opacity: hasVisibleVideo && (isActive || (isIncoming && incomingVisible)) ? 1 : 0,
       zIndex: isIncoming ? 2 : isActive ? 1 : 0,
-      transition: "none",
+      transition: isIncoming ? `opacity ${transitionDurationMs}ms ease-in-out` : "none",
       willChange: "opacity",
     };
   };
 
   return (
     <div className={`absolute inset-0 overflow-hidden bg-[#12190f] ${className}`} aria-hidden="true">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(215,255,122,.18),transparent_34%),radial-gradient(circle_at_80%_75%,rgba(126,85,45,.25),transparent_38%),linear-gradient(135deg,#12190f,#080b08_68%,#17200f)]" />
       <video ref={video0Ref} src={layerSources[0]} className="absolute inset-0 size-full object-cover" style={getLayerStyle(0)}
         muted playsInline controls={false} disablePictureInPicture preload="auto" onCanPlay={() => handleCanPlay(0)} onError={event => handleError(0, event)} onContextMenu={event => event.preventDefault()} />
       <video ref={video1Ref} src={layerSources[1]} className="absolute inset-0 size-full object-cover" style={getLayerStyle(1)}

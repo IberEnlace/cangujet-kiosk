@@ -4,6 +4,9 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
+    "generate:menu-images": "node scripts/generate-menu-image-manifest.mjs",
+    "predev": "npm run generate:menu-images",
+    "prebuild": "npm run generate:menu-images",
     "build": "tsc --noEmit && vite build",
     "dev": "concurrently -k -n API,WEB -c magenta,cyan \"npm:dev:server\" \"npm:dev:web\"",
     "dev:web": "vite",

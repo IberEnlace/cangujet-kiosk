@@ -157,7 +157,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
       <button onClick={() => setScreen("select")} className="absolute top-6 left-6 size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></button>
       <div className="text-center">
         <h2 className="text-2xl font-bold">Scan to Pay</h2>
-        <p className="text-white/40 mt-2">{import.meta.env.DEV ? "Development payment simulation" : "QR payment provider is not connected"}</p>
+        <p className="text-white/40 mt-2">QR payment provider is not connected</p>
       </div>
       <div className="p-6 bg-white rounded-3xl shadow-2xl shadow-black/50">
         <div className="size-48 bg-[#0a0a0a] rounded-2xl flex items-center justify-center relative overflow-hidden">

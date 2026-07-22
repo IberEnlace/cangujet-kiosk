@@ -5,7 +5,9 @@ const LOGIN_ROLE: Partial<Record<AppRoute, StaffRole>> = {
   [ROUTES.adminLogin]: "admin", [ROUTES.cashierLogin]: "cashier", [ROUTES.kitchenLogin]: "kitchen",
 };
 const HOME_ROLE: Partial<Record<AppRoute, UserRole>> = {
-  [ROUTES.admin]: "admin", [ROUTES.cashier]: "cashier", [ROUTES.kitchen]: "kitchen", [ROUTES.display]: "display",
+  [ROUTES.admin]: "admin", [ROUTES.adminDashboard]: "admin", [ROUTES.adminMenu]: "admin", [ROUTES.adminCategories]: "admin",
+  [ROUTES.adminNotifications]: "admin", [ROUTES.adminSettings]: "admin",
+  [ROUTES.cashier]: "cashier", [ROUTES.kitchen]: "kitchen", [ROUTES.display]: "display",
 };
 
 export function isKnownRoute(route: string): route is AppRoute {
@@ -13,7 +15,7 @@ export function isKnownRoute(route: string): route is AppRoute {
 }
 
 export function guardRoute(route: AppRoute, role: UserRole | null, authenticated: boolean): AppRoute {
-  const publicUtilityRoutes: AppRoute[] = [ROUTES.selectRole, ROUTES.deviceSetup, ROUTES.deviceInfo, ROUTES.dev];
+  const publicUtilityRoutes: AppRoute[] = [ROUTES.selectRole, ROUTES.deviceSetup, ROUTES.deviceInfo];
   if (publicUtilityRoutes.includes(route)) return route;
   if (CUSTOMER_ROUTES.includes(route)) return route;
   const loginRole = LOGIN_ROLE[route];

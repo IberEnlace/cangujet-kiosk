@@ -8,7 +8,6 @@ import { LanguageProvider, useLanguage } from "./context/LanguageContext";
 import RoleSelection from "./pages/RoleSelection";
 import StaffLogin from "./components/auth/StaffLogin";
 import DeviceSetup from "./pages/device/DeviceSetup";
-import DeveloperPortal from "./pages/DeveloperPortal";
 import CashierDashboard from "./pages/CashierDashboard";
 import StaffLayout from "./layouts/StaffLayout";
 import KioskJourney from "./pages/KioskJourney";
@@ -33,7 +32,9 @@ import NoriTextChat from "./pages/nori/NoriTextChat";
 import NoriVoiceConversation from "./pages/nori/NoriVoiceConversation";
 
 function getCurrentRoute(): AppRoute {
-  const path = window.location.hash.replace(/^#/, "") || ROUTES.idle;
+  const path = window.location.hash.replace(/^#/, "") || ROUTES.selectRole;
+  if (path === "/admin/integrations") return ROUTES.adminDashboard;
+  if (path === "/admin/email") return ROUTES.adminNotifications;
   return isKnownRoute(path) ? path : ROUTES.idle;
 }
 
@@ -66,7 +67,9 @@ function Application() {
 
   useEffect(() => {
     const initialHash = window.location.hash;
-    if (!initialHash || initialHash === "#/") navigateTo(ROUTES.idle);
+    if (!initialHash || initialHash === "#/") navigateTo(ROUTES.selectRole);
+    else if (initialHash === "#/admin/integrations") navigateTo(ROUTES.adminDashboard);
+    else if (initialHash === "#/admin/email") navigateTo(ROUTES.adminNotifications);
     const update = () => setRoute(getCurrentRoute());
     window.addEventListener("hashchange", update); update();
     return () => window.removeEventListener("hashchange", update);
@@ -123,7 +126,6 @@ function Application() {
   if (route === ROUTES.selectRole) return <RoleSelection onSelect={(mode, remember) => { auth.selectDeviceMode(mode, remember); navigateTo(isStaffRole(mode) ? getLoginRouteForRole(mode) : getHomeRouteForRole(mode)); }} />;
   if (route === ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => { window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle); }} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
   if (route === ROUTES.deviceInfo) return <DeviceInfo onBack={() => navigateTo(ROUTES.deviceSetup)} onCleared={() => navigateTo(ROUTES.deviceSetup)} />;
-  if (route === ROUTES.dev) return <DeveloperPortal navigate={navigateTo} />;
   if (route === ROUTES.idle) return <IdleScreen onStart={startOrder} />;
   if (route === ROUTES.language) return <LanguageSelection onBack={() => navigateTo(ROUTES.idle)} onContinue={() => {
     const allowed = device.config?.settings.allowedOrderTypes ?? [];
@@ -144,7 +146,13 @@ function Application() {
 
   const loginRole = (["admin", "cashier", "kitchen"] as StaffRole[]).find(role => route === getLoginRouteForRole(role));
   if (loginRole) return <StaffLogin role={loginRole} {...LOGIN_COPY[loginRole]} onSuccess={() => navigateTo(getHomeRouteForRole(loginRole))} onBack={() => navigateTo(ROUTES.selectRole)} />;
-  if (route === ROUTES.admin) return staffPage("admin", <Dashboard onNavigate={() => undefined} />);
+  if (route === ROUTES.admin) { navigateTo(ROUTES.adminDashboard); return null; }
+  const adminSections: Partial<Record<AppRoute, "dashboard" | "menu" | "categories" | "notifications" | "settings">> = {
+    [ROUTES.adminDashboard]: "dashboard", [ROUTES.adminMenu]: "menu", [ROUTES.adminCategories]: "categories",
+    [ROUTES.adminNotifications]: "notifications", [ROUTES.adminSettings]: "settings",
+  };
+  const adminSection = adminSections[route];
+  if (adminSection) return staffPage("admin", <Dashboard section={adminSection} onNavigate={navigateTo} />);
   if (route === ROUTES.cashier) return staffPage("cashier", <CashierDashboard />);
   if (route === ROUTES.kitchen) return staffPage("kitchen", <KitchenDisplay onNavigate={() => undefined} />);
   return null;

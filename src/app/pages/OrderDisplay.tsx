@@ -1,211 +1,39 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock } from "lucide-react";
-import { useCart } from "../context/CartContext";
+import { useCart, type KitchenOrder, type OrderStatus } from "../context/CartContext";
 import MorrowLogo from "../components/branding/MorrowLogo";
 
-type Props = { onNavigate: (route: string) => void };
+type Props={onNavigate:(route:string)=>void};
+const COMPLETED_LIFETIME_MS=5*60_000;
+const MAX_COMPLETED=8;
 
-type DisplayOrder = {
-  number: number;
-  status: "preparing" | "ready" | "completed";
-  eta: number;
-};
+function orderTimestamp(order:KitchenOrder){return order.completedAt??order.startTime}
+function playReadySound(){try{const context=new window.AudioContext();const oscillator=context.createOscillator();const gain=context.createGain();oscillator.frequency.value=784;gain.gain.setValueAtTime(.035,context.currentTime);gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+.24);oscillator.connect(gain);gain.connect(context.destination);oscillator.start();oscillator.stop(context.currentTime+.24);oscillator.addEventListener("ended",()=>context.close(),{once:true})}catch{/* Autoplay may be blocked; the visual announcement remains available. */}}
 
-function AnimatedNumber({ value }: { value: number }) {
-  const [displayed, setDisplayed] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setDisplayed(value), 200);
-    return () => clearTimeout(t);
-  }, [value]);
-  return <span className="tabular-nums">{displayed}</span>;
-}
+export default function OrderDisplay({onNavigate:_onNavigate}:Props){
+  const {kitchenOrders}=useCart();
+  const [now,setNow]=useState(Date.now());
+  const [announcing,setAnnouncing]=useState<Set<string>>(new Set());
+  const previousStatuses=useRef<Map<string,OrderStatus>|null>(null);
 
-export default function OrderDisplay({ onNavigate: _onNavigate }: Props) {
-  const { kitchenOrders } = useCart();
-  const [currentTime, setCurrentTime] = useState(new Date());
-  const [flash, setFlash] = useState<number | null>(null);
+  useEffect(()=>{const timer=window.setInterval(()=>setNow(Date.now()),30_000);return()=>window.clearInterval(timer)},[]);
+  useEffect(()=>{const current=new Map(kitchenOrders.map(order=>[order.id,order.status]));if(previousStatuses.current){const newlyReady=kitchenOrders.filter(order=>order.status==="ready"&&previousStatuses.current?.get(order.id)!=="ready").map(order=>order.id);if(newlyReady.length){setAnnouncing(ids=>new Set([...ids,...newlyReady]));playReadySound();window.setTimeout(()=>setAnnouncing(ids=>{const next=new Set(ids);newlyReady.forEach(id=>next.delete(id));return next}),1100)}}previousStatuses.current=current},[kitchenOrders]);
 
-  useEffect(() => {
-    const t = setInterval(() => setCurrentTime(new Date()), 1000);
-    return () => clearInterval(t);
-  }, []);
+  const readyOrders=useMemo(()=>kitchenOrders.filter(order=>order.status==="ready").sort((a,b)=>b.startTime-a.startTime),[kitchenOrders]);
+  const preparingOrders=useMemo(()=>kitchenOrders.filter(order=>order.status==="received"||order.status==="preparing"||order.status==="cooking").sort((a,b)=>a.startTime-b.startTime),[kitchenOrders]);
+  const completedOrders=useMemo(()=>kitchenOrders.filter(order=>order.status==="completed"&&now-orderTimestamp(order)<=COMPLETED_LIFETIME_MS).sort((a,b)=>orderTimestamp(b)-orderTimestamp(a)).slice(0,MAX_COMPLETED),[kitchenOrders,now]);
+  const clock=new Date(now).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
 
-  // Generate display orders from kitchen
-  const displayOrders: DisplayOrder[] = [
-    ...kitchenOrders.filter(o => o.status === "ready").map(o => ({
-      number: o.number,
-      status: "ready" as const,
-      eta: 0,
-    })),
-    ...kitchenOrders.filter(o => o.status === "preparing" || o.status === "cooking").map(o => ({
-      number: o.number,
-      status: "preparing" as const,
-      eta: o.estimatedMinutes,
-    })),
-    // Pad with demo numbers if empty
-    ...(kitchenOrders.length === 0 ? [
-      { number: 41, status: "completed" as const, eta: 0 },
-      { number: 42, status: "ready" as const, eta: 0 },
-      { number: 43, status: "ready" as const, eta: 0 },
-      { number: 44, status: "preparing" as const, eta: 8 },
-      { number: 45, status: "preparing" as const, eta: 12 },
-      { number: 46, status: "preparing" as const, eta: 15 },
-    ] : []),
-    ...kitchenOrders.filter(o => o.status === "completed").map(o => ({
-      number: o.number,
-      status: "completed" as const,
-      eta: 0,
-    })),
-  ];
-
-  const readyOrders = displayOrders.filter(o => o.status === "ready");
-  const preparingOrders = displayOrders.filter(o => o.status === "preparing");
-  const completedOrders = displayOrders.filter(o => o.status === "completed").slice(0, 8);
-
-  // Flash effect for new ready orders
-  useEffect(() => {
-    if (readyOrders.length > 0) {
-      const interval = setInterval(() => {
-        setFlash(readyOrders[Math.floor(Math.random() * readyOrders.length)]?.number);
-        setTimeout(() => setFlash(null), 800);
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [readyOrders.length]);
-
-  return (
-    <div className="min-h-screen bg-[#05070a] text-[#f0f0eb] font-['DM_Sans'] flex flex-col select-none">
-
-      {/* Header Brand Bar */}
-      <div className="bg-[#0a0d0f] border-b border-white/5 px-8 py-4 flex items-center justify-between">
-        <div>
-          <MorrowLogo variant="full" priority className="h-auto w-36" />
-          <p className="mt-1 text-[10px] text-white/30 uppercase tracking-[0.2em]">Order Status Display</p>
-        </div>
-        <div className="flex items-center gap-2 text-white/40">
-          <Clock size={16} />
-          <span className="font-mono text-lg tracking-wider">{currentTime.toLocaleTimeString()}</span>
-        </div>
-      </div>
-
-      {/* Main Display */}
-      <div className="flex-1 flex gap-0">
-
-        {/* READY - Left Column (largest) */}
-        <div className="flex-[2] border-r border-white/5 flex flex-col">
-          <div className="bg-[#d7ff7a]/10 border-b border-[#d7ff7a]/20 px-8 py-4 flex items-center gap-3">
-            <div className="size-3 rounded-full bg-[#d7ff7a] animate-pulse" />
-            <h2 className="font-black text-xl text-[#d7ff7a] uppercase tracking-[0.15em]">Ready for Pickup</h2>
-            <span className="ml-auto text-[#d7ff7a]/60 font-bold text-sm">{readyOrders.length} orders</span>
-          </div>
-
-          <div className="flex-1 p-6 grid grid-cols-3 content-start gap-4 overflow-hidden">
-            {readyOrders.length === 0 && (
-              <div className="col-span-3 flex flex-col items-center justify-center py-16 text-center">
-                <div className="size-16 rounded-2xl bg-white/5 flex items-center justify-center mb-3">
-                  <Clock size={28} className="text-white/15" />
-                </div>
-                <p className="text-white/20 text-lg">Orders are being prepared</p>
-                <p className="text-white/10 text-sm mt-1">Ready orders will appear here</p>
-              </div>
-            )}
-            {readyOrders.map(order => (
-              <div
-                key={order.number}
-                className={`relative flex items-center justify-center rounded-3xl border-2 aspect-square transition-all duration-300 ${
-                  flash === order.number
-                    ? "bg-[#d7ff7a] border-[#d7ff7a] scale-105"
-                    : "bg-[#d7ff7a]/10 border-[#d7ff7a]/40"
-                }`}
-              >
-                <div className="text-center">
-                  <p className={`text-7xl font-black leading-none ${flash === order.number ? "text-[#17200f]" : "text-[#d7ff7a]"}`}>
-                    <AnimatedNumber value={order.number} />
-                  </p>
-                  <p className={`text-xs font-bold mt-2 uppercase tracking-wider ${flash === order.number ? "text-[#17200f]/60" : "text-[#d7ff7a]/60"}`}>
-                    Collect Now
-                  </p>
-                </div>
-                {flash === order.number && (
-                  <div className="absolute -top-1 -right-1 size-4 rounded-full bg-[#d7ff7a] animate-ping" />
-                )}
-              </div>
-            ))}
-
-            {/* Demo ready orders if empty */}
-            {readyOrders.length === 0 && displayOrders.filter(o => o.status === "ready").length > 0 &&
-              displayOrders.filter(o => o.status === "ready").map(order => (
-                <div key={order.number} className="flex items-center justify-center rounded-3xl border-2 bg-[#d7ff7a]/10 border-[#d7ff7a]/40 aspect-square">
-                  <p className="text-6xl font-black text-[#d7ff7a]">
-                    <AnimatedNumber value={order.number} />
-                  </p>
-                </div>
-              ))
-            }
-          </div>
-        </div>
-
-        {/* PREPARING - Middle + Completed - Right */}
-        <div className="flex-[1] flex flex-col border-r border-white/5">
-          {/* Preparing section */}
-          <div className="flex-1 border-b border-white/5 flex flex-col">
-            <div className="bg-orange-500/10 border-b border-orange-500/20 px-6 py-4 flex items-center gap-2">
-              <div className="size-3 rounded-full bg-orange-400 animate-pulse" />
-              <h2 className="font-bold text-base text-orange-400 uppercase tracking-widest">Preparing</h2>
-              <span className="ml-auto text-orange-400/50 text-sm">{preparingOrders.length}</span>
-            </div>
-            <div className="flex-1 p-4 flex flex-col gap-2 overflow-hidden">
-              {preparingOrders.map(order => (
-                <div key={order.number} className="flex items-center justify-between px-4 py-3 rounded-2xl bg-orange-500/5 border border-orange-500/15 hover:border-orange-500/30 transition-all">
-                  <span className="text-3xl font-black text-orange-300"><AnimatedNumber value={order.number} /></span>
-                  <div className="text-right">
-                    <div className="flex items-center gap-1 justify-end">
-                      <Clock size={10} className="text-orange-400/60" />
-                      <span className="text-sm font-bold text-orange-400">~{order.eta}m</span>
-                    </div>
-                    <p className="text-[9px] text-orange-400/40 uppercase tracking-wider">est. time</p>
-                  </div>
-                </div>
-              ))}
-              {preparingOrders.length === 0 && (
-                <div className="flex-1 flex items-center justify-center">
-                  <p className="text-white/15 text-sm">No orders preparing</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Completed section */}
-          <div className="flex flex-col" style={{ height: "35%" }}>
-            <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-6 py-3 flex items-center gap-2">
-              <div className="size-2.5 rounded-full bg-emerald-400" />
-              <h2 className="font-bold text-sm text-emerald-400 uppercase tracking-widest">Completed</h2>
-            </div>
-            <div className="flex-1 p-4 flex flex-wrap gap-2 content-start overflow-hidden">
-              {completedOrders.map(order => (
-                <div key={order.number} className="flex items-center justify-center rounded-xl bg-emerald-500/5 border border-emerald-500/15 px-4 py-2">
-                  <span className="text-xl font-bold text-emerald-400/60"><AnimatedNumber value={order.number} /></span>
-                </div>
-              ))}
-              {completedOrders.length === 0 && <p className="text-white/15 text-sm w-full text-center pt-4">—</p>}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Footer ticker */}
-      <div className="bg-[#0a0d0f] border-t border-white/5 px-8 py-3 flex items-center justify-between overflow-hidden">
-        <div className="overflow-hidden flex-1">
-          <p className="text-white/30 text-sm animate-[marquee_20s_linear_infinite] whitespace-nowrap">
-            🍔 Welcome to Morrow Restaurant — Please collect your order at counter when your number is called — Thank you for dining with us — &nbsp;&nbsp;&nbsp;
-            🍔 Welcome to Morrow Restaurant — Please collect your order at counter when your number is called — Thank you for dining with us
-          </p>
-        </div>
-        <div className="ml-8 flex items-center gap-2 text-xs text-white/20 flex-shrink-0">
-          <div className="size-2 rounded-full bg-[#d7ff7a] animate-pulse" />
-          Live
-        </div>
+  return <main className="flex min-h-screen flex-col select-none overflow-hidden bg-[#05070a] font-['DM_Sans'] text-[#f0f0eb]">
+    <header className="flex items-center justify-between border-b border-white/5 bg-[#0a0d0f] px-[clamp(1rem,2.5vw,3rem)] py-[clamp(.8rem,1.5vh,1.25rem)]"><div><MorrowLogo variant="full" priority className="h-auto w-[clamp(8rem,10vw,12rem)]"/><p className="mt-1 text-[clamp(.55rem,.65vw,.75rem)] uppercase tracking-[.2em] text-white/30">Order Status Display</p></div><div className="flex items-center gap-2 text-white/50"><Clock size={20}/><time className="font-mono text-[clamp(1.1rem,1.6vw,2rem)] font-bold tabular-nums">{clock}</time></div></header>
+    <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(310px,1fr)]">
+      <section className="flex min-h-[52vh] min-w-0 flex-col border-b border-white/5 lg:min-h-0 lg:border-b-0 lg:border-r"><header className="flex items-center gap-3 border-b border-[#d7ff7a]/20 bg-[#d7ff7a]/10 px-[clamp(1rem,2vw,2rem)] py-4"><span className="size-3 rounded-full bg-[#d7ff7a]"/><h1 className="text-[clamp(1rem,1.5vw,1.6rem)] font-black uppercase tracking-[.14em] text-[#d7ff7a]">Ready for Pickup</h1><span className="ml-auto text-sm font-bold text-[#d7ff7a]/60">{readyOrders.length}</span></header>
+        <div className="grid flex-1 content-center grid-cols-1 gap-[clamp(.75rem,1.5vw,1.5rem)] overflow-hidden p-[clamp(1rem,2vw,2rem)] sm:grid-cols-2">{readyOrders.length?readyOrders.map(order=><article key={order.id} className={`flex min-h-[clamp(11rem,25vh,20rem)] items-center justify-center rounded-3xl border-2 border-[#d7ff7a]/45 bg-[#d7ff7a]/10 p-5 text-center transition duration-500 ${announcing.has(order.id)?"scale-[1.05] border-[#d7ff7a] bg-[#d7ff7a]/18":"scale-100"}`}><div><div className="text-[clamp(4.5rem,9vw,10rem)] font-black leading-none tabular-nums text-[#d7ff7a]">{order.number}</div><p className="mt-4 text-[clamp(.75rem,1vw,1.15rem)] font-black uppercase tracking-[.18em] text-[#d7ff7a]">Ready for Pickup</p><p className="mt-2 text-[clamp(.7rem,.85vw,1rem)] font-medium text-white/50">Collect at Counter</p></div></article>):<div className="col-span-full flex flex-col items-center justify-center py-16 text-center"><Clock size={40} className="mb-4 text-white/15"/><p className="text-[clamp(1.1rem,1.6vw,1.8rem)] font-semibold text-white/30">No orders ready</p><p className="mt-2 text-[clamp(.8rem,1vw,1.1rem)] text-white/18">Your order will appear here.</p></div>}</div>
+      </section>
+      <div className="grid min-h-0 grid-rows-[minmax(0,1fr)_minmax(170px,35%)]">
+        <section className="flex min-h-0 flex-col border-b border-white/5"><header className="flex items-center gap-2 border-b border-orange-500/20 bg-orange-500/10 px-5 py-4"><span className="size-3 rounded-full bg-orange-400"/><h2 className="text-[clamp(.9rem,1.1vw,1.2rem)] font-bold uppercase tracking-widest text-orange-400">Preparing</h2><span className="ml-auto text-sm text-orange-400/55">{preparingOrders.length}</span></header><div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4">{preparingOrders.length?preparingOrders.map(order=><article key={order.id} className="flex min-h-20 items-center justify-between gap-4 rounded-2xl border border-orange-500/15 bg-orange-500/5 px-5 py-3"><strong className="text-[clamp(2rem,3vw,3.6rem)] font-black tabular-nums text-orange-300">{order.number}</strong><div className="text-right"><p className="text-[clamp(.65rem,.8vw,.85rem)] font-medium uppercase tracking-wider text-orange-300/55">Estimated</p><p className="text-[clamp(1rem,1.35vw,1.5rem)] font-black text-orange-400">{order.estimatedMinutes} min</p></div></article>):<div className="flex flex-1 items-center justify-center text-center text-[clamp(.9rem,1.1vw,1.2rem)] text-white/20">Preparing new orders...</div>}</div></section>
+        <section className="flex min-h-0 flex-col"><header className="flex items-center gap-2 border-b border-emerald-500/20 bg-emerald-500/10 px-5 py-3"><span className="size-2.5 rounded-full bg-emerald-400"/><h2 className="text-sm font-bold uppercase tracking-widest text-emerald-400">Completed</h2></header><div className="flex flex-1 flex-wrap content-start gap-2 overflow-hidden p-4">{completedOrders.length?completedOrders.map(order=><div key={order.id} className="grid min-h-14 min-w-20 place-items-center rounded-xl border border-emerald-500/15 bg-emerald-500/5 px-4 py-2"><span className="text-[clamp(1.35rem,1.8vw,2.25rem)] font-bold tabular-nums text-emerald-400/65">{order.number}</span></div>):<div className="flex w-full flex-1 items-center justify-center text-sm text-white/18">No recent pickups.</div>}</div></section>
       </div>
     </div>
-  );
+  </main>;
 }

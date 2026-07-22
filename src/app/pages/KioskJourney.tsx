@@ -13,12 +13,12 @@ import { postNoriChat, shouldSubmitNoriKey } from "../services/noriChatClient";
 import MorrowLogo from "../components/branding/MorrowLogo";
 
 // Premium Unsplash Images for Kiosk Menu
-const burgerImg = "https://images.unsplash.com/photo-1606149059549-6042addafc5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=1080";
-const chickenImg = "https://images.unsplash.com/photo-1626082927389-6cd097cdc6ec?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=1080";
-const friesImg = "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=1080";
-const saladImg = "https://images.unsplash.com/photo-1512621776951-a57141f2eefd?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=1080";
-const drinkImg = "https://images.unsplash.com/photo-1543007630-9710e4a00a20?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=1080";
-const dessertImg = "https://images.unsplash.com/photo-1551024601-bec78aea704b?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=1080";
+const burgerImg = "/images/products/burger%20(2).png";
+const chickenImg = "/images/products/chicken%20(3).png";
+const friesImg = "/images/products/drink%20(4).png";
+const saladImg = "/images/products/salads%20(2).png";
+const drinkImg = "/images/products/drink%20(2).png";
+const dessertImg = "/images/products/desserts%20(2).png";
 
 type KioskItem = {
   id: string;
@@ -50,11 +50,10 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
   const { language, setLanguage } = useLanguage();
   const {
     items: sharedCart, addItem: addSharedItem, removeItem, updateQty,
-    updateCustomizations, clearCart, setOrderType, providerInstanceId,
+    updateCustomizations, clearCart, setOrderType,
   } = useCart();
   const cartRef = useRef(sharedCart);
   useEffect(() => { cartRef.current = sharedCart; }, [sharedCart]);
-  useEffect(() => { console.log("[CART][PROVIDER_INSTANCE]", providerInstanceId); }, [providerInstanceId]);
   const executedActionIdsRef = useRef(new Set<string>());
   const actionResultsRef = useRef<NoriChatRequest["actionResults"]>([]);
   const [screen, setScreen] = useState(initialScreen);
@@ -102,8 +101,6 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
     setAiLoading(true);
 
     const serializedCart = serializeNoriCart(cartRef.current);
-    console.log("[NORI][CART_BEFORE_REQUEST]", cartRef.current);
-    console.log("[NORI][SERIALIZED_CART]", serializedCart);
     const request: NoriChatRequest = {
       message,
       cart: serializedCart,

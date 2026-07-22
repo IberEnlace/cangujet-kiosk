@@ -10,14 +10,14 @@ type Product = { id: string; name: string; description: string; price: number; c
 type Category = { name: string; icon: LucideIcon; image: string };
 
 const categories: readonly Category[] = [
-  { name: "Pizza", icon: Pizza, image: "/images/categories/pizaaz1.png" },
-  { name: "Burgers", icon: Sandwich, image: "/images/categories/burger1.png" },
-  { name: "Pasta", icon: Soup, image: "/images/categories/pasta1.png" },
-  { name: "Salads", icon: Salad, image: "/images/categories/salads1.png" },
-  { name: "Chicken", icon: UtensilsCrossed, image: "/images/categories/chicken1.png" },
-  { name: "Desserts", icon: IceCreamBowl, image: "/images/categories/desserts1.png" },
-  { name: "Drinks", icon: CupSoda, image: "/images/categories/drink1.png" },
-  { name: "Coffee", icon: Coffee, image: "/images/categories/coffee1.png" },
+  { name: "Pizza", icon: Pizza, image: "/images/category-cutouts/pizza.png" },
+  { name: "Burgers", icon: Sandwich, image: "/images/category-cutouts/burgers.png" },
+  { name: "Pasta", icon: Soup, image: "/images/category-cutouts/pasta.png" },
+  { name: "Salads", icon: Salad, image: "/images/category-cutouts/salads.png" },
+  { name: "Chicken", icon: UtensilsCrossed, image: "/images/category-cutouts/chicken.png" },
+  { name: "Desserts", icon: IceCreamBowl, image: "/images/category-cutouts/desserts.png" },
+  { name: "Drinks", icon: CupSoda, image: "/images/category-cutouts/drinks.png" },
+  { name: "Coffee", icon: Coffee, image: "/images/category-cutouts/coffee.png" },
 ];
 
 function productImage(fileName: string) { return `/images/products/${encodeURIComponent(fileName)}`; }
@@ -60,7 +60,7 @@ const categoryCopy: Record<string, string> = {
   Chicken: "Golden, tender & delicious", Desserts: "One more good thing", Drinks: "Cool things, quickly", Coffee: "Freshly brewed for you",
 };
 
-const featuredCategories = categories.map(category => ({ ...category, copy: categoryCopy[category.name] }));
+const featuredCategories = categories.map(category => ({ ...category, copy: categoryCopy[category.name], itemCount: catalog[category.name]?.length ?? 0 }));
 
 function createProductImage(symbol: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><rect width="400" height="400" fill="#eee8dc"/><circle cx="200" cy="200" r="112" fill="#2e6d55"/><text x="200" y="228" text-anchor="middle" font-family="Arial,sans-serif" font-size="112" font-weight="700" fill="white">${symbol}</text></svg>`;
@@ -105,7 +105,7 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori }: 
           <aside className="relative border-e border-white/10 bg-[#0e130c] p-2 pb-28"><p className="px-2 pb-2 pt-2 font-['Space_Mono'] text-[8px] tracking-[.14em] text-white/35">MENU</p><nav className="space-y-2" aria-label="Menu categories">{categories.map(({ name, icon: Icon }) => <button type="button" key={name} onClick={() => chooseCategory(name)} aria-pressed={category === name} className={`flex min-h-[78px] w-full flex-col items-center justify-center rounded-2xl border px-1 py-2 transition active:scale-95 focus-visible:outline focus-visible:outline-3 focus-visible:outline-[#d7ff7a] ${category === name ? "border-[#d7ff7a]/50 bg-[#d7ff7a]/10 shadow-[0_5px_20px_rgba(215,255,122,.08)]" : "border-transparent hover:bg-white/5"}`}><span className={`grid size-11 place-items-center rounded-full ${category === name ? "bg-[#d7ff7a] text-[#17200f]" : "bg-white/5 text-white/45"}`}><Icon size={21} aria-hidden="true" /></span><span className={`mt-1.5 text-[9px] leading-3 sm:text-[10px] ${category === name ? "font-bold text-[#d7ff7a]" : "text-white/45"}`}>{name}</span></button>)}</nav></aside>
 
           <section className="relative min-w-0 pb-28"><div className="p-3 sm:p-5"><div className="flex items-start justify-between gap-3"><div><p className="font-['Space_Mono'] text-[8px] tracking-[.14em] text-[#d7ff7a] sm:text-[9px]">{view === "products" ? "CATEGORY SELECTED" : "CHOOSE A CATEGORY"}</p><h1 className="mt-1 text-[clamp(1.45rem,4vw,2.2rem)] font-semibold tracking-[-.04em] text-white">{view === "products" ? category : "What are you craving?"}</h1></div><button type="button" onClick={() => setView("categories")} className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">Categories</button></div>
-            {view === "categories" ? <CategoryLanding onChoose={chooseCategory} /> : <ProductGrid products={products} currency={currency} onAdd={addProduct} />}
+            {view === "categories" ? <CategoryLanding onChoose={chooseCategory} selected={category} /> : <ProductGrid products={products} currency={currency} onAdd={addProduct} />}
           </div></section>
         </div>
 
@@ -116,8 +116,23 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori }: 
   );
 }
 
-function CategoryLanding({ onChoose }: { onChoose: (name: string) => void }) {
-  return <div className="mt-5 grid grid-cols-1 gap-3 min-[560px]:grid-cols-2">{featuredCategories.map(({ name, copy, icon: Icon, image }) => <button type="button" key={name} onClick={() => onChoose(name)} className="relative min-h-[clamp(9rem,18vh,13rem)] overflow-hidden rounded-[24px] border border-white/10 bg-white/[.045] p-4 text-start shadow-[0_12px_30px_rgba(0,0,0,.18)] transition hover:border-[#d7ff7a]/35 hover:bg-white/[.07] active:scale-[.98] focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]">{image ? <><img src={image} alt="" className="absolute inset-0 size-full object-cover opacity-55" /><span className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" /></> : <span className="absolute end-3 top-3 grid size-20 place-items-center rounded-full bg-[#d7ff7a]/10 text-[#d7ff7a]"><Icon size={40} strokeWidth={1.5} aria-hidden="true" /></span>}<span className="absolute bottom-4 start-4"><strong className="block text-lg text-white">{name}</strong><span className="mt-1 block text-xs text-white/55">{copy}</span></span></button>)}</div>;
+function CategoryLanding({ onChoose, selected }: { onChoose: (name: string) => void; selected: string }) {
+  return <div className="mt-6 grid grid-cols-1 gap-x-4 gap-y-5 min-[560px]:grid-cols-2">{featuredCategories.map(({ name, copy, icon: Icon, image, itemCount }) => {
+    const isSelected = selected === name;
+    return <button type="button" key={name} onClick={() => onChoose(name)} aria-pressed={isSelected} className="group relative h-[clamp(11rem,20vh,13.5rem)] overflow-visible rounded-[24px] text-start transition duration-300 ease-out hover:-translate-y-1.5 hover:scale-[1.03] active:scale-[.99] focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]">
+      <span className={`absolute inset-0 overflow-hidden rounded-[24px] border transition duration-300 ${isSelected ? "border-[#d7ff7a]/70 bg-[#17200f] shadow-[0_16px_38px_rgba(120,170,62,.14)]" : "border-white/[.09] bg-[#10150f] shadow-[0_12px_30px_rgba(0,0,0,.22)] group-hover:border-[#d7ff7a]/30 group-hover:bg-[#131a11] group-hover:shadow-[0_18px_42px_rgba(120,170,62,.14)]"}`}>
+        <span className="absolute inset-0 bg-[radial-gradient(circle_at_76%_30%,rgba(215,251,105,.18),transparent_43%),linear-gradient(145deg,rgba(255,255,255,.035),transparent_55%)]" aria-hidden="true" />
+        <span className="absolute inset-x-0 bottom-0 z-10 h-[72%] bg-gradient-to-t from-[#080b08] via-[#080b08]/78 to-transparent" aria-hidden="true" />
+        {isSelected && <span className="absolute inset-x-5 top-0 z-30 h-0.5 rounded-b-full bg-[#d7ff7a] shadow-[0_0_12px_rgba(215,251,105,.42)]" aria-hidden="true" />}
+      </span>
+      <img src={image} alt="" className="pointer-events-none absolute -end-[4%] -top-[10%] z-[5] h-[82%] w-[62%] object-contain drop-shadow-[0_16px_14px_rgba(0,0,0,.34)] transition duration-500 ease-out group-hover:-translate-y-1.5 group-hover:translate-x-1 group-hover:scale-[1.045]" />
+      <span className="absolute inset-x-5 bottom-5 z-20">
+        <span className="flex items-center gap-2.5"><span className="grid size-8 place-items-center rounded-xl border border-[#d7ff7a]/20 bg-[#d7ff7a]/10 text-[#d7ff7a]"><Icon size={16} strokeWidth={1.8} aria-hidden="true" /></span><strong className="text-xl font-bold tracking-[-.025em] text-white">{name}</strong></span>
+        <span className="mt-2 block max-w-[72%] text-[11px] leading-4 text-white/52">{copy}</span>
+        <span className="mt-2 block font-['Space_Mono'] text-[9px] font-bold uppercase tracking-[.13em] text-[#d7ff7a]/80">{itemCount} Items</span>
+      </span>
+    </button>;
+  })}</div>;
 }
 
 function ProductGrid({ products, currency, onAdd }: { products: Product[]; currency: Intl.NumberFormat; onAdd: (product: Product) => void }) {
