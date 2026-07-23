@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Clock } from "lucide-react";
 import { useCart, type KitchenOrder, type OrderStatus } from "../context/CartContext";
 import MorrowLogo from "../components/branding/MorrowLogo";
+import { usePublicOrderBoard } from "../hooks/useRealtimeOrders";
 
 type Props={onNavigate:(route:string)=>void};
 const COMPLETED_LIFETIME_MS=5*60_000;
@@ -11,7 +12,9 @@ function orderTimestamp(order:KitchenOrder){return order.completedAt??order.star
 function playReadySound(){try{const context=new window.AudioContext();const oscillator=context.createOscillator();const gain=context.createGain();oscillator.frequency.value=784;gain.gain.setValueAtTime(.035,context.currentTime);gain.gain.exponentialRampToValueAtTime(.001,context.currentTime+.24);oscillator.connect(gain);gain.connect(context.destination);oscillator.start();oscillator.stop(context.currentTime+.24);oscillator.addEventListener("ended",()=>context.close(),{once:true})}catch{/* Autoplay may be blocked; the visual announcement remains available. */}}
 
 export default function OrderDisplay({onNavigate:_onNavigate}:Props){
-  const {kitchenOrders}=useCart();
+  const {kitchenOrders:demoOrders}=useCart();
+  const board=usePublicOrderBoard();
+  const kitchenOrders:KitchenOrder[]=board.isDemo?demoOrders:board.orders.map(order=>({id:order.order_number,number:Number(order.order_number.match(/(\d+)$/)?.[1])||0,items:[],status:order.public_status==="ready"?"ready":order.public_status==="completed"?"completed":"preparing",priority:false,delayed:false,startTime:new Date(order.created_at).getTime(),completedAt:order.public_status==="completed"?Date.now():undefined,estimatedMinutes:12,type:"dine_in"}));
   const [now,setNow]=useState(Date.now());
   const [announcing,setAnnouncing]=useState<Set<string>>(new Set());
   const previousStatuses=useRef<Map<string,OrderStatus>|null>(null);

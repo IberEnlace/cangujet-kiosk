@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   CreditCard, QrCode, Users, Check, ArrowLeft, ChevronRight, Loader2,
   Shield, Lock, Receipt
@@ -6,6 +6,8 @@ import {
 import { useCart, type PaymentMethod } from "../context/CartContext";
 import MorrowLogo from "../components/branding/MorrowLogo";
 import { useDevice } from "../context/DeviceContext";
+import { createOrder } from "../services/supabase/orderService";
+import { useAuth } from "../auth/AuthContext";
 
 type CustomerPaymentMethod = Extract<PaymentMethod, "credit" | "cashier" | "qr">;
 type PaymentColor = "blue" | "yellow" | "violet";
@@ -40,23 +42,70 @@ type Screen = "select" | "qr" | "processing";
 type Props = { onNavigate: (route: string) => void };
 
 export default function PaymentFlow({ onNavigate }: Props) {
-  const { total, items, setPaymentMethod, placeOrder } = useCart();
+  const { total, items, orderType, orderNotes, setPaymentMethod, recordCreatedOrder, placeOrder } = useCart();
   const { config } = useDevice();
+  const { currentRole } = useAuth();
   const methodMap: Record<CustomerPaymentMethod, "card" | "pay_at_cashier" | "qr"> = { credit: "card", cashier: "pay_at_cashier", qr: "qr" };
   const availableMethods = METHODS.filter(method => config?.settings.allowedPaymentMethods.includes(methodMap[method.id]));
   const [screen, setScreen] = useState<Screen>("select");
+  const [submitting, setSubmitting] = useState(false);
+  const [orderError, setOrderError] = useState("");
+  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   // Processing
   const [processingStep, setProcessingStep] = useState(0);
 
   const processingSteps = ["Connecting to payment gateway...", "Verifying card details...", "Authorizing payment...", "Confirming order..."];
 
-  const handleMethodSelect = (id: CustomerPaymentMethod) => {
+  const handleMethodSelect = async (id: CustomerPaymentMethod) => {
+    if (submitting || !orderType) return;
+
+    setSubmitting(true);
+    setOrderError("");
+
+    const result = await createOrder({
+      items,
+      orderType,
+      customerNote: orderNotes,
+      idempotencyKey,
+      source: currentRole === "cashier" ? "cashier" : "kiosk",
+    });
+
+    console.log("[MORROW] Cashier createOrder result:", result);
+
+    setSubmitting(false);
+
+    if (!result.ok) {
+      setOrderError(result.error.message);
+      return;
+    }
+
+    const created = {
+      id: result.data.order_id,
+      number: result.data.order_number,
+      total: Number(result.data.total),
+      trackingToken: idempotencyKey,
+    };
+
+    recordCreatedOrder(created);
     setPaymentMethod(id);
-    if (id === "credit") { onNavigate("paymentCard"); return; }
-    if (id === "qr") { setScreen("qr"); return; }
-    placeOrder(); onNavigate("confirmation");
+
+    if (id === "credit") {
+      onNavigate("paymentCard");
+      return;
+    }
+
+    if (id === "qr") {
+      setScreen("qr");
+      return;
+    }
+
+    placeOrder(created);
+    onNavigate("confirmation");
   };
+
+  const cartSignature = items.map(item => `${item.id}:${item.qty}:${item.noriCustomizations?.map(value => value.optionId).sort().join(",") ?? ""}`).sort().join("|");
+  useEffect(() => { setIdempotencyKey(crypto.randomUUID()); }, [cartSignature]);
 
   const startProcessing = () => {
     setScreen("processing");
@@ -105,7 +154,8 @@ export default function PaymentFlow({ onNavigate }: Props) {
             {availableMethods.map(m => (
               <button
                 key={m.id}
-                onClick={() => handleMethodSelect(m.id)}
+                onClick={() => void handleMethodSelect(m.id)}
+                disabled={submitting}
                 className={`relative flex min-h-32 items-center gap-4 rounded-2xl border p-5 text-left transition-all group active:scale-[0.98] focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a] min-[520px]:last:col-span-2 min-[520px]:last:w-[calc(50%-0.375rem)] min-[520px]:last:justify-self-center ${colorMap[m.color]}`}
               >
                 <span className={`size-14 shrink-0 rounded-2xl bg-white/5 flex items-center justify-center ${iconColorMap[m.color]} group-hover:scale-110 transition-transform`}>
@@ -119,6 +169,8 @@ export default function PaymentFlow({ onNavigate }: Props) {
               </button>
             ))}
           </div>
+          {orderError && <div role="alert" className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-200">{orderError}<button type="button" onClick={() => setOrderError("")} className="ms-3 underline">Dismiss</button></div>}
+          {submitting && <p role="status" className="mt-4 text-sm text-[#d7ff7a]">Creating your order securely…</p>}
         </div>
 
         {/* Order Summary Sidebar */}

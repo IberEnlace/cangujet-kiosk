@@ -1,10 +1,15 @@
-import { useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Coffee, CupSoda, IceCreamBowl, Pizza, Plus, Salad, Sandwich, ShoppingBag, Soup, UtensilsCrossed } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronLeft, ChevronRight, Coffee, CupSoda, IceCreamBowl, LoaderCircle, Mic, MicOff, Pizza, Plus, RefreshCw, Salad, Sandwich, ShoppingBag, Soup, UtensilsCrossed } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { useCart } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
 import MorrowLogo from "../../components/branding/MorrowLogo";
 import { useDevice } from "../../context/DeviceContext";
+import { useNoriConversation } from "../../context/NoriConversationContext";
+import { getLanguageOption, type SupportedLanguage } from "../../config/languages";
+import { BrowserSpeechRecognitionService } from "../../services/voice/BrowserSpeechRecognitionService";
+import { getLocalMenu, loadMenu } from "../../services/supabase/menuService";
+import type { NormalizedMenu } from "../../services/supabase/menuModels";
 
 type Product = { id: string; name: string; description: string; price: number; calories: number; badge?: string; symbol: string; image?: string };
 type Category = { name: string; icon: LucideIcon; image: string };
@@ -67,24 +72,37 @@ function createProductImage(symbol: string) {
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-interface MenuCatalogProps { onBack: () => void; onCheckout: () => void; onLanguage: () => void; onNori: () => void; }
+interface MenuCatalogProps { onBack: () => void; onCheckout: () => void; onLanguage: () => void; onNori: () => void; onNoriChat: () => void; }
 
-export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori }: MenuCatalogProps) {
+export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori, onNoriChat }: MenuCatalogProps) {
   const { config } = useDevice();
   const { language, direction } = useLanguage();
   const { items, addItem } = useCart();
+  const { isProcessing, sendMessage } = useNoriConversation();
   const [category, setCategory] = useState(() => sessionStorage.getItem("morrow:nori-entry-category") ?? "Pizza");
   const [view, setView] = useState<"categories" | "products">("categories");
   const [toast, setToast] = useState("");
+  const [sharedMenu, setSharedMenu] = useState<NormalizedMenu>(getLocalMenu);
   const toastTimerRef = useRef<number>();
-  const products = catalog[category] ?? [];
+  useEffect(() => {
+    let active = true;
+    void loadMenu().then(result => {
+      if (active && result.ok) setSharedMenu(result.data);
+    });
+    return () => { active = false; };
+  }, []);
+  const sourceCategories: Record<string, string[]> = { Pizza: ["pizza"], Burgers: ["burger"], Pasta: ["pasta"], Salads: ["salad", "healthy_bowl"], Chicken: ["side"], Desserts: ["dessert"], Drinks: ["cold_drink"], Coffee: ["hot_drink"] };
+  const products: Product[] = sharedMenu.products.filter(product => sourceCategories[category]?.includes(product.category)).map(product => ({
+    id: product.id, name: product.name, description: product.description, price: product.price, calories: product.calories,
+    badge: product.dietaryTags.includes("vegetarian") ? "VEGETARIAN" : undefined, symbol: product.name.charAt(0), image: product.image,
+  }));
   const count = items.reduce((sum, item) => sum + item.qty, 0);
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
   const currency = useMemo(() => new Intl.NumberFormat(language === "tr" ? "tr-TR" : language === "ar" ? "ar-SA" : "en-US", { style: "currency", currency: "EUR" }), [language]);
 
   const chooseCategory = (name: string) => { setCategory(name); sessionStorage.setItem("morrow:nori-entry-category", name); setView("products"); };
   const addProduct = (product: Product) => {
-    addItem({ id: `menu-${product.id}`, name: product.name, price: product.price, basePrice: product.price, calories: product.calories, category, image: product.image ?? createProductImage(product.symbol) });
+    addItem({ id: product.id, name: product.name, price: product.price, basePrice: product.price, calories: product.calories, category, image: product.image ?? createProductImage(product.symbol) });
     setToast(`${product.name} added`);
     window.clearTimeout(toastTimerRef.current);
     toastTimerRef.current = window.setTimeout(() => setToast(""), 1800);
@@ -105,15 +123,76 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori }: 
           <aside className="relative border-e border-white/10 bg-[#0e130c] p-2 pb-28"><p className="px-2 pb-2 pt-2 font-['Space_Mono'] text-[8px] tracking-[.14em] text-white/35">MENU</p><nav className="space-y-2" aria-label="Menu categories">{categories.map(({ name, icon: Icon }) => <button type="button" key={name} onClick={() => chooseCategory(name)} aria-pressed={category === name} className={`flex min-h-[78px] w-full flex-col items-center justify-center rounded-2xl border px-1 py-2 transition active:scale-95 focus-visible:outline focus-visible:outline-3 focus-visible:outline-[#d7ff7a] ${category === name ? "border-[#d7ff7a]/50 bg-[#d7ff7a]/10 shadow-[0_5px_20px_rgba(215,255,122,.08)]" : "border-transparent hover:bg-white/5"}`}><span className={`grid size-11 place-items-center rounded-full ${category === name ? "bg-[#d7ff7a] text-[#17200f]" : "bg-white/5 text-white/45"}`}><Icon size={21} aria-hidden="true" /></span><span className={`mt-1.5 text-[9px] leading-3 sm:text-[10px] ${category === name ? "font-bold text-[#d7ff7a]" : "text-white/45"}`}>{name}</span></button>)}</nav></aside>
 
           <section className="relative min-w-0 pb-28"><div className="p-3 sm:p-5"><div className="flex items-start justify-between gap-3"><div><p className="font-['Space_Mono'] text-[8px] tracking-[.14em] text-[#d7ff7a] sm:text-[9px]">{view === "products" ? "CATEGORY SELECTED" : "CHOOSE A CATEGORY"}</p><h1 className="mt-1 text-[clamp(1.45rem,4vw,2.2rem)] font-semibold tracking-[-.04em] text-white">{view === "products" ? category : "What are you craving?"}</h1></div><button type="button" onClick={() => setView("categories")} className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">Categories</button></div>
+            {config?.settings.aiAssistantEnabled && <NoriBanner onOpen={onNori} onOpenChat={onNoriChat} isProcessing={isProcessing} sendMessage={sendMessage} language={language} voiceEnabled={config.settings.voiceAssistantEnabled !== false} />}
             {view === "categories" ? <CategoryLanding onChoose={chooseCategory} selected={category} /> : <ProductGrid products={products} currency={currency} onAdd={addProduct} />}
           </div></section>
         </div>
 
-        <footer className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[900px] border-t border-white/10 bg-[#0b1009]/95 p-3 backdrop-blur-xl"><div className="flex items-center gap-3"><div className="min-w-0 flex-1"><p className="truncate text-xs text-white/40">{count ? `${count} item${count > 1 ? "s" : ""} in your order` : "Your cart is empty"}</p><p className="text-xl font-semibold text-white">{currency.format(total)}</p></div><button type="button" onClick={onCheckout} disabled={!count} className="min-h-14 rounded-2xl bg-[#d7ff7a] px-4 text-sm font-bold text-[#17200f] disabled:bg-white/10 disabled:text-white/25 sm:px-6">{count ? `Checkout · ${currency.format(total)}` : "Checkout"}</button></div></footer>
+        <footer className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[900px] border-t border-white/10 bg-[#0b1009]/95 p-3 backdrop-blur-xl"><div className="flex items-center gap-3"><div className="min-w-0 flex-1">{count ? <><p className="truncate text-xs text-white/40">{`${count} item${count > 1 ? "s" : ""} in your order`}</p><p className="text-xl font-semibold text-white">{currency.format(total)}</p></> : <><p className="text-xs text-white/38">Not sure what to order?</p>{config?.settings.aiAssistantEnabled && <button type="button" onClick={onNori} className="mt-0.5 min-h-8 text-start text-xs font-semibold text-[#D7FB69]/75 underline decoration-[#D7FB69]/25 underline-offset-4 hover:text-[#D7FB69] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D7FB69]">Ask Nori for a recommendation.</button>}</>}</div><button type="button" onClick={onCheckout} disabled={!count} className="min-h-14 rounded-2xl bg-[#d7ff7a] px-4 text-sm font-bold text-[#17200f] disabled:bg-white/10 disabled:text-white/25 sm:px-6">{count ? `Checkout · ${currency.format(total)}` : "Checkout"}</button></div></footer>
         {toast && <div role="status" className="fixed bottom-24 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-2xl bg-[#25372c] px-4 py-3 text-sm text-white shadow-xl"><span className="grid size-6 place-items-center rounded-lg bg-[#b8df83] text-[#21341f]"><Check size={14} aria-hidden="true" /></span>{toast}</div>}
       </div>
     </main>
   );
+}
+
+type BannerVoiceStatus = "idle" | "requesting" | "listening" | "processing" | "error";
+const quickPrompts = [
+  ["Healthy", "Recommend something healthy."],
+  ["High Protein", "Recommend a high-protein meal."],
+  ["Under €15", "Recommend a meal under €15."],
+  ["Vegetarian", "Show me vegetarian options."],
+  ["Kids", "Recommend something for kids."],
+  ["Surprise Me", "Surprise me with a meal recommendation."],
+] as const;
+
+function NoriBanner({ onOpenChat, isProcessing, sendMessage, language, voiceEnabled }: { onOpen: () => void; onOpenChat: () => void; isProcessing: boolean; sendMessage: (text: string) => Promise<string | null>; language: SupportedLanguage; voiceEnabled: boolean }) {
+  const recognition = useMemo(() => new BrowserSpeechRecognitionService(), []);
+  const [status, setStatus] = useState<BannerVoiceStatus>("idle");
+  const [error, setError] = useState("");
+  const busy = status === "processing" || isProcessing;
+  useEffect(() => () => recognition.cancel(), [recognition]);
+  useEffect(() => { if (isProcessing) setStatus("processing"); else if (status === "processing") setStatus("idle"); }, [isProcessing, status]);
+
+  const listen = async () => {
+    if (status === "listening") { recognition.cancel(); setStatus("idle"); return; }
+    if (!voiceEnabled || !recognition.isSupported()) { setError("Microphone access is unavailable. You can still type your request."); setStatus("error"); return; }
+    setError(""); setStatus("requesting");
+    try {
+      const pending = recognition.start(getLanguageOption(language).speechLocale);
+      setStatus("listening");
+      const result = await pending;
+      if (!result.transcript) { setError("I didn’t hear anything. Please try again."); setStatus("error"); return; }
+      setStatus("processing");
+      await sendMessage(result.transcript);
+      onOpenChat();
+    } catch (reason) {
+      const code = reason instanceof Error ? reason.message : "error";
+      setError(code === "permission_denied" ? "Microphone access is unavailable. You can still type your request." : code === "no_speech" ? "I didn’t hear anything. Please try again." : "Something went wrong with the microphone. Please try again.");
+      setStatus("error");
+    }
+  };
+  const submitPrompt = (request: string) => { if (busy) return; void sendMessage(request); onOpenChat(); };
+  const label = status === "listening" ? "Listening..." : busy ? "Finding your meal..." : status === "requesting" ? "Connecting..." : "Tap to talk";
+
+  return <section aria-labelledby="nori-banner-title" className="relative mt-5 overflow-hidden rounded-[26px] border border-[#D7FB69]/20 bg-[linear-gradient(135deg,rgba(215,251,105,.095),rgba(255,255,255,.025)_58%,rgba(215,251,105,.055))] p-4 shadow-[0_18px_45px_rgba(0,0,0,.2)] sm:p-5">
+    <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_88%_42%,rgba(215,251,105,.11),transparent_30%)]" aria-hidden="true" />
+    <div className="relative flex flex-col gap-4 min-[680px]:flex-row min-[680px]:items-center min-[680px]:justify-between">
+      <div className="min-w-0 flex-1">
+        <p className="font-['Space_Mono'] text-[9px] font-bold uppercase tracking-[.16em] text-[#D7FB69]">Hi, I’m Nori! 👋</p>
+        <h2 id="nori-banner-title" className="mt-1.5 text-[clamp(1.35rem,3.6vw,2rem)] font-semibold tracking-[-.035em] text-white">Need a recommendation?</h2>
+        <p className="mt-1 max-w-xl text-xs leading-5 text-white/55 sm:text-sm">Tell me what you like, and I’ll help you find the perfect meal.</p>
+        <div className="mt-3 flex flex-wrap gap-2" aria-label="Quick recommendation prompts">{quickPrompts.map(([title, request]) => <button key={title} type="button" disabled={busy} onClick={() => submitPrompt(request)} className="min-h-12 rounded-full border border-white/10 bg-white/[.045] px-3 text-[11px] font-semibold text-white/65 transition hover:border-[#D7FB69]/35 hover:bg-[#D7FB69]/8 hover:text-white active:scale-95 focus-visible:outline focus-visible:outline-3 focus-visible:outline-[#D7FB69] disabled:opacity-40">{title}</button>)}</div>
+        {error && <div role="alert" className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-amber-300/15 bg-amber-300/[.06] px-3 py-2 text-[11px] leading-4 text-amber-50/75"><span className="flex-1">{error}</span><button type="button" onClick={() => void listen()} className="flex min-h-12 items-center gap-1.5 rounded-lg px-3 font-bold text-[#D7FB69] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D7FB69]"><RefreshCw size={14} aria-hidden="true" />Retry</button><button type="button" onClick={onOpenChat} className="min-h-12 rounded-lg px-3 font-bold text-white/75 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D7FB69]">Type instead</button></div>}
+      </div>
+      <div className="flex shrink-0 flex-row items-center justify-center gap-3 min-[680px]:w-40 min-[680px]:flex-col">
+        <div className={`nori-voice-orbit relative grid size-[5.75rem] shrink-0 place-items-center rounded-full ${status === "listening" ? "is-listening" : ""}`}>
+          {status === "listening" && <><span className="nori-listening-ring absolute inset-0 rounded-full border border-[#D7FB69]/35" aria-hidden="true" /><span className="nori-listening-ring nori-listening-ring-delay absolute inset-0 rounded-full border border-[#D7FB69]/20" aria-hidden="true" /></>}
+          <button type="button" onClick={() => void listen()} disabled={busy} aria-label={status === "listening" ? "Stop listening to my request" : "Talk to Nori for a meal recommendation"} aria-pressed={status === "listening"} className="nori-mic-button relative z-10 grid size-[4.75rem] place-items-center rounded-full bg-[#D7FB69] text-[#17200f] shadow-[0_8px_28px_rgba(215,251,105,.2)] transition hover:scale-105 hover:shadow-[0_10px_32px_rgba(215,251,105,.28)] active:scale-95 focus-visible:outline focus-visible:outline-4 focus-visible:outline-white disabled:cursor-wait disabled:opacity-70">{busy ? <LoaderCircle className="animate-spin" size={29} aria-hidden="true" /> : status === "listening" ? <MicOff size={29} aria-hidden="true" /> : <Mic size={30} aria-hidden="true" />}</button>
+        </div>
+        <div className="min-w-0 text-start min-[680px]:text-center"><p role="status" aria-live="polite" className="text-sm font-bold text-white">{label}</p><p className="mt-0.5 text-[10px] text-white/35">{status === "listening" ? "Tap again to stop" : "Speak naturally"}</p></div>
+      </div>
+    </div>
+  </section>;
 }
 
 function CategoryLanding({ onChoose, selected }: { onChoose: (name: string) => void; selected: string }) {

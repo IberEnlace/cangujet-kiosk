@@ -12,7 +12,9 @@
     "dev:web": "vite",
     "dev:server": "node --env-file=.env --watch --import tsx src/server/index.ts",
     "start:server": "node --env-file=.env --import tsx src/server/index.ts",
-    "test:agent": "tsx --test src/server/services/*.test.ts"
+    "test:agent": "tsx --test src/server/services/*.test.ts src/app/services/supabase/*.test.ts",
+    "supabase:seed-menu": "node scripts/supabase-menu.mjs seed",
+    "supabase:verify-menu": "node scripts/supabase-menu.mjs verify"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
@@ -48,6 +50,7 @@
     "@radix-ui/react-toggle": "1.1.2",
     "@radix-ui/react-toggle-group": "1.1.2",
     "@radix-ui/react-tooltip": "1.1.8",
+    "@supabase/supabase-js": "2.49.8",
     "canvas-confetti": "1.9.4",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",

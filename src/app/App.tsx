@@ -30,6 +30,8 @@ import { NoriConversationProvider, useNoriConversation } from "./context/NoriCon
 import NoriModeSelection from "./pages/nori/NoriModeSelection";
 import NoriTextChat from "./pages/nori/NoriTextChat";
 import NoriVoiceConversation from "./pages/nori/NoriVoiceConversation";
+import { loadMenu } from "./services/supabase/menuService";
+import { replaceAiMenu } from "./data/aiMenu";
 
 function getCurrentRoute(): AppRoute {
   const path = window.location.hash.replace(/^#/, "") || ROUTES.selectRole;
@@ -66,6 +68,14 @@ function Application() {
   const [noriReturnRoute, setNoriReturnRoute] = useState<AppRoute>(ROUTES.categories);
 
   useEffect(() => {
+    let active = true;
+    void loadMenu().then(result => {
+      if (active && result.ok) replaceAiMenu(result.data.products);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
     const initialHash = window.location.hash;
     if (!initialHash || initialHash === "#/") navigateTo(ROUTES.selectRole);
     else if (initialHash === "#/admin/integrations") navigateTo(ROUTES.adminDashboard);
@@ -76,7 +86,7 @@ function Application() {
   }, []);
 
   const guardedRoute = useMemo(() => guardRoute(route, auth.currentRole, auth.isAuthenticated), [route, auth.currentRole, auth.isAuthenticated]);
-  useEffect(() => { if (guardedRoute !== route) navigateTo(guardedRoute); }, [guardedRoute, route]);
+  useEffect(() => { if (!auth.isLoading && guardedRoute !== route) navigateTo(guardedRoute); }, [auth.isLoading, guardedRoute, route]);
   useEffect(() => { if (route === ROUTES.categories && !orderType) navigateTo(ROUTES.service); }, [orderType, route]);
 
   const resetKiosk = useCallback(() => {
@@ -119,6 +129,7 @@ function Application() {
   }, [device.config, route]);
 
   if (device.status === "checking") return <DeviceLoadingScreen />;
+  if (auth.isLoading && (route.startsWith("/admin") || route.startsWith("/cashier") || route.startsWith("/kitchen"))) return <DeviceLoadingScreen />;
   if (!device.config && PROTECTED_CUSTOMER_ROUTES.includes(route)) return <DeviceLoadingScreen />;
   if ([ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice].includes(route as "/nori" | "/nori/chat" | "/nori/voice") && !device.config?.settings.aiAssistantEnabled) return null;
   if (route === ROUTES.noriVoice && device.config?.settings.voiceAssistantEnabled === false) return null;
@@ -133,7 +144,7 @@ function Application() {
     navigateTo(allowed.length === 1 ? ROUTES.categories : ROUTES.service);
   }} />;
   if (route === ROUTES.service) return <ServiceSelection onBack={() => navigateTo(ROUTES.language)} onContinue={() => navigateTo(ROUTES.categories)} />;
-  if (route === ROUTES.categories) return orderType ? <MenuCatalog onBack={() => navigateTo(ROUTES.service)} onLanguage={() => navigateTo(ROUTES.language)} onCheckout={() => navigateTo(ROUTES.cart)} onNori={() => { setNoriReturnRoute(ROUTES.categories); navigateTo(ROUTES.nori); }} /> : null;
+  if (route === ROUTES.categories) return orderType ? <MenuCatalog onBack={() => navigateTo(ROUTES.service)} onLanguage={() => navigateTo(ROUTES.language)} onCheckout={() => navigateTo(ROUTES.cart)} onNori={() => { setNoriReturnRoute(ROUTES.categories); navigateTo(ROUTES.nori); }} onNoriChat={() => { setNoriReturnRoute(ROUTES.categories); navigateTo(ROUTES.noriChat); }} /> : null;
   if (route === ROUTES.nori) return customerViewport(<NoriModeSelection onBack={() => navigateTo(noriReturnRoute)} onChat={() => navigateTo(ROUTES.noriChat)} onVoice={() => navigateTo(ROUTES.noriVoice)} />);
   if (route === ROUTES.noriChat) return customerViewport(<NoriTextChat onBack={() => navigateTo(ROUTES.nori)} onVoice={() => navigateTo(ROUTES.noriVoice)} onEnd={() => navigateTo(noriReturnRoute)} />);
   if (route === ROUTES.noriVoice) return customerViewport(<NoriVoiceConversation onBack={() => navigateTo(ROUTES.nori)} onText={() => navigateTo(ROUTES.noriChat)} onEnd={() => navigateTo(noriReturnRoute)} />);

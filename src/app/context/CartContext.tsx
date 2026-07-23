@@ -133,7 +133,9 @@ type CartContextType = {
   setOrderStatus: (s: OrderStatus) => void;
   queueNumber: number;
   currentOrderId: string;
-  placeOrder: () => void;
+  currentTrackingToken: string;
+  recordCreatedOrder: (order: { id: string; number: string; total: number; trackingToken?: string }) => void;
+  placeOrder: (created?: { id: string; number: string; total: number }) => void;
 
   // Kitchen orders (demo data)
   kitchenOrders: KitchenOrder[];
@@ -239,6 +241,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
   const [orderStatus, setOrderStatus] = useState<OrderStatus>("idle");
+  const [createdOrderTotal, setCreatedOrderTotal] = useState<number | null>(null);
+  const [currentTrackingToken, setCurrentTrackingToken] = useState("");
   const [queueNumber, setQueueNumber] = useState(0);
   const [currentOrderId, setCurrentOrderId] = useState("");
   const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>(readKitchenOrders);
@@ -270,7 +274,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const discount = couponDiscount + rewardsDiscount + giftCardBalance;
   const taxable = Math.max(0, subtotal - discount);
   const tax = taxable * taxRate;
-  const total = taxable + tax;
+  const calculatedTotal = taxable + tax;
+  const total = createdOrderTotal ?? calculatedTotal;
   const estimatedMinutes = Math.max(8, items.reduce((acc, i) => acc + i.qty * 2, 8));
 
   const addItem = useCallback((item: Omit<CartItem, "qty">) => {
@@ -341,18 +346,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setRewardsApplied(maxPoints);
   }, [user.loyaltyPoints]);
 
-  const placeOrder = useCallback(() => {
+  const recordCreatedOrder = useCallback((order: { id: string; number: string; total: number; trackingToken?: string }) => {
+    setCurrentOrderId(order.id);
+    const numeric = Number(order.number.match(/(\d+)$/)?.[1]);
+    if (Number.isFinite(numeric)) setQueueNumber(numeric);
+    setCreatedOrderTotal(order.total);
+    setCurrentTrackingToken(order.trackingToken ?? "");
+  }, []);
+
+  useEffect(() => { setCreatedOrderTotal(null); }, [items]);
+
+  const placeOrder = useCallback((created?: { id: string; number: string; total: number }) => {
     const num = Math.floor(Math.random() * 50) + 50;
     const id = `ORD-${Date.now().toString().slice(-6)}`;
-    setQueueNumber(num);
-    setCurrentOrderId(id);
+    const effectiveId = created?.id || currentOrderId || id;
+    const effectiveNumber = created ? Number(created.number.match(/(\d+)$/)?.[1]) || num : queueNumber || num;
+    if (created) setCreatedOrderTotal(created.total);
+    setQueueNumber(effectiveNumber); setCurrentOrderId(effectiveId);
     setOrderStatus("received");
     setPaymentStatus(paymentMethod === "cashier" ? "pending" : "paid");
 
     // Add to kitchen
     const newOrder: KitchenOrder = {
-      id,
-      number: num,
+      id: effectiveId,
+      number: effectiveNumber,
       items: items.map(i => ({ name: i.name, qty: i.qty, notes: orderNotes || undefined, customizations: i.customizations ? Object.values(i.customizations) : undefined, station: preparationStationForCategory(i.category) })),
       status: "received",
       priority: false,
@@ -377,7 +394,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
         paymentMethod: paymentMethod || "cash",
       }, ...prev.orderHistory],
     }));
-  }, [items, orderNotes, estimatedMinutes, orderType, total, paymentMethod]);
+  }, [items, orderNotes, estimatedMinutes, orderType, total, paymentMethod, currentOrderId, queueNumber]);
 
   const updateKitchenOrderStatus = useCallback((id: string, status: OrderStatus) => {
     setKitchenOrders(prev => prev.map(o => o.id === id ? { ...o, status, completedAt: status === "completed" ? Date.now() : undefined } : o));
@@ -405,7 +422,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
       giftCardBalance, applyGiftCard,
       rewardsApplied, applyRewards,
       subtotal, tax, discount, total, estimatedMinutes,
-      paymentMethod, paymentStatus, setPaymentMethod, orderStatus, setOrderStatus,
+      paymentMethod, paymentStatus, setPaymentMethod, orderStatus, setOrderStatus, currentTrackingToken, recordCreatedOrder,
       queueNumber, currentOrderId, placeOrder,
       kitchenOrders, updateKitchenOrderStatus,
       user, updateUser, toggleFavorite,

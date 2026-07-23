@@ -6,4 +6,6 @@
   Run `npm i` to install the dependencies.
 
   Run `npm run dev` to start the development server.
+
+  Supabase foundation and staff authentication: [docs/SUPABASE.md](docs/SUPABASE.md).
   

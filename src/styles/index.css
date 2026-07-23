@@ -17,3 +17,22 @@
   .confirmation-layout header h1 { margin-top: 0.35rem; }
   .confirmation-layout footer { padding-top: 0.45rem; }
 }
+
+@keyframes nori-breathe {
+  0%, 100% { transform: scale(1); box-shadow: 0 8px 28px rgba(215, 251, 105, .18); }
+  50% { transform: scale(1.025); box-shadow: 0 10px 32px rgba(215, 251, 105, .25); }
+}
+
+@keyframes nori-ring {
+  0% { transform: scale(.82); opacity: .65; }
+  100% { transform: scale(1.28); opacity: 0; }
+}
+
+.nori-voice-orbit:not(.is-listening) .nori-mic-button { animation: nori-breathe 3.2s ease-in-out infinite; }
+.nori-listening-ring { animation: nori-ring 1.8s ease-out infinite; }
+.nori-listening-ring-delay { animation-delay: .7s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .nori-voice-orbit .nori-mic-button,
+  .nori-listening-ring { animation: none !important; }
+}

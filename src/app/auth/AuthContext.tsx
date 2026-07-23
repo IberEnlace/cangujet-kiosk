@@ -1,14 +1,17 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
-import { MOCK_CREDENTIALS } from "./mockCredentials";
-import { AUTH_FLAG_KEY, AUTH_ROLE_KEY, DEVICE_MODE_KEY, ROUTES, getHomeRouteForRole, isDeviceMode, isStaffRole, type AppRoute, type DeviceMode, type StaffRole, type UserRole } from "./roleConfig";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { authMode, onStaffAuthChange, restoreStaffIdentity, signInStaff, signOutStaff, type AuthFailure, type StaffIdentity } from "../services/supabase/authService";
+import { DEVICE_MODE_KEY, ROUTES, getHomeRouteForRole, isDeviceMode, isStaffRole, type AppRoute, type DeviceMode, type StaffRole, type UserRole } from "./roleConfig";
 import { canRoleAccess } from "./routeGuards";
 
 interface AuthContextValue {
   currentRole: UserRole | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
+  isDemoAuth: boolean;
+  profile: StaffIdentity["profile"] | null;
   selectedDeviceMode: DeviceMode;
-  login: (role: StaffRole, email: string, password: string) => Promise<boolean>;
-  logout: (changeDeviceMode?: boolean) => void;
+  login: (role: StaffRole, email: string, password: string) => Promise<{ ok: boolean; error?: AuthFailure }>;
+  logout: (changeDeviceMode?: boolean) => Promise<void>;
   selectDeviceMode: (mode: DeviceMode, remember: boolean) => void;
   clearDeviceMode: () => void;
   canAccess: (route: AppRoute) => boolean;
@@ -16,41 +19,41 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-function restoreRole(): StaffRole | null {
-  const role = sessionStorage.getItem(AUTH_ROLE_KEY);
-  return sessionStorage.getItem(AUTH_FLAG_KEY) === "true" && isStaffRole(role as UserRole) ? role as StaffRole : null;
-}
-
 function restoreMode(): DeviceMode {
   const mode = localStorage.getItem(DEVICE_MODE_KEY);
   return isDeviceMode(mode) ? mode : "unassigned";
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [currentRole, setCurrentRole] = useState<UserRole | null>(() => restoreRole());
-  const [isAuthenticated, setAuthenticated] = useState(() => restoreRole() !== null);
+  const [profile, setProfile] = useState<StaffIdentity["profile"] | null>(null);
+  const [isDemoAuth, setDemoAuth] = useState(false);
+  const [isLoading, setLoading] = useState(authMode === "supabase");
   const [selectedDeviceMode, setSelectedDeviceMode] = useState<DeviceMode>(() => restoreMode());
+  const currentRole = profile?.role ?? null;
+  const isAuthenticated = profile !== null;
+
+  const applyIdentity = useCallback((identity: StaffIdentity | null) => {
+    setProfile(identity?.profile ?? null);
+    setDemoAuth(identity?.isDemo ?? false);
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    void restoreStaffIdentity().then(identity => { if (active) applyIdentity(identity); }).finally(() => { if (active) setLoading(false); });
+    const unsubscribe = onStaffAuthChange(identity => { if (active) { applyIdentity(identity); setLoading(false); } });
+    return () => { active = false; unsubscribe(); };
+  }, [applyIdentity]);
 
   const login = useCallback(async (role: StaffRole, email: string, password: string) => {
-    await new Promise(resolve => window.setTimeout(resolve, 450));
-    const valid = MOCK_CREDENTIALS[role].email === email.trim().toLowerCase() && MOCK_CREDENTIALS[role].password === password;
-    if (!valid) return false;
-    setCurrentRole(role); setAuthenticated(true);
-    sessionStorage.setItem(AUTH_ROLE_KEY, role);
-    sessionStorage.setItem(AUTH_FLAG_KEY, "true");
-    return true;
-  }, []);
+    const result = await signInStaff(role, email, password);
+    applyIdentity(result.identity);
+    return { ok: Boolean(result.identity), error: result.error };
+  }, [applyIdentity]);
 
-  const clearSession = useCallback(() => {
-    setCurrentRole(null); setAuthenticated(false);
-    sessionStorage.removeItem(AUTH_ROLE_KEY); sessionStorage.removeItem(AUTH_FLAG_KEY);
-  }, []);
-
-  const clearDeviceMode = useCallback(() => {
-    localStorage.removeItem(DEVICE_MODE_KEY); setSelectedDeviceMode("unassigned");
-  }, []);
-
-  const logout = useCallback((changeDeviceMode = false) => {
+  const clearSession = useCallback(() => applyIdentity(null), [applyIdentity]);
+  const clearDeviceMode = useCallback(() => { localStorage.removeItem(DEVICE_MODE_KEY); setSelectedDeviceMode("unassigned"); }, []);
+  const logout = useCallback(async (changeDeviceMode = false) => {
+    await signOutStaff();
     clearSession();
     if (changeDeviceMode) clearDeviceMode();
   }, [clearDeviceMode, clearSession]);
@@ -64,9 +67,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [clearSession, currentRole]);
 
   const value = useMemo<AuthContextValue>(() => ({
-    currentRole, isAuthenticated, selectedDeviceMode, login, logout, selectDeviceMode, clearDeviceMode,
+    currentRole, isAuthenticated, isLoading, isDemoAuth, profile, selectedDeviceMode, login, logout, selectDeviceMode, clearDeviceMode,
     canAccess: route => canRoleAccess(currentRole, route, isAuthenticated),
-  }), [currentRole, isAuthenticated, selectedDeviceMode, login, logout, selectDeviceMode, clearDeviceMode]);
+  }), [currentRole, isAuthenticated, isLoading, isDemoAuth, profile, selectedDeviceMode, login, logout, selectDeviceMode, clearDeviceMode]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
@@ -78,7 +81,7 @@ export function useAuth() {
 }
 
 export function getDefaultRouteForDevice(mode: DeviceMode, role: UserRole | null, authenticated: boolean): AppRoute {
-  if (mode === "unassigned") return "/select-role";
+  if (mode === "unassigned") return ROUTES.selectRole;
   if (isStaffRole(mode)) return authenticated && role === mode ? getHomeRouteForRole(mode) : `/${mode}/login` as AppRoute;
   return mode === "customer" ? ROUTES.idle : getHomeRouteForRole(mode);
 }

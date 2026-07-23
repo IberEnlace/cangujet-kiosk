@@ -1,4 +1,5 @@
 import menuCatalog from "./morrow-menu-ai.json";
+import type { NormalizedMenuProduct } from "../services/supabase/menuModels";
 
 type CatalogProduct = {
   id: string;
@@ -72,6 +73,7 @@ type CatalogCustomizationOption = {
 
 export type AIProductCustomizationOption = {
   id: string;
+  databaseId?: string;
   name: string;
   priceAdjustment: number;
   allergensAdded: string[];
@@ -222,3 +224,32 @@ export const aiMenu: AIFoodItem[] = (menuCatalog.products as CatalogProduct[])
     recommendationScore: product.recommendationScore,
   }))
   .sort((first, second) => second.recommendationScore - first.recommendationScore);
+
+export function replaceAiMenu(products: NormalizedMenuProduct[]) {
+  aiMenu.splice(0, aiMenu.length, ...products.filter(product => product.available && product.inStock).map(product => ({
+    id: product.id, name: product.name, description: product.description, price: product.price, available: product.available,
+    inStock: product.inStock, spiceLevel: product.spiceLevel, category: product.category,
+    tags: product.dietaryTags.map(readableTag), dietaryTags: product.dietaryTags.map(tag => tag.toLowerCase()),
+    cal: product.calories, protein: `${product.protein}g`, proteinGrams: product.protein,
+    nutrition: { calories: product.calories, proteinGrams: product.protein, carbohydratesGrams: product.carbohydrates,
+      totalFatGrams: product.fat, saturatedFatGrams: 0, sugarsGrams: product.sugars, addedSugarsGrams: 0,
+      fiberGrams: product.fiber, sodiumMilligrams: product.sodium, cholesterolMilligrams: 0 },
+    image: product.image, allergens: product.allergens.map(readableTag), mayContain: product.mayContain.map(readableTag),
+    crossContaminationPossible: product.crossContaminationPossible.map(readableTag), allergenSafetyMessage: product.allergenSafetyMessage,
+    keywords: product.keywords, vectorTags: product.vectorTags, recommendedWith: product.recommendedWith, ingredients: product.ingredients,
+    customizations: product.customizations, removableIngredients: product.removableIngredients,
+    customizationGroups: product.customizationGroups.map(group => ({ id: group.id, name: group.name, required: group.required,
+      minSelections: group.minSelections, maxSelections: group.maxSelections, options: group.options.filter(option => option.available).map(option => ({
+        id: option.id, databaseId: option.databaseId, name: option.name, priceAdjustment: option.priceDelta, allergensAdded: option.allergensAdded.map(readableTag),
+        allergensRemoved: option.allergensRemoved.map(readableTag), caloriesAdjustment: option.nutritionAdjustment.calories ?? 0,
+        proteinAdjustment: option.nutritionAdjustment.proteinGrams ?? 0,
+        nutritionAdjustment: { calories: option.nutritionAdjustment.calories ?? 0, proteinGrams: option.nutritionAdjustment.proteinGrams ?? 0,
+          carbohydratesGrams: option.nutritionAdjustment.carbohydratesGrams ?? 0, totalFatGrams: option.nutritionAdjustment.totalFatGrams ?? 0,
+          saturatedFatGrams: option.nutritionAdjustment.saturatedFatGrams ?? 0, sugarsGrams: option.nutritionAdjustment.sugarsGrams ?? 0,
+          addedSugarsGrams: option.nutritionAdjustment.addedSugarsGrams ?? 0, fiberGrams: option.nutritionAdjustment.fiberGrams ?? 0,
+          sodiumMilligrams: option.nutritionAdjustment.sodiumMilligrams ?? 0, cholesterolMilligrams: option.nutritionAdjustment.cholesterolMilligrams ?? 0 },
+        default: option.isDefault, available: option.available,
+      })) })),
+    recommendationScore: product.recommendationScore,
+  })).sort((first, second) => second.recommendationScore - first.recommendationScore));
+}

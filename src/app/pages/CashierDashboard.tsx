@@ -4,9 +4,12 @@ import { toast, Toaster } from "sonner";
 import { cashierCategories, cashierMenu, type CashierMenuProduct } from "../data/cashierMenu";
 import MorrowLogo from "../components/branding/MorrowLogo";
 import CashierReceipt, { printCashierReceipt, type CashierReceiptData } from "../components/cashier/CashierReceipt";
+import { useCashierOrders } from "../hooks/useRealtimeOrders";
+import { createOrder } from "../services/supabase/orderService";
+import { useAuth } from "../auth/AuthContext";
 
 type PaymentMethod = "Cash" | "Card";
-type CashierOrderItem = { id: string; productId: string; name: string; image: string; category: string; unitPrice: number; quantity: number; customizations: string[] };
+type CashierOrderItem = { id: string; productId: string; name: string; image: string; category: string; unitPrice: number; quantity: number; customizations: string[]; customizationOptionIds: string[] };
 type CashierOrder = { id: string; time: string; total: number; paymentMethod: PaymentMethod; status: "Completed"; items: CashierOrderItem[]; receipt: CashierReceiptData };
 type ShiftSummary = { totalSales: number; completedOrders: number; cashTotal: number; cardTotal: number };
 type Tool = "orders" | "receipts" | "shift";
@@ -25,6 +28,8 @@ function ProductImage({ product, className }: { product: CashierMenuProduct; cla
 }
 
 export default function CashierDashboard() {
+  const liveOrders=useCashierOrders();
+  const { profile }=useAuth();
   const [orderItems,setOrderItems]=useState<CashierOrderItem[]>([]);
   const [search,setSearch]=useState("");
   const [category,setCategory]=useState("All");
@@ -39,6 +44,8 @@ export default function CashierDashboard() {
   const [recentOrders,setRecentOrders]=useState<CashierOrder[]>([]);
   const [selectedOrder,setSelectedOrder]=useState<CashierOrder|null>(null);
   const [completedReceipt,setCompletedReceipt]=useState<CashierReceiptData|null>(null);
+  const [submitting,setSubmitting]=useState(false);
+  const [idempotencyKey,setIdempotencyKey]=useState(()=>crypto.randomUUID());
   const searchRef=useRef<HTMLInputElement>(null);
 
   const categories=useMemo(()=>["All",...cashierCategories],[]);
@@ -52,15 +59,47 @@ export default function CashierDashboard() {
 
   useEffect(()=>{const shortcut=(event:KeyboardEvent)=>{if(event.key==="/"&&!event.ctrlKey&&!event.metaKey){const target=event.target as HTMLElement;if(!["INPUT","TEXTAREA"].includes(target.tagName)){event.preventDefault();searchRef.current?.focus();}}if(event.key==="Escape"&&document.activeElement===searchRef.current)setSearch("");};window.addEventListener("keydown",shortcut);return()=>window.removeEventListener("keydown",shortcut);},[]);
 
-  const addConfigured=(product:CashierMenuProduct, chosen:Record<string,string>={})=>{const chosenOptions=product.customizationGroups.flatMap(group=>group.options.filter(option=>chosen[group.id]===option.id));const names=chosenOptions.map(option=>option.name);const unitPrice=product.price+chosenOptions.reduce((sum,option)=>sum+option.priceAdjustment,0);const id=[product.id,...Object.entries(chosen).sort().map(([,value])=>value)].join("::");setOrderItems(current=>current.some(item=>item.id===id)?current.map(item=>item.id===id?{...item,quantity:item.quantity+1}:item):[...current,{id,productId:product.id,name:product.name,image:product.image,category:product.cashierCategory,unitPrice,quantity:1,customizations:names}]);toast.success(`${product.name} added`,{duration:1200});setCustomizing(null);setSelections({});};
+  const addConfigured=(product:CashierMenuProduct, chosen:Record<string,string>={})=>{const chosenOptions=product.customizationGroups.flatMap(group=>group.options.filter(option=>chosen[group.id]===option.id));const names=chosenOptions.map(option=>option.name);const customizationOptionIds=chosenOptions.map(option=>option.databaseId??option.id);const unitPrice=product.price+chosenOptions.reduce((sum,option)=>sum+option.priceAdjustment,0);const id=[product.id,...Object.entries(chosen).sort().map(([,value])=>value)].join("::");setOrderItems(current=>current.some(item=>item.id===id)?current.map(item=>item.id===id?{...item,quantity:item.quantity+1}:item):[...current,{id,productId:product.id,name:product.name,image:product.image,category:product.cashierCategory,unitPrice,quantity:1,customizations:names,customizationOptionIds}]);toast.success(`${product.name} added`,{duration:1200});setCustomizing(null);setSelections({});};
   const chooseProduct=(product:CashierMenuProduct)=>{if(product.needsConfiguration||!product.available||!product.inStock)return;const groups=product.customizationGroups.filter(group=>group.required);if(!groups.length){addConfigured(product);return;}const defaults=Object.fromEntries(groups.map(group=>[group.id,group.options.find(option=>option.default)?.id??""]));setSelections(defaults);setCustomizing(product);};
   const confirmCustomization=()=>{if(!customizing)return;const required=customizing.customizationGroups.filter(group=>group.required);if(required.some(group=>!selections[group.id])){toast.error("Choose all required options.");return;}addConfigured(customizing,selections);};
   const updateQuantity=(id:string,quantity:number)=>setOrderItems(current=>quantity<1?current.filter(item=>item.id!==id):current.map(item=>item.id===id?{...item,quantity}:item));
-  const completeSale=()=>{if(amountReceived<total){toast.error("Amount received is less than the total due.");return;}const id=`CSH-${Date.now().toString().slice(-6)}`;const now=new Date();const receipt:CashierReceiptData={orderNumber:id,date:now.toLocaleString("en-GB",{dateStyle:"medium",timeStyle:"short"}),cashierName:"Admin",restaurantName:"Morrow Restaurant",branchName:"Main Branch",registerName:"Cashier Register",items:orderItems.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unitPrice:item.unitPrice,lineTotal:item.unitPrice*item.quantity,customizations:[...item.customizations]})),subtotal,taxRate:TAX_RATE,taxAmount:tax,total,paymentMethod:"cash",amountReceived,change};const order:CashierOrder={id,time:now.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),total,paymentMethod:"Cash",status:"Completed",items:orderItems.map(item=>({...item,customizations:[...item.customizations]})),receipt};setRecentOrders(current=>[order,...current]);setCompletedReceipt(receipt);setOrderItems([]);setCashOpen(false);setReceived("");toast.success(`Sale completed · ${order.id} · Change ${CURRENCY.format(change)}`);};
+  const completeSale=async()=>{
+    if(submitting)return;
+    if(amountReceived<total){toast.error("Amount received is less than the total due.");return;}
+    setSubmitting(true);
+    const result=await createOrder({
+      items:orderItems.map(item=>({id:item.id,productId:item.productId,qty:item.quantity,price:item.unitPrice,customizationOptionIds:item.customizationOptionIds})),
+      orderType:"dine_in",
+      idempotencyKey,
+      source:"cashier",
+      branchId:profile?.branch_id??undefined,
+    });
+    setSubmitting(false);
+    if(!result.ok){
+      console.error("[MORROW] Cashier createOrder failed:",result.error);
+      toast.error(result.error.message);
+      return;
+    }
+    const now=new Date();
+    const authoritativeSubtotal=Number(result.data.subtotal);
+    const authoritativeTax=Number(result.data.tax);
+    const authoritativeTotal=Number(result.data.total);
+    const authoritativeChange=Math.max(0,amountReceived-authoritativeTotal);
+    const id=result.data.order_number;
+    const receipt:CashierReceiptData={orderNumber:id,date:now.toLocaleString("en-GB",{dateStyle:"medium",timeStyle:"short"}),cashierName:profile?.full_name??"Cashier",restaurantName:"Morrow Restaurant",branchName:"Main Branch",registerName:"Cashier Register",items:orderItems.map(item=>({id:item.id,name:item.name,quantity:item.quantity,unitPrice:item.unitPrice,lineTotal:item.unitPrice*item.quantity,customizations:[...item.customizations]})),subtotal:authoritativeSubtotal,taxRate:authoritativeSubtotal?authoritativeTax/authoritativeSubtotal:TAX_RATE,taxAmount:authoritativeTax,total:authoritativeTotal,paymentMethod:"cash",amountReceived,change:authoritativeChange};
+    const order:CashierOrder={id,time:now.toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),total:authoritativeTotal,paymentMethod:"Cash",status:"Completed",items:orderItems.map(item=>({...item,customizations:[...item.customizations],customizationOptionIds:[...item.customizationOptionIds]})),receipt};
+    setRecentOrders(current=>[order,...current]);
+    setCompletedReceipt(receipt);
+    setOrderItems([]);
+    setCashOpen(false);
+    setReceived("");
+    setIdempotencyKey(crypto.randomUUID());
+    toast.success(`Sale completed · ${order.id} · Change ${CURRENCY.format(authoritativeChange)}`);
+  };
   const printReceipt=(receipt:CashierReceiptData)=>{if(!printCashierReceipt(receipt))toast.error("Printing was blocked. Allow popups and try again.");};
 
   return <main className="flex min-h-screen flex-col bg-[#07090a] font-['DM_Sans'] text-white"><Toaster theme="dark" position="top-right"/>
-    <header className="flex items-center justify-between border-b border-white/5 px-4 py-4 sm:px-6"><div><MorrowLogo variant="full" priority className="h-auto w-36"/><p className="mt-1 text-xs text-white/35">Register · Main Branch · Current shift</p></div><button onClick={()=>registerOpen?setCloseConfirm(true):setRegisterOpen(true)} className={`rounded-xl border px-4 py-2 text-xs font-bold ${registerOpen?"border-emerald-500/20 bg-emerald-500/10 text-emerald-400":"border-red-500/20 bg-red-500/10 text-red-400"}`}>{registerOpen?"Close Register":"Open Register"}</button></header>
+    <header className="flex items-center justify-between border-b border-white/5 px-4 py-4 sm:px-6"><div><MorrowLogo variant="full" priority className="h-auto w-36"/><p className="mt-1 text-xs text-white/35">Register · Main Branch · Current shift</p><p className="mt-1 text-[10px] text-white/25">{liveOrders.isDemo?"Demo orders":`${liveOrders.orders.length} branch orders · ${liveOrders.connection}`}</p></div><button onClick={()=>registerOpen?setCloseConfirm(true):setRegisterOpen(true)} className={`rounded-xl border px-4 py-2 text-xs font-bold ${registerOpen?"border-emerald-500/20 bg-emerald-500/10 text-emerald-400":"border-red-500/20 bg-red-500/10 text-red-400"}`}>{registerOpen?"Close Register":"Open Register"}</button></header>
     <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_400px]"><section className="min-w-0 p-4 sm:p-6"><div className="relative"><Search size={17} className="absolute left-4 top-3.5 text-white/30"/><input ref={searchRef} value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search name, category, or keyword…" className="h-12 w-full rounded-2xl border border-white/10 bg-white/[0.04] pl-11 pr-12 outline-none transition focus:border-[#d7fb69]/50 focus:ring-2 focus:ring-[#d7fb69]/10"/>{search&&<button aria-label="Clear search" onClick={()=>{setSearch("");searchRef.current?.focus();}} className="absolute right-3 top-2.5 rounded-lg p-2 text-white/35 hover:bg-white/10 hover:text-white"><X size={16}/></button>}</div>
       <div className="my-4 flex gap-2 overflow-x-auto pb-1" aria-label="Menu categories">{categories.map(label=><button key={label} onClick={()=>setCategory(label)} className={`min-h-10 shrink-0 rounded-xl px-4 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/40 ${category===label?"bg-[#d7fb69] text-[#17200f]":"border border-white/10 bg-white/[0.04] text-white/55 hover:bg-white/[0.08] hover:text-white"}`}>{label}</button>)}</div>
       {visibleProducts.length===0?<div className="grid min-h-52 place-items-center rounded-2xl border border-dashed border-white/10 text-sm text-white/35">No menu items found.</div>:<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{visibleProducts.map(product=><button key={product.id} disabled={!registerOpen||product.needsConfiguration||!product.available||!product.inStock} onClick={()=>chooseProduct(product)} className="group min-h-48 overflow-hidden rounded-2xl border border-white/8 bg-white/[0.03] text-left transition hover:-translate-y-0.5 hover:border-[#d7fb69]/25 hover:bg-white/[0.06] focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/45 disabled:opacity-40"><div className="aspect-[16/7] w-full overflow-hidden bg-white/[0.025]"><ProductImage product={product} className="size-full object-contain p-1.5"/></div><div className="p-3"><div className="text-[11px] font-medium text-[#d7fb69]/70">{product.cashierCategory}</div><h3 className="mt-0.5 line-clamp-2 text-sm font-bold leading-5">{product.name}</h3>{product.needsConfiguration?<span className="mt-1.5 inline-flex rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-1 text-[10px] font-bold text-amber-300">Needs configuration</span>:<p className="mt-1.5 font-black text-[#d7fb69]">{CURRENCY.format(product.price)}</p>}</div></button>)}</div>}

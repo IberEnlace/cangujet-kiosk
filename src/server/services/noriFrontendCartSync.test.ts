@@ -126,7 +126,7 @@ test("customer assistant and cart route share the single application CartProvide
   const appSource = readFileSync("src/app/App.tsx", "utf8");
   const providerMounts = appSource.match(/<CartProvider>/g) ?? [];
   assert.equal(providerMounts.length, 1);
-  assert.match(appSource, /<CartProvider><Application \/><\/CartProvider>/);
+  assert.match(appSource, /<CartProvider>.*<NoriConversationProvider><Application \/><\/NoriConversationProvider>.*<\/CartProvider>/s);
   assert.match(appSource, /route === ROUTES\.kiosk/);
   assert.match(appSource, /route === ROUTES\.cart/);
 });

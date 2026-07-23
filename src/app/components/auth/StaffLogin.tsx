@@ -53,7 +53,7 @@ export default function StaffLogin({ role, title, description, onSuccess, onBack
   const RoleIcon = meta.icon;
   const [email, setEmail] = useState(""); const [password, setPassword] = useState("");
   const [show, setShow] = useState(false); const [loading, setLoading] = useState(false); const [error, setError] = useState("");
-  const submit = async (event: FormEvent) => { event.preventDefault(); setLoading(true); setError(""); const ok = await login(role, email, password); setLoading(false); if (ok) onSuccess(); else setError("The email or password is incorrect for this workspace."); };
+  const submit = async (event: FormEvent) => { event.preventDefault(); setLoading(true); setError(""); const result = await login(role, email, password); setLoading(false); if (result.ok) onSuccess(); else setError(result.error === "wrong_workspace" ? "Your account is not assigned to this workspace." : result.error === "inactive_profile" ? "This staff account is inactive. Contact an administrator." : result.error === "missing_profile" ? "Your staff profile is not configured." : result.error === "service_error" ? "Authentication is temporarily unavailable. Please try again." : "The email or password is incorrect."); };
   const enter = (delay: number, x = 0, y = 0) => ({ initial: reducedMotion ? false as const : { opacity: 0, x, y }, animate: { opacity: 1, x: 0, y: 0 }, transition: { duration: reducedMotion ? .1 : .5, delay: reducedMotion ? 0 : delay, ease: [0.22, 1, 0.36, 1] as const } });
 
   return <main className={`auth-page auth-page--${role}`} style={{ "--role-accent": meta.accent, "--role-rgb": meta.rgb } as React.CSSProperties}>
@@ -74,7 +74,7 @@ export default function StaffLogin({ role, title, description, onSuccess, onBack
         <motion.div {...enter(.34, 0, 8)} className="auth-field"><label htmlFor={`${role}-password`}>Password</label><div className="auth-password"><input id={`${role}-password`} value={password} onChange={e=>setPassword(e.target.value)} type={show?"text":"password"} required placeholder="Enter your password"/><button type="button" aria-label={show ? "Hide password" : "Show password"} onClick={()=>setShow(v=>!v)}>{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></motion.div>
         {error && <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="auth-error" role="alert">{error}</motion.p>}
         <motion.button {...enter(.4, 0, 8)} type="submit" disabled={loading} className="auth-submit"><span>{loading?"Signing in…":"Sign in securely"}</span>{loading && <i aria-hidden="true" />}</motion.button>
-        <p className="auth-session-note">Development authentication · Session ends on logout</p>
+        <p className="auth-session-note">Secure staff authentication · Session ends on logout</p>
       </motion.form>
     </section>
   </main>;

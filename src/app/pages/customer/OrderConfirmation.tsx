@@ -9,9 +9,11 @@ import { MockReceiptPrinterService } from "../../services/printer/MockReceiptPri
 import MorrowLogo from "../../components/branding/MorrowLogo";
 import type { ReceiptData, ReceiptPrintStatus } from "../../services/printer/ReceiptPrinterService";
 import { useDevice } from "../../context/DeviceContext";
+import { useOrderTracking } from "../../hooks/useRealtimeOrders";
 
 export default function OrderConfirmation({ onReset }: { onReset: () => void }) {
-  const { queueNumber, currentOrderId, items, total, orderType, paymentMethod } = useCart();
+  const { queueNumber, currentOrderId, currentTrackingToken, items, total, orderType, paymentMethod } = useCart();
+  const tracking = useOrderTracking(currentOrderId, currentTrackingToken);
   const { config } = useDevice();
   const printingEnabled = config?.settings.receiptPrintingEnabled ?? false;
   const { language, direction } = useLanguage();
@@ -81,6 +83,7 @@ export default function OrderConfirmation({ onReset }: { onReset: () => void }) 
         <footer className="border-t border-white/8 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <p className="text-[clamp(.92rem,1.8vw,1.2rem)] font-semibold leading-snug">{copy.instruction}</p>
           <p className="mt-1 text-[clamp(.72rem,1.3vw,.9rem)] leading-snug text-white/40">{copy.collectAtCounter}</p>
+          {tracking.tracking && <p role="status" className="mt-1 text-xs font-semibold capitalize text-[#D7FB69]">Live order status: {tracking.tracking.status}</p>}
           {printStatus === "printer_error" && <p className="mt-1 text-xs text-red-300">{copy.errorHelp}</p>}
           <p className={`mt-2 min-h-5 text-[clamp(.75rem,1.3vw,.9rem)] text-[#D7FB69] ${printStatus === "printed" ? "visible" : "invisible"}`}>{copy.returningIn.replace("{seconds}", String(countdown))}</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
