@@ -35,6 +35,7 @@ export type PreparationStation = "kitchen" | "grill" | "drinks" | "dessert" | "n
 export type KitchenOrder = {
   id: string;
   number: number;
+  databaseStatus?: import("../../lib/supabase/database.types").DbOrderStatus;
   items: { name: string; qty: number; notes?: string; station?: PreparationStation; customizations?: string[]; allergenWarnings?: string[] }[];
   status: OrderStatus;
   priority: boolean;

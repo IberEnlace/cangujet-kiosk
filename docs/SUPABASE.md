@@ -44,6 +44,93 @@ Every application table has RLS enabled. Authorization derives from `auth.uid()`
 
 The existing Node Nori provider boundary remains appropriate because AI keys stay server-side. The curated menu JSON remains the fallback, and `products.id` is text so the later idempotent seed can preserve stable Nori/cart identifiers.
 
+## Operational notification email delivery
+
+Apply `202607240002_notification_email_delivery.sql` and
+`202607240003_operational_notifications.sql`, create and verify a sending domain
+in Resend, then configure server-side Edge Function secrets:
+
+```sh
+supabase secrets set RESEND_API_KEY=...
+supabase secrets set MORROW_NOTIFICATION_FROM_EMAIL=notifications@your-verified-domain.example
+supabase secrets set MORROW_NOTIFICATION_FROM_NAME=MORROW
+supabase secrets set MORROW_NOTIFICATION_INTERNAL_SECRET=a-random-value-of-at-least-24-characters
+supabase secrets set RESEND_WEBHOOK_SECRET=whsec_...
+supabase functions deploy send-notification-email
+supabase functions deploy process-notifications --no-verify-jwt
+supabase functions deploy device-heartbeat --no-verify-jwt
+supabase functions deploy resend-webhook --no-verify-jwt
+```
+
+Never place these values in `VITE_` variables. `sent` means Resend accepted a
+message; `delivered`, `delayed`, `failed`, `bounced`, and `complained` come from
+the signed webhook.
+
+Store the processor URL and the same internal secret in Supabase Vault before
+applying the operational migration (or before the first cron run):
+
+```sql
+select vault.create_secret(
+  'https://PROJECT_REF.supabase.co/functions/v1/process-notifications',
+  'morrow_notification_processor_url'
+);
+select vault.create_secret(
+  'THE_SAME_INTERNAL_SECRET',
+  'morrow_notification_internal_secret'
+);
+```
+
+The migration installs a `morrow-process-notifications` Supabase Cron job at
+`*/5 * * * *`. It calls the processor through `pg_net`; the command reads its
+URL and header value from Vault at execution time. Daily reports run in the
+five-minute window beginning at `daily_report_time` in `branches.timezone`.
+They cover the preceding local scheduled-time-to-scheduled-time business day.
+Weekly reports cover Monday 00:00 through the following Monday 00:00 in branch
+time. UTC storage plus unique local-period rows prevents duplicate runs through
+DST transitions.
+
+Configure this Resend webhook URL and select delivered, failed, bounced,
+delivery-delayed, and complained events:
+
+```text
+https://PROJECT_REF.supabase.co/functions/v1/resend-webhook
+```
+
+Copy its signing secret into `RESEND_WEBHOOK_SECRET`. The endpoint rejects
+missing, stale, or invalid Svix signatures and processes provider event IDs
+idempotently.
+
+Operational events must be inserted by trusted server workflows into
+`notification_events`; database and browser code never calls Resend. Use a
+stable event key such as `order_failure:{attempt}:{safe_code}`. Payment alerts
+must remain unused until a real trusted payment integration inserts a failure
+event. Devices call `device-heartbeat` with the internal header. Five minutes
+without a heartbeat creates one offline incident; three consecutive sync
+failures create one sync alert. A successful heartbeat clears the incident.
+
+To verify deployment:
+
+1. Send the existing test email and confirm separate delivery-log rows.
+2. Use **Send Daily Report Now** and compare totals with branch orders.
+3. Insert one safe order-failure event, run the processor, then repeat the same
+   event key and confirm no second email.
+4. Stop a test device heartbeat for over five minutes and confirm one offline
+   alert; restore it and confirm its incident state clears.
+5. Submit three failed sync heartbeats and confirm the threshold behavior.
+6. Inspect `cron.job_run_details`, `notification_report_runs`,
+   `notification_events`, and `notification_delivery_logs`.
+7. Send a Resend test webhook and confirm the provider status changes.
+
+To disable all operational notifications safely, turn off every notification
+toggle for each branch. For an emergency global stop, unschedule the processor:
+
+```sql
+select cron.unschedule('morrow-process-notifications');
+```
+
+This preserves queued events and history. Reapply the same `cron.schedule`
+statement from the migration to resume processing.
+
 ## Menu seed
 
 The canonical local menu currently contains 10 categories, 37 stable products, 111 customization groups, and 313 options.

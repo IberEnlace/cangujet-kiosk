@@ -4,7 +4,7 @@ alter table public.orders
   add column if not exists ready_at timestamptz,
   add column if not exists completed_at timestamptz,
   add column if not exists cancelled_at timestamptz;
-alter table public.branches add column if not exists allow_unpaid_kitchen_orders boolean not null default false;
+alter table public.branches add column if not exists allow_unpaid_kitchen_orders boolean not null default true;
 
 create table if not exists public.order_status_history (
   id uuid primary key default gen_random_uuid(),
@@ -29,8 +29,15 @@ declare v_order public.orders%rowtype; v_role public.staff_role; v_changed times
 begin
   if auth.uid() is null then raise exception using errcode = '42501', message = 'authentication_required'; end if;
   v_role := public.current_user_role();
-  select o, b.allow_unpaid_kitchen_orders into v_order, v_allow_unpaid
-  from public.orders o join public.branches b on b.id = o.branch_id where o.id = p_order_id for update of o;
+ select o.*
+into v_order
+from public.orders o
+where o.id = p_order_id
+for update;
+select b.allow_unpaid_kitchen_orders
+into v_allow_unpaid
+from public.branches b
+where b.id = v_order.branch_id;
   if not found then raise exception using errcode = 'P0002', message = 'order_not_found'; end if;
   if not public.is_admin() and v_order.branch_id <> public.current_user_branch_id() then raise exception using errcode = '42501', message = 'branch_not_authorized'; end if;
   if not ((v_order.status = 'pending' and p_next_status in ('confirmed','cancelled'))

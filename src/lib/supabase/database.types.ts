@@ -14,6 +14,8 @@ export type OrderItemRow = { id: string; order_id: string; product_id: string | 
 export type OrderStatusHistoryRow = { id: string; order_id: string; previous_status: DbOrderStatus; new_status: DbOrderStatus; changed_by: string | null; changed_at: string; reason: string | null };
 export type PublicBoardRow = { order_number: string; public_status: "preparing" | "ready" | "completed"; created_at: string; ready_at: string | null };
 export type TrackingRow = { order_number: string; status: DbOrderStatus; created_at: string; confirmed_at: string | null; preparing_at: string | null; ready_at: string | null; completed_at: string | null; total: number; currency: string };
+export type NotificationSettingsRow = { id: string; branch_id: string; primary_email: string; secondary_email: string | null; daily_report_time: string; daily_sales_report: boolean; weekly_sales_summary: boolean; order_failure_alerts: boolean; payment_failure_alerts: boolean; kiosk_offline_alerts: boolean; kitchen_offline_alerts: boolean; device_sync_failure_alerts: boolean; created_at: string; updated_at: string };
+export type NotificationDeliveryLogRow = { id: string; branch_id: string | null; recipient: string; notification_type: string; provider: string; provider_message_id: string | null; status: "queued" | "sent" | "delivered" | "delayed" | "failed" | "bounced" | "complained"; error_code: string | null; error_message: string | null; requested_by: string | null; created_at: string; sent_at: string | null; idempotency_key?: string | null; delivered_at?: string | null; failed_at?: string | null; bounced_at?: string | null; complained_at?: string | null; provider_event_id?: string | null; provider_event_type?: string | null; last_provider_update_at?: string | null };
 export type CreateOrderArgs = { p_branch_id: string; p_source: "kiosk" | "cashier" | "nori"; p_order_type: "dine_in" | "takeaway"; p_items: Json; p_customer_note?: string | null; p_idempotency_key: string };
 export type CreateOrderRow = { order_id: string; order_number: string; subtotal: number; tax: number; total: number; currency: string; order_status: Database["public"]["Enums"]["order_status"]; payment_status: Database["public"]["Enums"]["payment_status"]; created_at: string };
 
@@ -34,6 +36,8 @@ export interface Database {
       orders: Table<OrderRow>;
       order_items: Table<OrderItemRow>;
       order_status_history: Table<OrderStatusHistoryRow>;
+      notification_settings: Table<NotificationSettingsRow>;
+      notification_delivery_logs: Table<NotificationDeliveryLogRow>;
       public_order_refresh_signal: Table<{ singleton: boolean; changed_at: string }>;
       nori_conversations: Table<Record<string, unknown>>;
       nori_messages: Table<Record<string, unknown>>;

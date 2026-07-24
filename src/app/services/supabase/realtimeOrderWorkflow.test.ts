@@ -2,15 +2,52 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import type { OperationalOrder } from "./kitchenOrderService";
-import { isKitchenPaymentEligible, mergeOrders } from "./kitchenOrderService";
-import { NEXT_STATUS } from "./orderStatusService";
+import { COMPLETED_KITCHEN_VISIBILITY_MS, getKitchenColumn, isKitchenOrderVisible, isKitchenPaymentEligible, mergeOrders } from "./kitchenOrderService";
+import { getKitchenAction, NEXT_STATUS } from "./orderStatusService";
 
 const migration = readFileSync("supabase/migrations/202607230004_realtime_order_workflow.sql", "utf8");
+const fixMigration = readFileSync("supabase/migrations/202607240001_fix_kitchen_status_transitions.sql", "utf8");
+const kitchenDisplay = readFileSync("src/app/pages/KitchenDisplay.tsx", "utf8");
 
 test("database lifecycle exposes only forward operational transitions", () => {
   assert.deepEqual(NEXT_STATUS, { pending: "confirmed", confirmed: "preparing", preparing: "ready", ready: "completed" });
   assert.match(migration, /illegal_status_transition/);
   assert.doesNotMatch(JSON.stringify(NEXT_STATUS), /completed.*pending|ready.*preparing/);
+});
+
+test("kitchen actions use database statuses and never send UI aliases", () => {
+  assert.deepEqual(getKitchenAction("pending"), { label: "Accept Order", nextStatus: "confirmed" });
+  assert.deepEqual(getKitchenAction("confirmed"), { label: "Start Cooking", nextStatus: "preparing" });
+  assert.deepEqual(getKitchenAction("preparing"), { label: "Mark as Ready", nextStatus: "ready" });
+  assert.deepEqual(getKitchenAction("ready"), { label: "Complete Order", nextStatus: "completed" });
+  assert.equal(getKitchenAction("completed"), null);
+  assert.equal(getKitchenAction("cancelled"), null);
+  const requested = ["pending", "confirmed", "preparing", "ready"].map(status => getKitchenAction(status as Parameters<typeof getKitchenAction>[0])?.nextStatus);
+  assert.deepEqual(requested, ["confirmed", "preparing", "ready", "completed"]);
+  assert.doesNotMatch(requested.join(","), /incoming|received|cooking/);
+  assert.notDeepEqual(getKitchenAction("pending")?.nextStatus, "preparing");
+});
+
+test("each database status maps to exactly one Kitchen column", () => {
+  assert.equal(getKitchenColumn("pending"), "received");
+  assert.equal(getKitchenColumn("confirmed"), "preparing");
+  assert.equal(getKitchenColumn("preparing"), "cooking");
+  assert.equal(getKitchenColumn("ready"), "ready");
+  assert.equal(getKitchenColumn("completed"), "completed");
+  assert.equal(getKitchenColumn("cancelled"), null);
+  assert.match(kitchenDisplay, /pending=\{liveOrders\.pendingId===order\.id\}/);
+  assert.match(kitchenDisplay, /disabled=\{pending\}/);
+});
+
+test("completed Kitchen visibility expires without deleting or changing the order", () => {
+  const now = Date.now();
+  const recent = { status: "completed" as const, completed_at: new Date(now - COMPLETED_KITCHEN_VISIBILITY_MS + 1_000).toISOString() };
+  const expired = { status: "completed" as const, completed_at: new Date(now - COMPLETED_KITCHEN_VISIBILITY_MS - 1_000).toISOString() };
+  assert.equal(isKitchenOrderVisible(recent, now), true);
+  assert.equal(isKitchenOrderVisible(expired, now), false);
+  assert.equal(isKitchenOrderVisible({ status: "cancelled", completed_at: null }, now), false);
+  assert.equal(recent.status, "completed");
+  assert.match(kitchenDisplay, /COMPLETED_KITCHEN_VISIBILITY_MS/);
 });
 
 test("transition RPC rejects anonymous callers and records history with timestamps", () => {
@@ -26,8 +63,11 @@ test("unpaid kitchen eligibility is production-safe by default and explicit in d
   assert.equal(isKitchenPaymentEligible("pending", false), false);
   assert.equal(isKitchenPaymentEligible("failed", false), false);
   assert.equal(isKitchenPaymentEligible("refunded", false), false);
-  assert.match(migration, /v_order\.status = 'pending' and p_next_status = 'confirmed' and v_allow_unpaid/);
-  assert.match(migration, /v_order\.payment_status <> 'paid' and not v_allow_unpaid/);
+  assert.match(fixMigration, /v_order\.status = 'pending' and p_next_status = 'confirmed'/);
+  assert.match(fixMigration, /v_order\.payment_status = 'paid' or v_allow_unpaid/);
+  assert.match(fixMigration, /v_order\.payment_status <> 'paid'[\s\S]*and not v_allow_unpaid/);
+  assert.match(fixMigration, /security definer[\s\S]*set search_path = ''/);
+  assert.match(fixMigration, /revoke all on function public\.transition_order_status[\s\S]*from public/);
 });
 
 test("realtime merge deduplicates updates and sorts deterministically", () => {

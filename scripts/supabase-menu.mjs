@@ -2,14 +2,33 @@ import { createClient } from "@supabase/supabase-js";
 import { readFileSync } from "node:fs";
 
 const mode = process.argv[2];
-if (!["seed", "verify"].includes(mode)) throw new Error("Usage: node scripts/supabase-menu.mjs <seed|verify>");
+if (!["seed", "verify", "repair-images"].includes(mode)) throw new Error("Usage: node scripts/supabase-menu.mjs <seed|verify|repair-images>");
 const url = process.env.SUPABASE_URL;
 const secret = process.env.SUPABASE_SECRET_KEY;
 if (!url || !secret) throw new Error("SUPABASE_URL and SUPABASE_SECRET_KEY are required. Never use a VITE_ variable for the secret.");
 const client = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
 const catalog = JSON.parse(readFileSync(new URL("../src/app/data/morrow-menu-ai.json", import.meta.url), "utf8"));
+const productImageById = JSON.parse(readFileSync(new URL("../src/app/data/productImages.generated.json", import.meta.url), "utf8"));
 validateCatalog(catalog);
-if (mode === "seed") await seed(); else await verify();
+if (mode === "seed") await seed(); else if (mode === "repair-images") await repairImages(); else await verify();
+
+async function repairImages() {
+  const remote = await select("products", "id,image_url");
+  const repaired = [];
+  const preserved = [];
+  for (const product of remote) {
+    const generated = productImageById[product.id];
+    if (!generated) continue;
+    if (product.image_url && (product.image_url === generated || !isCategoryPlaceholder(product.image_url))) {
+      preserved.push(product.id);
+      continue;
+    }
+    const { error } = await client.from("products").update({ image_url: generated }).eq("id", product.id);
+    if (error) throw new Error(`products image repair failed for ${product.id}: ${error.message}`);
+    repaired.push(product.id);
+  }
+  console.log(JSON.stringify({ repaired, preserved, repairedCount: repaired.length, preservedCount: preserved.length }, null, 2));
+}
 
 async function seed() {
   const activeBranches = await select("branches", "currency,is_active");
@@ -17,14 +36,16 @@ async function seed() {
   if (branchCurrencies.length !== 1) throw new Error(`Menu seed requires exactly one active branch currency; found ${branchCurrencies.length}.`);
   const menuCurrency = branchCurrencies[0];
   const beforeCategories = await select("categories", "id,slug");
-  const beforeProducts = await select("products", "id");
+  const beforeProducts = await select("products", "id,image_url");
+  const existingProduct = new Map(beforeProducts.map(product => [product.id, product]));
   const categoryRows = catalog.categories.map((category, index) => ({ name: title(category), slug: slug(category), description: null, image_url: null, display_order: index, is_active: true }));
   await upsert("categories", categoryRows, "slug");
   const categories = await select("categories", "id,slug");
   const categoryId = new Map(categories.map(row => [row.slug, row.id]));
   const products = catalog.products.map(product => ({
     id: product.id, category_id: categoryId.get(slug(product.category)), name: product.name, slug: slug(product.id),
-    description: product.description, price: product.price, currency: menuCurrency, image_url: product.image,
+    description: product.description, price: product.price, currency: menuCurrency,
+    image_url: preserveProductSpecificImage(existingProduct.get(product.id)?.image_url, productImageById[product.id] ?? product.image),
     calories: product.nutrition.calories, protein: product.nutrition.proteinGrams, carbohydrates: product.nutrition.carbohydratesGrams,
     fat: product.nutrition.totalFatGrams, fiber: product.nutrition.fiberGrams, sugars: product.nutrition.sugarsGrams,
     sodium: product.nutrition.sodiumMilligrams, ingredients: product.ingredients, allergens: product.allergens.contains,
@@ -65,7 +86,7 @@ async function seed() {
 }
 
 async function verify() {
-  const remote = await select("products", "id,price,calories,protein,carbohydrates,fat,fiber,sugars,sodium");
+  const remote = await select("products", "id,price,image_url,calories,protein,carbohydrates,fat,fiber,sugars,sodium");
   const groups = await select("product_customization_groups", "id,product_id,source_id");
   const options = await select("product_customization_options", "group_id,source_id");
   const localIds = new Set(catalog.products.map(product => product.id)); const remoteIds = new Set(remote.map(product => product.id));
@@ -79,7 +100,11 @@ async function verify() {
     const saved = groups.find(row => row.product_id === product.id && row.source_id === group.id);
     for (const option of group.options) if (!saved || !optionKeys.has(`${saved.id}:${option.id}`)) missingCustomizationRelationships.push(`${product.id}/${group.id}/${option.id}`);
   }
-  const report = { localProducts: catalog.products.length, databaseProducts: remote.length, missingProductIds, unexpectedProductIds, priceDifferences, missingNutritionalFields, missingCustomizationRelationships };
+  const imageValues = remote.filter(product => productImageById[product.id]).map(product => product.image_url).filter(Boolean);
+  const duplicateProductImageValues = [...new Set(imageValues.filter((image, index) => imageValues.indexOf(image) !== index))];
+  const sampleIds = ["burger-beef-classic", "burger-chicken-spicy", "pizza-margherita", "pizza-chicken-bbq", "pasta-chicken-alfredo", "pasta-arrabbiata"];
+  const sampleProductImages = Object.fromEntries(sampleIds.map(id => [id, remote.find(product => product.id === id)?.image_url ?? null]));
+  const report = { localProducts: catalog.products.length, databaseProducts: remote.length, missingProductIds, unexpectedProductIds, priceDifferences, missingNutritionalFields, missingCustomizationRelationships, duplicateProductImageValues, sampleProductImages };
   console.log(JSON.stringify(report, null, 2));
   if (Object.values(report).some(value => Array.isArray(value) && value.length)) process.exitCode = 1;
 }
@@ -98,3 +123,10 @@ async function upsert(table, rows, onConflict) { const { error } = await client.
 function slug(value) { return value.toLowerCase().replaceAll("_", "-").replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-"); }
 function title(value) { return value.split("_").map(part => part[0].toUpperCase() + part.slice(1)).join(" "); }
 function asList(value) { return Array.isArray(value) ? value : value ? [value] : []; }
+function preserveProductSpecificImage(existing, generated) {
+  const value = typeof existing === "string" ? existing.trim() : "";
+  return value && (value === generated || !isCategoryPlaceholder(value)) ? value : generated;
+}
+function isCategoryPlaceholder(value) {
+  return /^\/?(?:public\/)?images\/products\/(?:burger|pizza|pasta|salads|chicken|coffee|drink|desserts)\.(?:png|jpe?g|webp)$/i.test(value);
+}

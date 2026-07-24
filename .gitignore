@@ -11,3 +11,4 @@ dist/
 Thumbs.db
 .idea/
 .vscode/
+supabase/.temp/

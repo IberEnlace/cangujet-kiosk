@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { isSupabaseConfigured } from "../../lib/supabase/client";
 import { useAuth } from "../auth/AuthContext";
-import { useCart, type KitchenOrder, type OrderStatus } from "../context/CartContext";
-import { fetchBranchOrders, mergeOrders, type OperationalOrder } from "../services/supabase/kitchenOrderService";
+import { useCart, type KitchenOrder } from "../context/CartContext";
+import { fetchBranchOrders, fetchCompletedTodayCount, getKitchenColumn, isKitchenOrderVisible, mergeOrders, type OperationalOrder } from "../services/supabase/kitchenOrderService";
 import { fetchPublicOrderBoard } from "../services/supabase/publicOrderBoardService";
 import { subscribeToBranchOrders, subscribeToPublicBoardSignal, type RealtimeConnectionStatus } from "../services/supabase/realtimeOrderService";
-import { NEXT_STATUS, transitionOrderStatus } from "../services/supabase/orderStatusService";
+import { getKitchenAction, transitionOrderStatus } from "../services/supabase/orderStatusService";
 import type { PublicBoardRow } from "../../lib/supabase/database.types";
 import type { TrackingRow } from "../../lib/supabase/database.types";
 import { getOrderTracking } from "../services/supabase/orderStatusService";
@@ -13,13 +13,18 @@ import { getOrderTracking } from "../services/supabase/orderStatusService";
 export function useKitchenOrders() {
   const auth = useAuth(); const demo = useCart();
   const [live, setLive] = useState<OperationalOrder[]>([]); const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
-  const [error, setError] = useState(""); const [pendingId, setPendingId] = useState<string | null>(null);
+  const [error, setError] = useState(""); const [pendingId, setPendingId] = useState<string | null>(null); const [doneToday, setDoneToday] = useState(0);
   const allowUnpaid = import.meta.env?.DEV && import.meta.env?.VITE_MORROW_ALLOW_UNPAID_KITCHEN_ORDERS === "true";
   const branchId = auth.profile?.branch_id;
   const fetchCurrent = useCallback(async () => {
     if (!branchId) return;
     const result = await fetchBranchOrders(branchId, "kitchen", allowUnpaid);
-    if (result.ok) { setLive(current => mergeOrders(current, result.data).filter(order => !["completed","cancelled"].includes(order.status))); setError(""); }
+    if (result.ok) {
+      setLive(mergeOrders([], result.data).filter(order => isKitchenOrderVisible(order)));
+      const completedCount = await fetchCompletedTodayCount(branchId);
+      if (completedCount !== null) setDoneToday(completedCount);
+      setError("");
+    }
     else setError(result.error.message);
   }, [allowUnpaid, branchId]);
   useEffect(() => {
@@ -28,14 +33,29 @@ export function useKitchenOrders() {
     const subscription = subscribeToBranchOrders({ branchId, audience: "kitchen", onSignal: () => void fetchCurrent(), onStatus: setConnection });
     return () => { void subscription.unsubscribe(); };
   }, [branchId, fetchCurrent]);
+  useEffect(() => {
+    const timer = window.setInterval(() => setLive(current => current.filter(order => isKitchenOrderVisible(order))), 15_000);
+    return () => window.clearInterval(timer);
+  }, []);
   const transition = useCallback(async (id: string) => {
-    const order = live.find(value => value.id === id); const next = order && NEXT_STATUS[order.status];
-    if (!next) return false;
-    setPendingId(id); const result = await transitionOrderStatus(id, next); setPendingId(null);
+    const order = live.find(value => value.id === id); const action = order && getKitchenAction(order.status);
+    if (!order || !action) return false;
+    if (import.meta.env?.DEV) console.debug("[MORROW] Kitchen transition", { orderId: id, currentDatabaseStatus: order.status, requestedNextStatus: action.nextStatus });
+    setPendingId(id); const result = await transitionOrderStatus(id, action.nextStatus); setPendingId(null);
     if (!result.ok) { setError(result.error.message); return false; }
+    setLive(current => current.map(value => value.id === id ? {
+      ...value,
+      status: result.data.status,
+      updated_at: result.data.changedAt,
+      confirmed_at: result.data.status === "confirmed" ? result.data.changedAt : value.confirmed_at,
+      preparing_at: result.data.status === "preparing" ? result.data.changedAt : value.preparing_at,
+      ready_at: result.data.status === "ready" ? result.data.changedAt : value.ready_at,
+      completed_at: result.data.status === "completed" ? result.data.changedAt : value.completed_at,
+    } : value));
+    setError("");
     await fetchCurrent(); return true;
   }, [fetchCurrent, live]);
-  return { orders: isSupabaseConfigured ? live.map(toKitchenOrder) : demo.kitchenOrders, isDemo: !isSupabaseConfigured, connection, error, pendingId, transition, refresh: fetchCurrent };
+  return { orders: isSupabaseConfigured ? live.flatMap(order => getKitchenColumn(order.status) ? [toKitchenOrder(order)] : []) : demo.kitchenOrders, isDemo: !isSupabaseConfigured, connection, error, pendingId, doneToday, transition, refresh: fetchCurrent };
 }
 
 export function usePublicOrderBoard() {
@@ -84,9 +104,10 @@ export function useOrderTracking(orderId: string, trackingToken: string) {
 }
 
 function toKitchenOrder(order: OperationalOrder): KitchenOrder {
-  const statusMap: Record<string, OrderStatus> = { pending: "received", confirmed: "preparing", preparing: "cooking", ready: "ready", completed: "completed", cancelled: "completed" };
   const number = Number(order.order_number.match(/(\d+)$/)?.[1]) || 0;
-  return { id: order.id, number, status: statusMap[order.status] ?? "received", priority: false, delayed: false,
+  const column = getKitchenColumn(order.status);
+  if (!column) throw new Error("Cancelled orders cannot be mapped to a Kitchen column.");
+  return { id: order.id, number, status: column, databaseStatus: order.status, priority: false, delayed: false,
     startTime: new Date(order.created_at).getTime(), completedAt: order.completed_at ? new Date(order.completed_at).getTime() : undefined,
     estimatedMinutes: 12, type: order.order_type === "takeaway" ? "take_away" : "dine_in",
     items: order.items.map(item => ({ name: item.product_name_snapshot, qty: item.quantity, notes: item.notes ?? undefined,

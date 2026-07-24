@@ -1,47 +1,1567 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from "react";
-import { ChevronDown, ChevronUp, Eye, EyeOff, LayoutDashboard, Mail, Menu as MenuIcon, Pencil, Plus, Settings as SettingsIcon, Tags, Trash2, UtensilsCrossed, X } from "lucide-react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from "react";
+import {
+  ChevronDown,
+  ChevronUp,
+  Eye,
+  EyeOff,
+  LayoutDashboard,
+  Mail,
+  Menu as MenuIcon,
+  Pencil,
+  Plus,
+  Settings as SettingsIcon,
+  Tags,
+  Trash2,
+  UtensilsCrossed,
+  X,
+} from "lucide-react";
 import { toast, Toaster } from "sonner";
 import MorrowLogo from "../components/branding/MorrowLogo";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../components/ui/select";
-import { dashboardStats, initialCategories, initialProducts, recentOrders, systemStatuses } from "../../admin/data/adminMockData";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../components/ui/select";
+import {
+  dashboardStats,
+  initialCategories,
+  initialProducts,
+  recentOrders,
+  systemStatuses,
+} from "../../admin/data/adminMockData";
 import { mockDeviceService } from "../../admin/services/deviceService";
-import { isValidEmail, mockNotificationService } from "../../admin/services/emailService";
-import type { AdminCategory, AdminProduct, NotificationSettings, OrderStatus, SystemStatus } from "../../admin/types/adminTypes";
+import {
+  isValidEmail,
+  mockNotificationService,
+} from "../../admin/services/emailService";
+import type {
+  AdminCategory,
+  AdminProduct,
+  NotificationSettings,
+  OrderStatus,
+  SystemStatus,
+} from "../../admin/types/adminTypes";
+import {
+  applyProductImageFallback,
+  resolveProductImage,
+} from "../services/productImageResolver";
+import {
+  invalidateMenuCache,
+  loadMenu,
+} from "../services/supabase/menuService";
+import type { NormalizedMenuProduct } from "../services/supabase/menuModels";
+import AdminNotifications from "./AdminNotifications";
 
-type AdminSection = "dashboard" | "menu" | "categories" | "notifications" | "settings";
+type AdminSection =
+  | "dashboard"
+  | "menu"
+  | "categories"
+  | "notifications"
+  | "settings";
 type Props = { section: AdminSection; onNavigate: (route: string) => void };
 const nav = [
-  ["dashboard", "Dashboard", LayoutDashboard], ["menu", "Menu", UtensilsCrossed], ["categories", "Categories", Tags],
-  ["notifications", "Notifications", Mail], ["settings", "Settings", SettingsIcon],
+  ["dashboard", "Dashboard", LayoutDashboard],
+  ["menu", "Menu", UtensilsCrossed],
+  ["categories", "Categories", Tags],
+  ["notifications", "Notifications", Mail],
+  ["settings", "Settings", SettingsIcon],
 ] as const;
-const input = "w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none transition focus:border-[#d7fb69]/60 focus:ring-2 focus:ring-[#d7fb69]/10";
-const button = "rounded-xl px-4 py-2.5 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/50 disabled:cursor-not-allowed disabled:opacity-40";
+const input =
+  "w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none transition focus:border-[#d7fb69]/60 focus:ring-2 focus:ring-[#d7fb69]/10";
+const button =
+  "rounded-xl px-4 py-2.5 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/50 disabled:cursor-not-allowed disabled:opacity-40";
 const card = "rounded-2xl border border-white/10 bg-white/[0.04]";
-const money = new Intl.NumberFormat("en-IE", { style: "currency", currency: "EUR" });
+const money = new Intl.NumberFormat("en-IE", {
+  style: "currency",
+  currency: "EUR",
+});
 
-function PageHeader({ title, subtitle, action }: { title: string; subtitle: string; action?: ReactNode }) { return <div className="mb-6 flex flex-wrap items-center gap-4"><div><h1 className="text-2xl font-black">{title}</h1><p className="mt-1 text-sm text-white/40">{subtitle}</p></div><div className="ml-auto">{action}</div></div>; }
-function StatusBadge({ status }: { status: OrderStatus | SystemStatus | string }) { const good = ["completed", "ready", "online", "connected", "Connected", "Active", "enabled", "Enabled"].includes(status); const warn = ["preparing", "coming_soon", "mock", "Coming Soon", "Mock Mode"].includes(status); return <span className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize ${good ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300" : warn ? "border-amber-400/20 bg-amber-400/10 text-amber-300" : "border-white/10 bg-white/5 text-white/45"}`}>{status.replace(/_/g, " ")}</span>; }
-function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) { return <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-modal="true" aria-label={title} onMouseDown={e => { if (e.target === e.currentTarget) onClose(); }}><div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-[#111511] p-5 shadow-2xl"><div className="mb-5 flex items-center"><h2 className="text-lg font-bold">{title}</h2><button aria-label="Close" onClick={onClose} className="ml-auto rounded-lg p-2 hover:bg-white/10"><X size={18}/></button></div>{children}</div></div>; }
-function Toggle({ checked, onChange, label }: { checked: boolean; onChange: (v: boolean) => void; label: string }) { return <label className="flex cursor-pointer items-center justify-between gap-4 text-sm"><span>{label}</span><button type="button" role="switch" aria-checked={checked} onClick={() => onChange(!checked)} className={`h-6 w-11 rounded-full p-1 transition ${checked ? "bg-[#d7fb69]" : "bg-white/15"}`}><span className={`block size-4 rounded-full bg-[#17200f] transition ${checked ? "translate-x-5" : ""}`}/></button></label>; }
+function PageHeader({
+  title,
+  subtitle,
+  action,
+}: {
+  title: string;
+  subtitle: string;
+  action?: ReactNode;
+}) {
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-4">
+      <div>
+        <h1 className="text-2xl font-black">{title}</h1>
+        <p className="mt-1 text-sm text-white/40">{subtitle}</p>
+      </div>
+      <div className="ml-auto">{action}</div>
+    </div>
+  );
+}
+function StatusBadge({
+  status,
+}: {
+  status: OrderStatus | SystemStatus | string;
+}) {
+  const good = [
+    "completed",
+    "ready",
+    "online",
+    "connected",
+    "Connected",
+    "Active",
+    "enabled",
+    "Enabled",
+  ].includes(status);
+  const warn = [
+    "preparing",
+    "coming_soon",
+    "mock",
+    "Coming Soon",
+    "Mock Mode",
+  ].includes(status);
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize ${good ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300" : warn ? "border-amber-400/20 bg-amber-400/10 text-amber-300" : "border-white/10 bg-white/5 text-white/45"}`}
+    >
+      {status.replace(/_/g, " ")}
+    </span>
+  );
+}
+function Modal({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-[#111511] p-5 shadow-2xl">
+        <div className="mb-5 flex items-center">
+          <h2 className="text-lg font-bold">{title}</h2>
+          <button
+            aria-label="Close"
+            onClick={onClose}
+            className="ml-auto rounded-lg p-2 hover:bg-white/10"
+          >
+            <X size={18} />
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+function Toggle({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <label className="flex cursor-pointer items-center justify-between gap-4 text-sm">
+      <span>{label}</span>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        onClick={() => onChange(!checked)}
+        className={`h-6 w-11 rounded-full p-1 transition ${checked ? "bg-[#d7fb69]" : "bg-white/15"}`}
+      >
+        <span
+          className={`block size-4 rounded-full bg-[#17200f] transition ${checked ? "translate-x-5" : ""}`}
+        />
+      </button>
+    </label>
+  );
+}
 
-function DashboardPage() { return <><PageHeader title="Dashboard" subtitle="Restaurant Overview"/><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{[
-  ["Today’s Sales", money.format(dashboardStats.todaySales), "Total sales today"], ["Today’s Orders", dashboardStats.todayOrders, "Completed and active orders"], ["Kiosk Name", dashboardStats.kioskName, "Active device name"], ["Kiosk Number", dashboardStats.kioskNumber, "Device identifier"],
-].map(([title,value,sub]) => <div key={title} className={`${card} p-5`}><p className="text-xs font-bold uppercase tracking-wider text-white/35">{title}</p><p className="mt-3 text-2xl font-black text-[#d7fb69]">{value}</p><p className="mt-1 text-xs text-white/35">{sub}</p></div>)}</div><div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]"><section className={`${card} overflow-hidden`}><h2 className="p-5 text-sm font-bold">Recent Orders</h2><div className="overflow-x-auto"><table className="w-full min-w-[560px] text-left text-sm"><thead className="border-y border-white/5 text-xs uppercase text-white/30"><tr>{["Order ID","Time","Items","Total","Status"].map(h=><th key={h} className="px-5 py-3">{h}</th>)}</tr></thead><tbody>{recentOrders.map(o=><tr key={o.id} className="border-b border-white/5"><td className="px-5 py-3 font-mono text-white/60">{o.id}</td><td className="px-5 py-3">{o.time}</td><td className="px-5 py-3">{o.itemCount} items</td><td className="px-5 py-3 font-bold">{money.format(o.total)}</td><td className="px-5 py-3"><StatusBadge status={o.status}/></td></tr>)}</tbody></table></div></section><section className={`${card} p-5`}><h2 className="mb-3 text-sm font-bold">System Status</h2>{systemStatuses.map(s=><div key={s.label} className="flex items-center justify-between border-b border-white/5 py-3 last:border-0"><span className="text-sm text-white/70">{s.label}</span><StatusBadge status={s.status}/></div>)}</section></div></>; }
+function DashboardPage() {
+  return (
+    <>
+      <PageHeader title="Dashboard" subtitle="Restaurant Overview" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          [
+            "Today’s Sales",
+            money.format(dashboardStats.todaySales),
+            "Total sales today",
+          ],
+          [
+            "Today’s Orders",
+            dashboardStats.todayOrders,
+            "Completed and active orders",
+          ],
+          ["Kiosk Name", dashboardStats.kioskName, "Active device name"],
+          ["Kiosk Number", dashboardStats.kioskNumber, "Device identifier"],
+        ].map(([title, value, sub]) => (
+          <div key={title} className={`${card} p-5`}>
+            <p className="text-xs font-bold uppercase tracking-wider text-white/35">
+              {title}
+            </p>
+            <p className="mt-3 text-2xl font-black text-[#d7fb69]">{value}</p>
+            <p className="mt-1 text-xs text-white/35">{sub}</p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
+        <section className={`${card} overflow-hidden`}>
+          <h2 className="p-5 text-sm font-bold">Recent Orders</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[560px] text-left text-sm">
+              <thead className="border-y border-white/5 text-xs uppercase text-white/30">
+                <tr>
+                  {["Order ID", "Time", "Items", "Total", "Status"].map((h) => (
+                    <th key={h} className="px-5 py-3">
+                      {h}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.map((o) => (
+                  <tr key={o.id} className="border-b border-white/5">
+                    <td className="px-5 py-3 font-mono text-white/60">
+                      {o.id}
+                    </td>
+                    <td className="px-5 py-3">{o.time}</td>
+                    <td className="px-5 py-3">{o.itemCount} items</td>
+                    <td className="px-5 py-3 font-bold">
+                      {money.format(o.total)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <StatusBadge status={o.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+        <section className={`${card} p-5`}>
+          <h2 className="mb-3 text-sm font-bold">System Status</h2>
+          {systemStatuses.map((s) => (
+            <div
+              key={s.label}
+              className="flex items-center justify-between border-b border-white/5 py-3 last:border-0"
+            >
+              <span className="text-sm text-white/70">{s.label}</span>
+              <StatusBadge status={s.status} />
+            </div>
+          ))}
+        </section>
+      </div>
+    </>
+  );
+}
 
-function AdminSelect({ value, onChange, options, placeholder }: { value: string; onChange: (value: string) => void; options: string[]; placeholder?: string }) { return <Select value={value} onValueChange={onChange}><SelectTrigger className="mt-1 h-10 rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/[0.08] focus:border-[#d7fb69]/60 focus:ring-[#d7fb69]/20"><SelectValue placeholder={placeholder}/></SelectTrigger><SelectContent className="rounded-xl border-white/10 bg-[#111511] text-white shadow-2xl">{options.map(option=><SelectItem key={option} value={option} className="rounded-lg text-white/80 focus:bg-[#d7fb69]/15 focus:text-[#d7fb69] data-[state=checked]:text-[#d7fb69]">{option}</SelectItem>)}</SelectContent></Select> }
+function AdminSelect({
+  value,
+  onChange,
+  options,
+  placeholder,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  options: string[];
+  placeholder?: string;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="mt-1 h-10 rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/[0.08] focus:border-[#d7fb69]/60 focus:ring-[#d7fb69]/20">
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent className="rounded-xl border-white/10 bg-[#111511] text-white shadow-2xl">
+        {options.map((option) => (
+          <SelectItem
+            key={option}
+            value={option}
+            className="rounded-lg text-white/80 focus:bg-[#d7fb69]/15 focus:text-[#d7fb69] data-[state=checked]:text-[#d7fb69]"
+          >
+            {option}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
 
-const blankProduct: AdminProduct = { id:"", name:"", description:"", category:"", price:0, image:"", available:true, calories:0, protein:0, allergens:[] };
-function ProductForm({ value, onSave, onClose }: { value: AdminProduct; onSave: (v: AdminProduct) => void; onClose: () => void }) { const commonCategories=["Pizza","Burgers","Pasta","Bowls","Sides","Drinks","Desserts"];const initialCategory=commonCategories.some(c=>c.toLowerCase()===value.category.toLowerCase())?commonCategories.find(c=>c.toLowerCase()===value.category.toLowerCase())??value.category:value.category?"Other...":"";const [p,setP]=useState(value);const [categoryChoice,setCategoryChoice]=useState(initialCategory);const [customCategory,setCustomCategory]=useState(initialCategory==="Other..."?value.category:"");const selectImage=(file?:File)=>{if(!file)return;if(!file.type.startsWith("image/")){toast.error("Choose a valid image file.");return;}const reader=new FileReader();reader.onload=()=>setP(current=>({...current,image:String(reader.result)}));reader.readAsDataURL(file);};const submit=(e:FormEvent)=>{e.preventDefault();const category=categoryChoice==="Other..."?customCategory.trim():categoryChoice.trim();if(!p.name.trim()||!category||p.price<0){toast.error("Name, category, and a valid price are required.");return;}onSave({...p,category,id:p.id||crypto.randomUUID()});};return <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2"><label className="sm:col-span-2 text-xs text-white/50">Product name<input className={`${input} mt-1`} value={p.name} onChange={e=>setP({...p,name:e.target.value})}/></label><label className="sm:col-span-2 text-xs text-white/50">Description<textarea className={`${input} mt-1`} value={p.description} onChange={e=>setP({...p,description:e.target.value})}/></label><div className="text-xs text-white/50">Category<AdminSelect value={categoryChoice} onChange={setCategoryChoice} options={[...commonCategories,"Other..."]} placeholder="Search or select a category"/>{categoryChoice==="Other..."&&<input aria-label="Custom category name" placeholder="Custom category name" className={`${input} mt-2`} value={customCategory} onChange={e=>setCustomCategory(e.target.value)}/>}</div><label className="text-xs text-white/50">Price<input type="number" min="0" step=".01" className={`${input} mt-1`} value={p.price} onChange={e=>setP({...p,price:Number(e.target.value)})}/></label><label className="sm:col-span-2 text-xs text-white/50">Product image<div className="mt-1 flex items-center gap-4 rounded-xl border border-dashed border-white/15 bg-white/[0.025] p-4">{p.image?<img src={p.image} alt="Selected product preview" className="size-20 rounded-xl object-cover"/>:<div className="grid size-20 place-items-center rounded-xl bg-white/5 text-[10px] text-white/30">No image</div>}<div><input id="product-image-upload" type="file" accept="image/*" className="sr-only" onChange={e=>selectImage(e.target.files?.[0])}/><label htmlFor="product-image-upload" className={`${button} inline-flex cursor-pointer border border-white/10 bg-white/5 hover:bg-white/10`}>Choose Image</label><p className="mt-2 text-[10px] text-white/30">Preview only — not uploaded.</p></div></div></label><label className="text-xs text-white/50">Calories<input type="number" min="0" className={`${input} mt-1`} value={p.calories} onChange={e=>setP({...p,calories:Number(e.target.value)})}/></label><label className="text-xs text-white/50">Protein (g)<input type="number" min="0" className={`${input} mt-1`} value={p.protein} onChange={e=>setP({...p,protein:Number(e.target.value)})}/></label><label className="sm:col-span-2 text-xs text-white/50">Allergens (comma separated)<input className={`${input} mt-1`} value={p.allergens.join(", ")} onChange={e=>setP({...p,allergens:e.target.value.split(",").map(x=>x.trim()).filter(Boolean)})}/></label><div className="sm:col-span-2"><Toggle label="Available" checked={p.available} onChange={available=>setP({...p,available})}/></div><div className="sm:col-span-2 flex justify-end gap-2"><button type="button" onClick={onClose} className={`${button} bg-white/5`}>Cancel</button><button className={`${button} bg-[#d7fb69] text-[#17200f]`}>Save Product</button></div></form>;}
-function MenuPage() { const [products,setProducts]=useState(initialProducts); const [editing,setEditing]=useState<AdminProduct|undefined>(undefined); const [deleting,setDeleting]=useState<AdminProduct|null>(null); const save=(p:AdminProduct)=>{setProducts(old=>old.some(x=>x.id===p.id)?old.map(x=>x.id===p.id?p:x):[p,...old]);setEditing(undefined);toast.success("Product saved in demo state.");}; return <><PageHeader title="Menu" subtitle="Manage kiosk products" action={<button onClick={()=>setEditing({...blankProduct})} className={`${button} flex items-center gap-2 bg-[#d7fb69] text-[#17200f]`}><Plus size={16}/>Add Product</button>}/><div className={`${card} overflow-hidden`}><div className="overflow-x-auto"><table className="w-full min-w-[820px] text-left text-sm"><thead className="border-b border-white/5 text-xs uppercase text-white/30"><tr>{["Product","Category","Price","Availability","Actions"].map(h=><th key={h} className="px-5 py-3">{h}</th>)}</tr></thead><tbody>{products.length===0?<tr><td colSpan={5} className="p-10 text-center text-white/35">No products yet.</td></tr>:products.map(p=><tr key={p.id} className="border-b border-white/5"><td className="px-5 py-3"><div className="flex items-center gap-3"><img src={p.image||"/images/products/burger.png"} alt="" className="size-10 rounded-lg object-cover"/><span className="font-medium">{p.name}</span></div></td><td className="px-5 py-3 capitalize text-white/55">{p.category.replace(/_/g," ")}</td><td className="px-5 py-3 font-bold text-[#d7fb69]">{money.format(p.price)}</td><td className="px-5 py-3"><button onClick={()=>setProducts(old=>old.map(x=>x.id===p.id?{...x,available:!x.available}:x))}><StatusBadge status={p.available?"Active":"Unavailable"}/></button></td><td className="px-5 py-3"><div className="flex gap-1"><button aria-label={`Edit ${p.name}`} onClick={()=>setEditing(p)} className="rounded-lg p-2 hover:bg-white/10"><Pencil size={15}/></button><button aria-label={`Delete ${p.name}`} onClick={()=>setDeleting(p)} className="rounded-lg p-2 text-red-300 hover:bg-red-400/10"><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div></div>{editing!==undefined&&<Modal title={editing.id?"Edit Product":"Add Product"} onClose={()=>setEditing(undefined)}><ProductForm value={editing} onSave={save} onClose={()=>setEditing(undefined)}/></Modal>}{deleting&&<Modal title="Delete Product?" onClose={()=>setDeleting(null)}><p className="text-sm text-white/55">This action cannot be undone.</p><div className="mt-5 flex justify-end gap-2"><button onClick={()=>setDeleting(null)} className={`${button} bg-white/5`}>Cancel</button><button onClick={()=>{setProducts(x=>x.filter(p=>p.id!==deleting.id));setDeleting(null);toast.success("Product deleted.");}} className={`${button} bg-red-500 text-white`}>Delete</button></div></Modal>}</>; }
+const blankProduct: AdminProduct = {
+  id: "",
+  name: "",
+  description: "",
+  category: "",
+  price: 0,
+  image: "",
+  available: true,
+  calories: 0,
+  protein: 0,
+  allergens: [],
+};
+function toAdminProduct(product: NormalizedMenuProduct): AdminProduct {
+  return {
+    id: product.id,
+    name: product.name,
+    description: product.description,
+    category: product.category,
+    price: product.price,
+    image: product.image,
+    available: product.available && product.inStock,
+    calories: product.calories,
+    protein: product.protein,
+    allergens: product.allergens,
+  };
+}
+function ProductThumbnail({ product }: { product: AdminProduct }) {
+  return (
+    <img
+      src={resolveProductImage(product)}
+      alt={product.name}
+      className="size-10 rounded-lg object-cover"
+      onError={(event) =>
+        applyProductImageFallback(event.currentTarget, product)
+      }
+    />
+  );
+}
+function ProductForm({
+  value,
+  onSave,
+  onClose,
+}: {
+  value: AdminProduct;
+  onSave: (v: AdminProduct) => void;
+  onClose: () => void;
+}) {
+  const commonCategories = [
+    "Pizza",
+    "Burgers",
+    "Pasta",
+    "Bowls",
+    "Sides",
+    "Drinks",
+    "Desserts",
+  ];
+  const initialCategory = commonCategories.some(
+    (c) => c.toLowerCase() === value.category.toLowerCase(),
+  )
+    ? (commonCategories.find(
+        (c) => c.toLowerCase() === value.category.toLowerCase(),
+      ) ?? value.category)
+    : value.category
+      ? "Other..."
+      : "";
+  const [p, setP] = useState(value);
+  const [categoryChoice, setCategoryChoice] = useState(initialCategory);
+  const [customCategory, setCustomCategory] = useState(
+    initialCategory === "Other..." ? value.category : "",
+  );
+  const selectImage = (file?: File) => {
+    if (!file) return;
+    if (!file.type.startsWith("image/")) {
+      toast.error("Choose a valid image file.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () =>
+      setP((current) => ({ ...current, image: String(reader.result) }));
+    reader.readAsDataURL(file);
+  };
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    const category =
+      categoryChoice === "Other..."
+        ? customCategory.trim()
+        : categoryChoice.trim();
+    if (!p.name.trim() || !category || p.price < 0) {
+      toast.error("Name, category, and a valid price are required.");
+      return;
+    }
+    onSave({ ...p, category, id: p.id || crypto.randomUUID() });
+  };
+  return (
+    <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
+      <label className="sm:col-span-2 text-xs text-white/50">
+        Product name
+        <input
+          className={`${input} mt-1`}
+          value={p.name}
+          onChange={(e) => setP({ ...p, name: e.target.value })}
+        />
+      </label>
+      <label className="sm:col-span-2 text-xs text-white/50">
+        Description
+        <textarea
+          className={`${input} mt-1`}
+          value={p.description}
+          onChange={(e) => setP({ ...p, description: e.target.value })}
+        />
+      </label>
+      <div className="text-xs text-white/50">
+        Category
+        <AdminSelect
+          value={categoryChoice}
+          onChange={setCategoryChoice}
+          options={[...commonCategories, "Other..."]}
+          placeholder="Search or select a category"
+        />
+        {categoryChoice === "Other..." && (
+          <input
+            aria-label="Custom category name"
+            placeholder="Custom category name"
+            className={`${input} mt-2`}
+            value={customCategory}
+            onChange={(e) => setCustomCategory(e.target.value)}
+          />
+        )}
+      </div>
+      <label className="text-xs text-white/50">
+        Price
+        <input
+          type="number"
+          min="0"
+          step=".01"
+          className={`${input} mt-1`}
+          value={p.price}
+          onChange={(e) => setP({ ...p, price: Number(e.target.value) })}
+        />
+      </label>
+      <label className="sm:col-span-2 text-xs text-white/50">
+        Product image
+        <div className="mt-1 flex items-center gap-4 rounded-xl border border-dashed border-white/15 bg-white/[0.025] p-4">
+          {p.image ? (
+            <img
+              src={p.image}
+              alt="Selected product preview"
+              className="size-20 rounded-xl object-cover"
+            />
+          ) : (
+            <div className="grid size-20 place-items-center rounded-xl bg-white/5 text-[10px] text-white/30">
+              No image
+            </div>
+          )}
+          <div>
+            <input
+              id="product-image-upload"
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={(e) => selectImage(e.target.files?.[0])}
+            />
+            <label
+              htmlFor="product-image-upload"
+              className={`${button} inline-flex cursor-pointer border border-white/10 bg-white/5 hover:bg-white/10`}
+            >
+              Choose Image
+            </label>
+            <p className="mt-2 text-[10px] text-white/30">
+              Preview only — not uploaded.
+            </p>
+          </div>
+        </div>
+      </label>
+      <label className="text-xs text-white/50">
+        Calories
+        <input
+          type="number"
+          min="0"
+          className={`${input} mt-1`}
+          value={p.calories}
+          onChange={(e) => setP({ ...p, calories: Number(e.target.value) })}
+        />
+      </label>
+      <label className="text-xs text-white/50">
+        Protein (g)
+        <input
+          type="number"
+          min="0"
+          className={`${input} mt-1`}
+          value={p.protein}
+          onChange={(e) => setP({ ...p, protein: Number(e.target.value) })}
+        />
+      </label>
+      <label className="sm:col-span-2 text-xs text-white/50">
+        Allergens (comma separated)
+        <input
+          className={`${input} mt-1`}
+          value={p.allergens.join(", ")}
+          onChange={(e) =>
+            setP({
+              ...p,
+              allergens: e.target.value
+                .split(",")
+                .map((x) => x.trim())
+                .filter(Boolean),
+            })
+          }
+        />
+      </label>
+      <div className="sm:col-span-2">
+        <Toggle
+          label="Available"
+          checked={p.available}
+          onChange={(available) => setP({ ...p, available })}
+        />
+      </div>
+      <div className="sm:col-span-2 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className={`${button} bg-white/5`}
+        >
+          Cancel
+        </button>
+        <button className={`${button} bg-[#d7fb69] text-[#17200f]`}>
+          Save Product
+        </button>
+      </div>
+    </form>
+  );
+}
+function MenuPage() {
+  const [products, setProducts] = useState(initialProducts);
+  const [editing, setEditing] = useState<AdminProduct | undefined>(undefined);
+  const [deleting, setDeleting] = useState<AdminProduct | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadMenu({ signal: controller.signal, force: true }).then((result) => {
+      if (result.ok) setProducts(result.data.products.map(toAdminProduct));
+    });
+    return () => controller.abort();
+  }, []);
+  const save = (p: AdminProduct) => {
+    setProducts((old) =>
+      old.some((x) => x.id === p.id)
+        ? old.map((x) => (x.id === p.id ? p : x))
+        : [p, ...old],
+    );
+    invalidateMenuCache();
+    setEditing(undefined);
+    toast.success("Product saved in demo state.");
+  };
+  return (
+    <>
+      <PageHeader
+        title="Menu"
+        subtitle="Manage kiosk products"
+        action={
+          <button
+            onClick={() => setEditing({ ...blankProduct })}
+            className={`${button} flex items-center gap-2 bg-[#d7fb69] text-[#17200f]`}
+          >
+            <Plus size={16} />
+            Add Product
+          </button>
+        }
+      />
+      <div className={`${card} overflow-hidden`}>
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[820px] text-left text-sm">
+            <thead className="border-b border-white/5 text-xs uppercase text-white/30">
+              <tr>
+                {[
+                  "Product",
+                  "Category",
+                  "Price",
+                  "Availability",
+                  "Actions",
+                ].map((h) => (
+                  <th key={h} className="px-5 py-3">
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {products.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="p-10 text-center text-white/35">
+                    No products yet.
+                  </td>
+                </tr>
+              ) : (
+                products.map((p) => (
+                  <tr key={p.id} className="border-b border-white/5">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <ProductThumbnail product={p} />
+                        <span className="font-medium">{p.name}</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 capitalize text-white/55">
+                      {p.category.replace(/_/g, " ")}
+                    </td>
+                    <td className="px-5 py-3 font-bold text-[#d7fb69]">
+                      {money.format(p.price)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <button
+                        onClick={() =>
+                          setProducts((old) =>
+                            old.map((x) =>
+                              x.id === p.id
+                                ? { ...x, available: !x.available }
+                                : x,
+                            ),
+                          )
+                        }
+                      >
+                        <StatusBadge
+                          status={p.available ? "Active" : "Unavailable"}
+                        />
+                      </button>
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex gap-1">
+                        <button
+                          aria-label={`Edit ${p.name}`}
+                          onClick={() => setEditing(p)}
+                          className="rounded-lg p-2 hover:bg-white/10"
+                        >
+                          <Pencil size={15} />
+                        </button>
+                        <button
+                          aria-label={`Delete ${p.name}`}
+                          onClick={() => setDeleting(p)}
+                          className="rounded-lg p-2 text-red-300 hover:bg-red-400/10"
+                        >
+                          <Trash2 size={15} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+      {editing !== undefined && (
+        <Modal
+          title={editing.id ? "Edit Product" : "Add Product"}
+          onClose={() => setEditing(undefined)}
+        >
+          <ProductForm
+            value={editing}
+            onSave={save}
+            onClose={() => setEditing(undefined)}
+          />
+        </Modal>
+      )}
+      {deleting && (
+        <Modal title="Delete Product?" onClose={() => setDeleting(null)}>
+          <p className="text-sm text-white/55">This action cannot be undone.</p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setDeleting(null)}
+              className={`${button} bg-white/5`}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                setProducts((x) => x.filter((p) => p.id !== deleting.id));
+                setDeleting(null);
+                toast.success("Product deleted.");
+              }}
+              className={`${button} bg-red-500 text-white`}
+            >
+              Delete
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
 
-function CategoriesPage(){const [items,setItems]=useState(initialCategories);const [edit,setEdit]=useState<AdminCategory|undefined>(undefined);const [del,setDel]=useState<AdminCategory|null>(null);const counts=useMemo(()=>Object.fromEntries(initialProducts.map(p=>p.category).map(c=>[c,initialProducts.filter(p=>p.category===c).length])),[]);const move=(i:number,d:number)=>{const n=[...items],j=i+d;if(j<0||j>=n.length)return;[n[i],n[j]]=[n[j],n[i]];setItems(n.map((x,k)=>({...x,displayOrder:k+1})));};return <><PageHeader title="Categories" subtitle="Manage menu categories" action={<button onClick={()=>setEdit({id:"",name:"",description:"",icon:"",displayOrder:items.length+1,active:true})} className={`${button} flex items-center gap-2 bg-[#d7fb69] text-[#17200f]`}><Plus size={16}/>Add Category</button>}/><div className={`${card} overflow-x-auto`}><table className="w-full min-w-[720px] text-left text-sm"><thead className="border-b border-white/5 text-xs uppercase text-white/30"><tr>{["Name","Products","Order","Status","Actions"].map(h=><th className="px-5 py-3" key={h}>{h}</th>)}</tr></thead><tbody>{items.map((c,i)=><tr key={c.id} className="border-b border-white/5"><td className="px-5 py-4 font-medium">{c.name}</td><td className="px-5 py-4 text-white/50">{counts[c.id]??counts[c.name.toLowerCase()]??0}</td><td className="px-5 py-4">{c.displayOrder}</td><td className="px-5 py-4"><button onClick={()=>setItems(x=>x.map(y=>y.id===c.id?{...y,active:!y.active}:y))}><StatusBadge status={c.active?"Active":"Disabled"}/></button></td><td className="px-5 py-4"><div className="flex gap-1"><button disabled={i===0} aria-label="Move up" onClick={()=>move(i,-1)} className="p-2 disabled:opacity-20"><ChevronUp size={15}/></button><button disabled={i===items.length-1} aria-label="Move down" onClick={()=>move(i,1)} className="p-2 disabled:opacity-20"><ChevronDown size={15}/></button><button aria-label="Edit category" onClick={()=>setEdit(c)} className="p-2"><Pencil size={15}/></button><button aria-label="Delete category" onClick={()=>setDel(c)} className="p-2 text-red-300"><Trash2 size={15}/></button></div></td></tr>)}</tbody></table></div>{edit!==undefined&&<Modal title={edit.id?"Edit Category":"Add Category"} onClose={()=>setEdit(undefined)}><CategoryForm value={edit} onClose={()=>setEdit(undefined)} onSave={v=>{setItems(x=>x.some(y=>y.id===v.id)?x.map(y=>y.id===v.id?v:y):[...x,{...v,id:v.id||crypto.randomUUID()}]);setEdit(undefined);toast.success("Category saved.");}}/></Modal>}{del&&<Modal title="Delete Category?" onClose={()=>setDel(null)}><p className="text-sm text-white/55">This action cannot be undone.</p><div className="mt-5 flex justify-end gap-2"><button onClick={()=>setDel(null)} className={`${button} bg-white/5`}>Cancel</button><button onClick={()=>{setItems(x=>x.filter(y=>y.id!==del.id));setDel(null);}} className={`${button} bg-red-500`}>Delete</button></div></Modal>}</>}
-function CategoryForm({value,onSave,onClose}:{value:AdminCategory;onSave:(v:AdminCategory)=>void;onClose:()=>void}){const icons=[["🍕","Pizza"],["🍔","Burger"],["🥤","Drink"],["🍰","Dessert"],["🍟","Fries"],["🥗","Salad"],["☕","Coffee"]];const known=icons.some(([icon])=>icon===value.icon);const [v,setV]=useState(value);const [other,setOther]=useState(Boolean(value.icon&&!known));return <form onSubmit={e=>{e.preventDefault();if(!v.name.trim())return toast.error("Category name is required.");if(!v.icon.trim())return toast.error("Choose or enter a category icon.");onSave(v);}} className="space-y-4"><label className="block text-xs text-white/50">Category name<input className={`${input} mt-1`} value={v.name} onChange={e=>setV({...v,name:e.target.value})}/></label><label className="block text-xs text-white/50">Description<textarea className={`${input} mt-1`} value={v.description} onChange={e=>setV({...v,description:e.target.value})}/></label><fieldset><legend className="text-xs text-white/50">Category icon</legend><div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-8">{icons.map(([icon,label])=><button key={label} type="button" aria-label={label} aria-pressed={!other&&v.icon===icon} title={label} onClick={()=>{setOther(false);setV({...v,icon})}} className={`rounded-xl border p-3 text-xl transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/40 ${!other&&v.icon===icon?"border-[#d7fb69] bg-[#d7fb69]/10":"border-white/10 bg-white/5 hover:bg-white/10"}`}>{icon}</button>)}<button type="button" aria-pressed={other} onClick={()=>{setOther(true);if(known)setV({...v,icon:""})}} className={`rounded-xl border px-2 text-xs transition ${other?"border-[#d7fb69] bg-[#d7fb69]/10":"border-white/10 bg-white/5"}`}>Other…</button></div>{other&&<input aria-label="Custom category icon" placeholder="Enter an emoji or icon" maxLength={8} className={`${input} mt-2`} value={v.icon} onChange={e=>setV({...v,icon:e.target.value})}/>}</fieldset><label className="block text-xs text-white/50">Display order<input type="number" min="1" className={`${input} mt-1`} value={v.displayOrder} onChange={e=>setV({...v,displayOrder:Number(e.target.value)})}/></label><Toggle label="Active" checked={v.active} onChange={active=>setV({...v,active})}/><div className="flex justify-end gap-2"><button type="button" onClick={onClose} className={`${button} bg-white/5`}>Cancel</button><button className={`${button} bg-[#d7fb69] text-[#17200f]`}>Save Category</button></div></form>}
+function CategoriesPage() {
+  const [items, setItems] = useState(initialCategories);
+  const [edit, setEdit] = useState<AdminCategory | undefined>(undefined);
+  const [del, setDel] = useState<AdminCategory | null>(null);
+  const counts = useMemo(
+    () =>
+      Object.fromEntries(
+        initialProducts
+          .map((p) => p.category)
+          .map((c) => [
+            c,
+            initialProducts.filter((p) => p.category === c).length,
+          ]),
+      ),
+    [],
+  );
+  const move = (i: number, d: number) => {
+    const n = [...items],
+      j = i + d;
+    if (j < 0 || j >= n.length) return;
+    [n[i], n[j]] = [n[j], n[i]];
+    setItems(n.map((x, k) => ({ ...x, displayOrder: k + 1 })));
+  };
+  return (
+    <>
+      <PageHeader
+        title="Categories"
+        subtitle="Manage menu categories"
+        action={
+          <button
+            onClick={() =>
+              setEdit({
+                id: "",
+                name: "",
+                description: "",
+                icon: "",
+                displayOrder: items.length + 1,
+                active: true,
+              })
+            }
+            className={`${button} flex items-center gap-2 bg-[#d7fb69] text-[#17200f]`}
+          >
+            <Plus size={16} />
+            Add Category
+          </button>
+        }
+      />
+      <div className={`${card} overflow-x-auto`}>
+        <table className="w-full min-w-[720px] text-left text-sm">
+          <thead className="border-b border-white/5 text-xs uppercase text-white/30">
+            <tr>
+              {["Name", "Products", "Order", "Status", "Actions"].map((h) => (
+                <th className="px-5 py-3" key={h}>
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((c, i) => (
+              <tr key={c.id} className="border-b border-white/5">
+                <td className="px-5 py-4 font-medium">{c.name}</td>
+                <td className="px-5 py-4 text-white/50">
+                  {counts[c.id] ?? counts[c.name.toLowerCase()] ?? 0}
+                </td>
+                <td className="px-5 py-4">{c.displayOrder}</td>
+                <td className="px-5 py-4">
+                  <button
+                    onClick={() =>
+                      setItems((x) =>
+                        x.map((y) =>
+                          y.id === c.id ? { ...y, active: !y.active } : y,
+                        ),
+                      )
+                    }
+                  >
+                    <StatusBadge status={c.active ? "Active" : "Disabled"} />
+                  </button>
+                </td>
+                <td className="px-5 py-4">
+                  <div className="flex gap-1">
+                    <button
+                      disabled={i === 0}
+                      aria-label="Move up"
+                      onClick={() => move(i, -1)}
+                      className="p-2 disabled:opacity-20"
+                    >
+                      <ChevronUp size={15} />
+                    </button>
+                    <button
+                      disabled={i === items.length - 1}
+                      aria-label="Move down"
+                      onClick={() => move(i, 1)}
+                      className="p-2 disabled:opacity-20"
+                    >
+                      <ChevronDown size={15} />
+                    </button>
+                    <button
+                      aria-label="Edit category"
+                      onClick={() => setEdit(c)}
+                      className="p-2"
+                    >
+                      <Pencil size={15} />
+                    </button>
+                    <button
+                      aria-label="Delete category"
+                      onClick={() => setDel(c)}
+                      className="p-2 text-red-300"
+                    >
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {edit !== undefined && (
+        <Modal
+          title={edit.id ? "Edit Category" : "Add Category"}
+          onClose={() => setEdit(undefined)}
+        >
+          <CategoryForm
+            value={edit}
+            onClose={() => setEdit(undefined)}
+            onSave={(v) => {
+              setItems((x) =>
+                x.some((y) => y.id === v.id)
+                  ? x.map((y) => (y.id === v.id ? v : y))
+                  : [...x, { ...v, id: v.id || crypto.randomUUID() }],
+              );
+              setEdit(undefined);
+              toast.success("Category saved.");
+            }}
+          />
+        </Modal>
+      )}
+      {del && (
+        <Modal title="Delete Category?" onClose={() => setDel(null)}>
+          <p className="text-sm text-white/55">This action cannot be undone.</p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setDel(null)}
+              className={`${button} bg-white/5`}
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => {
+                setItems((x) => x.filter((y) => y.id !== del.id));
+                setDel(null);
+              }}
+              className={`${button} bg-red-500`}
+            >
+              Delete
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+function CategoryForm({
+  value,
+  onSave,
+  onClose,
+}: {
+  value: AdminCategory;
+  onSave: (v: AdminCategory) => void;
+  onClose: () => void;
+}) {
+  const icons = [
+    ["🍕", "Pizza"],
+    ["🍔", "Burger"],
+    ["🥤", "Drink"],
+    ["🍰", "Dessert"],
+    ["🍟", "Fries"],
+    ["🥗", "Salad"],
+    ["☕", "Coffee"],
+  ];
+  const known = icons.some(([icon]) => icon === value.icon);
+  const [v, setV] = useState(value);
+  const [other, setOther] = useState(Boolean(value.icon && !known));
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (!v.name.trim()) return toast.error("Category name is required.");
+        if (!v.icon.trim())
+          return toast.error("Choose or enter a category icon.");
+        onSave(v);
+      }}
+      className="space-y-4"
+    >
+      <label className="block text-xs text-white/50">
+        Category name
+        <input
+          className={`${input} mt-1`}
+          value={v.name}
+          onChange={(e) => setV({ ...v, name: e.target.value })}
+        />
+      </label>
+      <label className="block text-xs text-white/50">
+        Description
+        <textarea
+          className={`${input} mt-1`}
+          value={v.description}
+          onChange={(e) => setV({ ...v, description: e.target.value })}
+        />
+      </label>
+      <fieldset>
+        <legend className="text-xs text-white/50">Category icon</legend>
+        <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-8">
+          {icons.map(([icon, label]) => (
+            <button
+              key={label}
+              type="button"
+              aria-label={label}
+              aria-pressed={!other && v.icon === icon}
+              title={label}
+              onClick={() => {
+                setOther(false);
+                setV({ ...v, icon });
+              }}
+              className={`rounded-xl border p-3 text-xl transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/40 ${!other && v.icon === icon ? "border-[#d7fb69] bg-[#d7fb69]/10" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+            >
+              {icon}
+            </button>
+          ))}
+          <button
+            type="button"
+            aria-pressed={other}
+            onClick={() => {
+              setOther(true);
+              if (known) setV({ ...v, icon: "" });
+            }}
+            className={`rounded-xl border px-2 text-xs transition ${other ? "border-[#d7fb69] bg-[#d7fb69]/10" : "border-white/10 bg-white/5"}`}
+          >
+            Other…
+          </button>
+        </div>
+        {other && (
+          <input
+            aria-label="Custom category icon"
+            placeholder="Enter an emoji or icon"
+            maxLength={8}
+            className={`${input} mt-2`}
+            value={v.icon}
+            onChange={(e) => setV({ ...v, icon: e.target.value })}
+          />
+        )}
+      </fieldset>
+      <label className="block text-xs text-white/50">
+        Display order
+        <input
+          type="number"
+          min="1"
+          className={`${input} mt-1`}
+          value={v.displayOrder}
+          onChange={(e) => setV({ ...v, displayOrder: Number(e.target.value) })}
+        />
+      </label>
+      <Toggle
+        label="Active"
+        checked={v.active}
+        onChange={(active) => setV({ ...v, active })}
+      />
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onClose}
+          className={`${button} bg-white/5`}
+        >
+          Cancel
+        </button>
+        <button className={`${button} bg-[#d7fb69] text-[#17200f]`}>
+          Save Category
+        </button>
+      </div>
+    </form>
+  );
+}
 
-function DeviceForm({connected,onConnectionChange}:{connected:boolean;onConnectionChange:(connected:boolean)=>void}){const [key,setKey]=useState("");const [showKey,setShowKey]=useState(false);const [busy,setBusy]=useState<"connect"|"sync"|"disconnect"|null>(null);const [lastSync,setLastSync]=useState("Never");const [configuredOn,setConfiguredOn]=useState("");const [confirmDisconnect,setConfirmDisconnect]=useState(false);const connect=async()=>{setBusy("connect");try{const config=await mockDeviceService.connectDevice(key);const now=config.lastSync??new Date().toLocaleString();onConnectionChange(true);setLastSync(now);setConfiguredOn(now);toast.success("Device configuration loaded successfully.");}catch(e){toast.error((e as Error).message)}finally{setBusy(null)}};const sync=async()=>{setBusy("sync");try{const config=await mockDeviceService.syncDevice();setLastSync(config.lastSync??new Date().toLocaleString());toast.success("Device data synced successfully.");}finally{setBusy(null)}};const disconnect=async()=>{setBusy("disconnect");await mockDeviceService.disconnectDevice();setKey("");onConnectionChange(false);setLastSync("Never");setConfiguredOn("");setConfirmDisconnect(false);setBusy(null);toast.success("Device disconnected.");};return <div className="space-y-4"><label className="block text-xs text-white/50">Device Secret Key<div className="relative mt-1"><input type={showKey?"text":"password"} className={`${input} pr-11`} value={key} onChange={e=>setKey(e.target.value)} autoComplete="off"/><button type="button" aria-label={showKey?"Hide device key":"Show device key"} onClick={()=>setShowKey(x=>!x)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-white/40 hover:bg-white/10">{showKey?<EyeOff size={16}/>:<Eye size={16}/>}</button></div></label><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{[["Connection Status",connected?"Connected":"Not Configured"],["Kiosk Name","Morrow Kiosk"],["Kiosk Number","KSK-001"],["Branch Name","Main Branch"],["Last Sync",lastSync],...(connected?[["Configured On",configuredOn]]:[])].map(([a,b])=><div key={a} className="rounded-xl border border-white/5 bg-white/[0.025] p-3"><p className="text-xs text-white/35">{a}</p><div className="mt-1 text-sm">{a==="Connection Status"?<StatusBadge status={b}/>:b}</div></div>)}</div><div className="flex flex-wrap gap-2"><button disabled={busy!==null||connected} onClick={connect} className={`${button} bg-[#d7fb69] text-[#17200f]`}>{busy==="connect"?"Connecting…":"Connect Device"}</button><button disabled={busy!==null||!connected} onClick={sync} className={`${button} border border-white/10 bg-white/5`}>{busy==="sync"?"Syncing…":"Sync Now"}</button><button disabled={busy!==null||!connected} onClick={()=>setConfirmDisconnect(true)} className={`${button} border border-red-400/20 bg-red-400/5 text-red-300`}>Disconnect Device</button></div><p className="text-[11px] text-white/30">Demo mode: actions are simulated in this prototype.</p>{confirmDisconnect&&<Modal title="Disconnect Device?" onClose={()=>setConfirmDisconnect(false)}><p className="text-sm text-white/55">This kiosk will stop receiving its assigned menu and branch settings.</p><div className="mt-5 flex justify-end gap-2"><button onClick={()=>setConfirmDisconnect(false)} className={`${button} bg-white/5`}>Cancel</button><button disabled={busy!==null} onClick={disconnect} className={`${button} bg-red-500 text-white`}>{busy==="disconnect"?"Disconnecting…":"Disconnect"}</button></div></Modal>}</div>}
+function DeviceForm({
+  connected,
+  onConnectionChange,
+}: {
+  connected: boolean;
+  onConnectionChange: (connected: boolean) => void;
+}) {
+  const [key, setKey] = useState("");
+  const [showKey, setShowKey] = useState(false);
+  const [busy, setBusy] = useState<"connect" | "sync" | "disconnect" | null>(
+    null,
+  );
+  const [lastSync, setLastSync] = useState("Never");
+  const [configuredOn, setConfiguredOn] = useState("");
+  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
+  const connect = async () => {
+    setBusy("connect");
+    try {
+      const config = await mockDeviceService.connectDevice(key);
+      const now = config.lastSync ?? new Date().toLocaleString();
+      onConnectionChange(true);
+      setLastSync(now);
+      setConfiguredOn(now);
+      toast.success("Device configuration loaded successfully.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const sync = async () => {
+    setBusy("sync");
+    try {
+      const config = await mockDeviceService.syncDevice();
+      setLastSync(config.lastSync ?? new Date().toLocaleString());
+      toast.success("Device data synced successfully.");
+    } finally {
+      setBusy(null);
+    }
+  };
+  const disconnect = async () => {
+    setBusy("disconnect");
+    await mockDeviceService.disconnectDevice();
+    setKey("");
+    onConnectionChange(false);
+    setLastSync("Never");
+    setConfiguredOn("");
+    setConfirmDisconnect(false);
+    setBusy(null);
+    toast.success("Device disconnected.");
+  };
+  return (
+    <div className="space-y-4">
+      <label className="block text-xs text-white/50">
+        Device Secret Key
+        <div className="relative mt-1">
+          <input
+            type={showKey ? "text" : "password"}
+            className={`${input} pr-11`}
+            value={key}
+            onChange={(e) => setKey(e.target.value)}
+            autoComplete="off"
+          />
+          <button
+            type="button"
+            aria-label={showKey ? "Hide device key" : "Show device key"}
+            onClick={() => setShowKey((x) => !x)}
+            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-white/40 hover:bg-white/10"
+          >
+            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
+        </div>
+      </label>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {[
+          ["Connection Status", connected ? "Connected" : "Not Configured"],
+          ["Kiosk Name", "Morrow Kiosk"],
+          ["Kiosk Number", "KSK-001"],
+          ["Branch Name", "Main Branch"],
+          ["Last Sync", lastSync],
+          ...(connected ? [["Configured On", configuredOn]] : []),
+        ].map(([a, b]) => (
+          <div
+            key={a}
+            className="rounded-xl border border-white/5 bg-white/[0.025] p-3"
+          >
+            <p className="text-xs text-white/35">{a}</p>
+            <div className="mt-1 text-sm">
+              {a === "Connection Status" ? <StatusBadge status={b} /> : b}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <button
+          disabled={busy !== null || connected}
+          onClick={connect}
+          className={`${button} bg-[#d7fb69] text-[#17200f]`}
+        >
+          {busy === "connect" ? "Connecting…" : "Connect Device"}
+        </button>
+        <button
+          disabled={busy !== null || !connected}
+          onClick={sync}
+          className={`${button} border border-white/10 bg-white/5`}
+        >
+          {busy === "sync" ? "Syncing…" : "Sync Now"}
+        </button>
+        <button
+          disabled={busy !== null || !connected}
+          onClick={() => setConfirmDisconnect(true)}
+          className={`${button} border border-red-400/20 bg-red-400/5 text-red-300`}
+        >
+          Disconnect Device
+        </button>
+      </div>
+      <p className="text-[11px] text-white/30">
+        Demo mode: actions are simulated in this prototype.
+      </p>
+      {confirmDisconnect && (
+        <Modal
+          title="Disconnect Device?"
+          onClose={() => setConfirmDisconnect(false)}
+        >
+          <p className="text-sm text-white/55">
+            This kiosk will stop receiving its assigned menu and branch
+            settings.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setConfirmDisconnect(false)}
+              className={`${button} bg-white/5`}
+            >
+              Cancel
+            </button>
+            <button
+              disabled={busy !== null}
+              onClick={disconnect}
+              className={`${button} bg-red-500 text-white`}
+            >
+              {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
 
-function NotificationsPage(){const [v,setV]=useState<NotificationSettings>({restaurantEmail:"admin@morrow.example",secondaryEmail:"",dailySalesReport:true,weeklySalesSummary:false,orderFailureAlerts:true,paymentFailureAlerts:true,kioskOfflineAlerts:true,kitchenDisplayOfflineAlerts:true,deviceSyncFailureAlerts:true,dailyReportTime:"22:00"});const [testOpen,setTestOpen]=useState(false);const [recipient,setRecipient]=useState(v.restaurantEmail);const [notificationType,setNotificationType]=useState("Daily Sales Report");const [loading,setLoading]=useState(false);const valid=()=>{if(!isValidEmail(v.restaurantEmail)){toast.error("Enter a valid restaurant email.");return false}if(v.secondaryEmail&&!isValidEmail(v.secondaryEmail)){toast.error("Enter a valid secondary email.");return false}return true};const save=()=>{if(valid())toast.success("Notification settings saved.");};const sendTest=async()=>{setLoading(true);try{await mockNotificationService.sendTestNotification(recipient,notificationType);setTestOpen(false);toast.success("Test notification simulated successfully.");}catch(e){toast.error((e as Error).message)}finally{setLoading(false)}};const preferences:[keyof NotificationSettings,string][]=[["dailySalesReport","Daily Sales Report"],["weeklySalesSummary","Weekly Sales Summary"],["orderFailureAlerts","Order Failure Alerts"],["paymentFailureAlerts","Payment Failure Alerts"],["kioskOfflineAlerts","Kiosk Offline Alerts"],["kitchenDisplayOfflineAlerts","Kitchen Display Offline Alerts"],["deviceSyncFailureAlerts","Device Sync Failure Alerts"]];return <><PageHeader title="Notifications" subtitle="Manage restaurant reports and system alerts"/><div className="grid max-w-5xl gap-5 lg:grid-cols-2"><SettingsSection title="Notification Email"><div className="grid gap-4"><Field label="Restaurant Email" type="email" value={v.restaurantEmail} onChange={restaurantEmail=>setV({...v,restaurantEmail})}/><Field label="Secondary Email (optional)" type="email" value={v.secondaryEmail} onChange={secondaryEmail=>setV({...v,secondaryEmail})}/><label className="text-xs text-white/50">Daily Report Time<input type="time" className={`${input} mt-1`} value={v.dailyReportTime} onChange={e=>setV({...v,dailyReportTime:e.target.value})}/><span className="mt-1 block text-[11px] text-white/30">The daily report will be sent at this time using the restaurant timezone.</span></label></div></SettingsSection><SettingsSection title="Notification Preferences"><div className="space-y-4">{preferences.map(([key,label])=><Toggle key={key} label={label} checked={Boolean(v[key])} onChange={checked=>setV({...v,[key]:checked})}/>)}</div></SettingsSection><div className="flex flex-wrap gap-2 lg:col-span-2"><button onClick={save} className={`${button} bg-[#d7fb69] text-[#17200f]`}>Save Notification Settings</button><button onClick={()=>{setRecipient(v.restaurantEmail);setTestOpen(true)}} className={`${button} border border-white/10 bg-white/5`}>Send Test Notification</button></div><p className="text-[11px] text-white/30 lg:col-span-2">Demo mode: actions are simulated in this prototype.</p></div>{testOpen&&<Modal title="Send Test Notification" onClose={()=>setTestOpen(false)}><div className="space-y-4"><Field label="Recipient Email" type="email" value={recipient} onChange={setRecipient}/><label className="block text-xs text-white/50">Notification Type<AdminSelect value={notificationType} onChange={setNotificationType} options={["Daily Sales Report","System Alert","Kiosk Offline Alert"]}/></label></div><p className="mt-3 text-[11px] text-white/30">Demo mode: this notification will only be simulated.</p><div className="mt-5 flex justify-end gap-2"><button onClick={()=>setTestOpen(false)} className={`${button} bg-white/5`}>Cancel</button><button disabled={loading} onClick={sendTest} className={`${button} bg-[#d7fb69] text-[#17200f]`}>{loading?"Sending…":"Send Test"}</button></div></Modal>}</>}
-function Field({label,value,onChange,type="text"}:{label:string;value:string|number;onChange:(v:string)=>void;type?:string}){return <label className="text-xs text-white/50">{label}<input type={type} className={`${input} mt-1`} value={value} onChange={e=>onChange(e.target.value)}/></label>}
-function SettingsPage(){const [restaurant,setRestaurant]=useState({name:"Morrow Restaurant",currency:"EUR",tax:"8",language:"English",timezone:"Europe/Istanbul"});const [kiosk,setKiosk]=useState({name:"Morrow Kiosk",number:"KSK-001",timeout:"60",autoReturn:true,sound:true,animations:true});const [connected,setConnected]=useState(false);const saveKiosk=()=>{if(!Number.isFinite(Number(kiosk.timeout))||Number(kiosk.timeout)<=0){toast.error("Idle Timeout must be a positive number.");return}toast.success("Changes saved for this demo session.")};return <><PageHeader title="Settings" subtitle="Restaurant, kiosk, and device preferences"/><div className="grid max-w-5xl gap-5"><SettingsSection title="Restaurant Settings"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><Field label="Restaurant Name" value={restaurant.name} onChange={name=>setRestaurant({...restaurant,name})}/><label className="text-xs text-white/50">Currency<AdminSelect value={restaurant.currency} onChange={currency=>setRestaurant({...restaurant,currency})} options={["EUR","USD","GBP","TRY"]}/></label><Field label="Tax Rate (%)" type="number" value={restaurant.tax} onChange={tax=>setRestaurant({...restaurant,tax})}/><label className="text-xs text-white/50">Default Language<AdminSelect value={restaurant.language} onChange={language=>setRestaurant({...restaurant,language})} options={["English","Turkish","Arabic"]}/></label><label className="text-xs text-white/50">Timezone<AdminSelect value={restaurant.timezone} onChange={timezone=>setRestaurant({...restaurant,timezone})} options={["Europe/Istanbul","Europe/Berlin","Europe/London","America/New_York"]}/></label></div><Save/></SettingsSection><SettingsSection title="Kiosk Settings"><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"><label className="text-xs text-white/50">Kiosk Name<input disabled={connected} className={`${input} mt-1 disabled:cursor-not-allowed disabled:opacity-50`} value={kiosk.name} onChange={e=>setKiosk({...kiosk,name:e.target.value})}/>{connected&&<span className="mt-1 block text-[11px] text-white/30">Managed by the connected device configuration.</span>}</label><label className="text-xs text-white/50">Kiosk Number<input disabled={connected} className={`${input} mt-1 disabled:cursor-not-allowed disabled:opacity-50`} value={kiosk.number} onChange={e=>setKiosk({...kiosk,number:e.target.value})}/>{connected&&<span className="mt-1 block text-[11px] text-white/30">Managed by the connected device configuration.</span>}</label><label className="text-xs text-white/50">Idle Timeout<div className="relative mt-1"><input type="number" min="1" className={`${input} pr-20`} value={kiosk.timeout} onChange={e=>setKiosk({...kiosk,timeout:e.target.value})}/><span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/30">seconds</span></div></label></div><div className="mt-5 space-y-4"><Toggle label="Auto-return to categories after add-to-cart" checked={kiosk.autoReturn} onChange={autoReturn=>setKiosk({...kiosk,autoReturn})}/><Toggle label="Enable sound" checked={kiosk.sound} onChange={sound=>setKiosk({...kiosk,sound})}/><Toggle label="Enable animations" checked={kiosk.animations} onChange={animations=>setKiosk({...kiosk,animations})}/></div><button onClick={saveKiosk} className={`${button} mt-6 bg-[#d7fb69] text-[#17200f]`}>Save Changes</button></SettingsSection><SettingsSection title="Device Configuration"><DeviceForm connected={connected} onConnectionChange={setConnected}/></SettingsSection></div></>}
-function SettingsSection({title,children}:{title:string;children:ReactNode}){return <section className={`${card} p-6`}><h2 className="mb-5 font-bold">{title}</h2>{children}</section>};function Save(){return <button onClick={()=>toast.success("Changes saved for this demo session.")} className={`${button} mt-6 bg-[#d7fb69] text-[#17200f]`}>Save Changes</button>}
+function NotificationsPage() {
+  const [v, setV] = useState<NotificationSettings>({
+    restaurantEmail: "admin@morrow.example",
+    secondaryEmail: "",
+    dailySalesReport: true,
+    weeklySalesSummary: false,
+    orderFailureAlerts: true,
+    paymentFailureAlerts: true,
+    kioskOfflineAlerts: true,
+    kitchenDisplayOfflineAlerts: true,
+    deviceSyncFailureAlerts: true,
+    dailyReportTime: "22:00",
+  });
+  const [testOpen, setTestOpen] = useState(false);
+  const [recipient, setRecipient] = useState(v.restaurantEmail);
+  const [notificationType, setNotificationType] =
+    useState("Daily Sales Report");
+  const [loading, setLoading] = useState(false);
+  const valid = () => {
+    if (!isValidEmail(v.restaurantEmail)) {
+      toast.error("Enter a valid restaurant email.");
+      return false;
+    }
+    if (v.secondaryEmail && !isValidEmail(v.secondaryEmail)) {
+      toast.error("Enter a valid secondary email.");
+      return false;
+    }
+    return true;
+  };
+  const save = () => {
+    if (valid()) toast.success("Notification settings saved.");
+  };
+  const sendTest = async () => {
+    setLoading(true);
+    try {
+      await mockNotificationService.sendTestNotification(
+        recipient,
+        notificationType,
+      );
+      setTestOpen(false);
+      toast.success("Test notification simulated successfully.");
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  const preferences: [keyof NotificationSettings, string][] = [
+    ["dailySalesReport", "Daily Sales Report"],
+    ["weeklySalesSummary", "Weekly Sales Summary"],
+    ["orderFailureAlerts", "Order Failure Alerts"],
+    ["paymentFailureAlerts", "Payment Failure Alerts"],
+    ["kioskOfflineAlerts", "Kiosk Offline Alerts"],
+    ["kitchenDisplayOfflineAlerts", "Kitchen Display Offline Alerts"],
+    ["deviceSyncFailureAlerts", "Device Sync Failure Alerts"],
+  ];
+  return (
+    <>
+      <PageHeader
+        title="Notifications"
+        subtitle="Manage restaurant reports and system alerts"
+      />
+      <div className="grid max-w-5xl gap-5 lg:grid-cols-2">
+        <SettingsSection title="Notification Email">
+          <div className="grid gap-4">
+            <Field
+              label="Restaurant Email"
+              type="email"
+              value={v.restaurantEmail}
+              onChange={(restaurantEmail) => setV({ ...v, restaurantEmail })}
+            />
+            <Field
+              label="Secondary Email (optional)"
+              type="email"
+              value={v.secondaryEmail}
+              onChange={(secondaryEmail) => setV({ ...v, secondaryEmail })}
+            />
+            <label className="text-xs text-white/50">
+              Daily Report Time
+              <input
+                type="time"
+                className={`${input} mt-1`}
+                value={v.dailyReportTime}
+                onChange={(e) =>
+                  setV({ ...v, dailyReportTime: e.target.value })
+                }
+              />
+              <span className="mt-1 block text-[11px] text-white/30">
+                The daily report will be sent at this time using the restaurant
+                timezone.
+              </span>
+            </label>
+          </div>
+        </SettingsSection>
+        <SettingsSection title="Notification Preferences">
+          <div className="space-y-4">
+            {preferences.map(([key, label]) => (
+              <Toggle
+                key={key}
+                label={label}
+                checked={Boolean(v[key])}
+                onChange={(checked) => setV({ ...v, [key]: checked })}
+              />
+            ))}
+          </div>
+        </SettingsSection>
+        <div className="flex flex-wrap gap-2 lg:col-span-2">
+          <button
+            onClick={save}
+            className={`${button} bg-[#d7fb69] text-[#17200f]`}
+          >
+            Save Notification Settings
+          </button>
+          <button
+            onClick={() => {
+              setRecipient(v.restaurantEmail);
+              setTestOpen(true);
+            }}
+            className={`${button} border border-white/10 bg-white/5`}
+          >
+            Send Test Notification
+          </button>
+        </div>
+        <p className="text-[11px] text-white/30 lg:col-span-2">
+          Demo mode: actions are simulated in this prototype.
+        </p>
+      </div>
+      {testOpen && (
+        <Modal
+          title="Send Test Notification"
+          onClose={() => setTestOpen(false)}
+        >
+          <div className="space-y-4">
+            <Field
+              label="Recipient Email"
+              type="email"
+              value={recipient}
+              onChange={setRecipient}
+            />
+            <label className="block text-xs text-white/50">
+              Notification Type
+              <AdminSelect
+                value={notificationType}
+                onChange={setNotificationType}
+                options={[
+                  "Daily Sales Report",
+                  "System Alert",
+                  "Kiosk Offline Alert",
+                ]}
+              />
+            </label>
+          </div>
+          <p className="mt-3 text-[11px] text-white/30">
+            Demo mode: this notification will only be simulated.
+          </p>
+          <div className="mt-5 flex justify-end gap-2">
+            <button
+              onClick={() => setTestOpen(false)}
+              className={`${button} bg-white/5`}
+            >
+              Cancel
+            </button>
+            <button
+              disabled={loading}
+              onClick={sendTest}
+              className={`${button} bg-[#d7fb69] text-[#17200f]`}
+            >
+              {loading ? "Sending…" : "Send Test"}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </>
+  );
+}
+void NotificationsPage;
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string | number;
+  onChange: (v: string) => void;
+  type?: string;
+}) {
+  return (
+    <label className="text-xs text-white/50">
+      {label}
+      <input
+        type={type}
+        className={`${input} mt-1`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </label>
+  );
+}
+function SettingsPage() {
+  const [restaurant, setRestaurant] = useState({
+    name: "Morrow Restaurant",
+    currency: "EUR",
+    tax: "8",
+    language: "English",
+    timezone: "Europe/Istanbul",
+  });
+  const [kiosk, setKiosk] = useState({
+    name: "Morrow Kiosk",
+    number: "KSK-001",
+    timeout: "60",
+    autoReturn: true,
+    sound: true,
+    animations: true,
+  });
+  const [connected, setConnected] = useState(false);
+  const saveKiosk = () => {
+    if (!Number.isFinite(Number(kiosk.timeout)) || Number(kiosk.timeout) <= 0) {
+      toast.error("Idle Timeout must be a positive number.");
+      return;
+    }
+    toast.success("Changes saved for this demo session.");
+  };
+  return (
+    <>
+      <PageHeader
+        title="Settings"
+        subtitle="Restaurant, kiosk, and device preferences"
+      />
+      <div className="grid max-w-5xl gap-5">
+        <SettingsSection title="Restaurant Settings">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <Field
+              label="Restaurant Name"
+              value={restaurant.name}
+              onChange={(name) => setRestaurant({ ...restaurant, name })}
+            />
+            <label className="text-xs text-white/50">
+              Currency
+              <AdminSelect
+                value={restaurant.currency}
+                onChange={(currency) =>
+                  setRestaurant({ ...restaurant, currency })
+                }
+                options={["EUR", "USD", "GBP", "TRY"]}
+              />
+            </label>
+            <Field
+              label="Tax Rate (%)"
+              type="number"
+              value={restaurant.tax}
+              onChange={(tax) => setRestaurant({ ...restaurant, tax })}
+            />
+            <label className="text-xs text-white/50">
+              Default Language
+              <AdminSelect
+                value={restaurant.language}
+                onChange={(language) =>
+                  setRestaurant({ ...restaurant, language })
+                }
+                options={["English", "Turkish", "Arabic"]}
+              />
+            </label>
+            <label className="text-xs text-white/50">
+              Timezone
+              <AdminSelect
+                value={restaurant.timezone}
+                onChange={(timezone) =>
+                  setRestaurant({ ...restaurant, timezone })
+                }
+                options={[
+                  "Europe/Istanbul",
+                  "Europe/Berlin",
+                  "Europe/London",
+                  "America/New_York",
+                ]}
+              />
+            </label>
+          </div>
+          <Save />
+        </SettingsSection>
+        <SettingsSection title="Kiosk Settings">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <label className="text-xs text-white/50">
+              Kiosk Name
+              <input
+                disabled={connected}
+                className={`${input} mt-1 disabled:cursor-not-allowed disabled:opacity-50`}
+                value={kiosk.name}
+                onChange={(e) => setKiosk({ ...kiosk, name: e.target.value })}
+              />
+              {connected && (
+                <span className="mt-1 block text-[11px] text-white/30">
+                  Managed by the connected device configuration.
+                </span>
+              )}
+            </label>
+            <label className="text-xs text-white/50">
+              Kiosk Number
+              <input
+                disabled={connected}
+                className={`${input} mt-1 disabled:cursor-not-allowed disabled:opacity-50`}
+                value={kiosk.number}
+                onChange={(e) => setKiosk({ ...kiosk, number: e.target.value })}
+              />
+              {connected && (
+                <span className="mt-1 block text-[11px] text-white/30">
+                  Managed by the connected device configuration.
+                </span>
+              )}
+            </label>
+            <label className="text-xs text-white/50">
+              Idle Timeout
+              <div className="relative mt-1">
+                <input
+                  type="number"
+                  min="1"
+                  className={`${input} pr-20`}
+                  value={kiosk.timeout}
+                  onChange={(e) =>
+                    setKiosk({ ...kiosk, timeout: e.target.value })
+                  }
+                />
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/30">
+                  seconds
+                </span>
+              </div>
+            </label>
+          </div>
+          <div className="mt-5 space-y-4">
+            <Toggle
+              label="Auto-return to categories after add-to-cart"
+              checked={kiosk.autoReturn}
+              onChange={(autoReturn) => setKiosk({ ...kiosk, autoReturn })}
+            />
+            <Toggle
+              label="Enable sound"
+              checked={kiosk.sound}
+              onChange={(sound) => setKiosk({ ...kiosk, sound })}
+            />
+            <Toggle
+              label="Enable animations"
+              checked={kiosk.animations}
+              onChange={(animations) => setKiosk({ ...kiosk, animations })}
+            />
+          </div>
+          <button
+            onClick={saveKiosk}
+            className={`${button} mt-6 bg-[#d7fb69] text-[#17200f]`}
+          >
+            Save Changes
+          </button>
+        </SettingsSection>
+        <SettingsSection title="Device Configuration">
+          <DeviceForm connected={connected} onConnectionChange={setConnected} />
+        </SettingsSection>
+      </div>
+    </>
+  );
+}
+function SettingsSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className={`${card} p-6`}>
+      <h2 className="mb-5 font-bold">{title}</h2>
+      {children}
+    </section>
+  );
+}
+function Save() {
+  return (
+    <button
+      onClick={() => toast.success("Changes saved for this demo session.")}
+      className={`${button} mt-6 bg-[#d7fb69] text-[#17200f]`}
+    >
+      Save Changes
+    </button>
+  );
+}
 
-export default function Dashboard({section,onNavigate}:Props){const pages:Record<AdminSection,ReactNode>={dashboard:<DashboardPage/>,menu:<MenuPage/>,categories:<CategoriesPage/>,notifications:<NotificationsPage/>,settings:<SettingsPage/>};return <div className="min-h-screen bg-[#080a08] text-[#f0f0eb] font-['DM_Sans'] md:flex"><Toaster theme="dark" position="top-right"/><aside className="border-b border-white/5 bg-[#090b09] md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col md:border-b-0 md:border-r"><div className="flex items-center justify-between border-b border-white/5 px-5 py-5"><div><MorrowLogo variant="full" priority className="h-auto w-36"/><p className="mt-1 text-[10px] text-white/30">Admin Panel</p></div><MenuIcon className="text-white/30 md:hidden" size={20}/></div><nav aria-label="Admin navigation" className="flex gap-1 overflow-x-auto p-3 md:flex-1 md:flex-col">{nav.map(([id,label,Icon])=><button key={id} onClick={()=>onNavigate(`/admin/${id}`)} aria-current={section===id?"page":undefined} className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/40 ${section===id?"bg-[#d7fb69] font-bold text-[#17200f]":"text-white/50 hover:bg-white/5 hover:text-white"}`}><Icon size={17}/>{label}</button>)}</nav><div className="hidden border-t border-white/5 p-4 md:block"><div className="flex items-center gap-3 rounded-xl bg-white/5 p-3"><div className="grid size-8 place-items-center rounded-full bg-[#d7fb69]/15 text-xs font-bold text-[#d7fb69]">A</div><div><p className="text-xs font-bold">Admin</p><p className="text-[10px] text-white/30">Morrow Kiosk</p></div></div></div></aside><main className="min-w-0 flex-1 p-4 pb-28 sm:p-6 lg:p-8"><div className="mx-auto w-full max-w-[1440px]">{pages[section]}</div></main></div>}
+export default function Dashboard({ section, onNavigate }: Props) {
+  const pages: Record<AdminSection, ReactNode> = {
+    dashboard: <DashboardPage />,
+    menu: <MenuPage />,
+    categories: <CategoriesPage />,
+    notifications: <AdminNotifications />,
+    settings: <SettingsPage />,
+  };
+  return (
+    <div className="min-h-screen bg-[#080a08] text-[#f0f0eb] font-['DM_Sans'] md:flex">
+      <Toaster theme="dark" position="top-right" />
+      <aside className="border-b border-white/5 bg-[#090b09] md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col md:border-b-0 md:border-r">
+        <div className="flex items-center justify-between border-b border-white/5 px-5 py-5">
+          <div>
+            <MorrowLogo variant="full" priority className="h-auto w-36" />
+            <p className="mt-1 text-[10px] text-white/30">Admin Panel</p>
+          </div>
+          <MenuIcon className="text-white/30 md:hidden" size={20} />
+        </div>
+        <nav
+          aria-label="Admin navigation"
+          className="flex gap-1 overflow-x-auto p-3 md:flex-1 md:flex-col"
+        >
+          {nav.map(([id, label, Icon]) => (
+            <button
+              key={id}
+              onClick={() => onNavigate(`/admin/${id}`)}
+              aria-current={section === id ? "page" : undefined}
+              className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/40 ${section === id ? "bg-[#d7fb69] font-bold text-[#17200f]" : "text-white/50 hover:bg-white/5 hover:text-white"}`}
+            >
+              <Icon size={17} />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="hidden border-t border-white/5 p-4 md:block">
+          <div className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
+            <div className="grid size-8 place-items-center rounded-full bg-[#d7fb69]/15 text-xs font-bold text-[#d7fb69]">
+              A
+            </div>
+            <div>
+              <p className="text-xs font-bold">Admin</p>
+              <p className="text-[10px] text-white/30">Morrow Kiosk</p>
+            </div>
+          </div>
+        </div>
+      </aside>
+      <main className="min-w-0 flex-1 p-4 pb-28 sm:p-6 lg:p-8">
+        <div className="mx-auto w-full max-w-[1440px]">{pages[section]}</div>
+      </main>
+    </div>
+  );
+}
