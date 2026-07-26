@@ -20,16 +20,15 @@ test("category and customization mappings remain connected", () => {
   assert.ok(burger?.customizationGroups.flatMap(group => group.options).some(option => option.id === "gluten-free-bun"));
 });
 
-test("unconfigured repository uses one complete local dataset and cache can be invalidated", async () => {
+test("unconfigured production repository fails explicitly instead of returning a local menu", async () => {
   invalidateMenuCache();
   const first = await loadMenu();
-  assert.equal(first.ok, true);
-  if (!first.ok) return;
-  assert.equal(first.source, "local");
-  assert.equal(first.data.products.length, getLocalMenu().products.length);
+  assert.equal(first.ok, false);
+  if (first.ok) return;
+  assert.equal(first.error.code, "configuration");
   invalidateMenuCache();
   const second = await loadMenu();
-  assert.equal(second.ok, true);
+  assert.equal(second.ok, false);
 });
 
 test("Nori registry accepts the exact shared menu IDs and prices", () => {

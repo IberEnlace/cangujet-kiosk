@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, Coffee, CupSoda, IceCreamBowl, LoaderCircle, Mic, MicOff, Pizza, Plus, RefreshCw, Salad, Sandwich, ShoppingBag, Soup, UtensilsCrossed } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, LoaderCircle, Mic, MicOff, Plus, RefreshCw, ShoppingBag } from "lucide-react";
 import { useCart } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
 import MorrowLogo from "../../components/branding/MorrowLogo";
@@ -8,64 +7,10 @@ import { useDevice } from "../../context/DeviceContext";
 import { useNoriConversation } from "../../context/NoriConversationContext";
 import { getLanguageOption, type SupportedLanguage } from "../../config/languages";
 import { BrowserSpeechRecognitionService } from "../../services/voice/BrowserSpeechRecognitionService";
-import { getLocalMenu, loadMenu } from "../../services/supabase/menuService";
+import { loadMenu } from "../../services/supabase/menuService";
 import type { NormalizedMenu } from "../../services/supabase/menuModels";
 
 type Product = { id: string; name: string; description: string; price: number; calories: number; badge?: string; symbol: string; image?: string };
-type Category = { name: string; icon: LucideIcon; image: string };
-
-const categories: readonly Category[] = [
-  { name: "Pizza", icon: Pizza, image: "/images/category-cutouts/pizza.png" },
-  { name: "Burgers", icon: Sandwich, image: "/images/category-cutouts/burgers.png" },
-  { name: "Pasta", icon: Soup, image: "/images/category-cutouts/pasta.png" },
-  { name: "Salads", icon: Salad, image: "/images/category-cutouts/salads.png" },
-  { name: "Chicken", icon: UtensilsCrossed, image: "/images/category-cutouts/chicken.png" },
-  { name: "Desserts", icon: IceCreamBowl, image: "/images/category-cutouts/desserts.png" },
-  { name: "Drinks", icon: CupSoda, image: "/images/category-cutouts/drinks.png" },
-  { name: "Coffee", icon: Coffee, image: "/images/category-cutouts/coffee.png" },
-];
-
-function productImage(fileName: string) { return `/images/products/${encodeURIComponent(fileName)}`; }
-
-function createProducts(category: string, names: readonly string[], fileNumbers: readonly number[], basePrice: number, calories: number): Product[] {
-  return names.map((name, index) => {
-    const number = fileNumbers[index];
-    const fileName = number === 1 ? `${category}.png` : `${category} (${number}).png`;
-    return {
-      id: `${category}-${number}`,
-      name,
-      description: `Freshly prepared ${name.toLowerCase()} with Morrow's signature touch`,
-      price: basePrice + index,
-      calories: calories + index * 45,
-      symbol: name.charAt(0),
-      image: productImage(fileName),
-      badge: index === 0 ? "POPULAR" : undefined,
-    };
-  });
-}
-
-const catalog: Record<string, Product[]> = {
-  Pizza: [
-    { id: "margherita", name: "Morrow Margherita", description: "Tomato, fior di latte & basil", price: 8, calories: 760, badge: "VEGETARIAN", symbol: "M", image: "/images/products/pizza%20(4).png" },
-    { id: "pepperoni", name: "Firehouse Pepperoni", description: "Spiced pepperoni, mozzarella & oregano", price: 10, calories: 890, badge: "POPULAR", symbol: "P", image: "/images/products/pizza%20(3).png" },
-    { id: "truffle", name: "Truffle Bianca", description: "Mushroom cream, truffle & parmesan", price: 11, calories: 820, symbol: "T", image: "/images/products/pizza%20(2).png" },
-    { id: "veggie", name: "Garden Roast", description: "Zucchini, peppers & fresh herbs", price: 9, calories: 690, badge: "VEGETARIAN", symbol: "G", image: "/images/products/pizza.png" },
-  ],
-  Burgers: createProducts("burger", ["Morrow Classic", "Smoky Beef Burger", "Crispy Chicken Burger", "Double Cheese Burger", "Garden Burger"], [1, 2, 3, 4, 5], 8, 590),
-  Pasta: createProducts("pasta", ["Classic Pomodoro", "Creamy Alfredo", "Pesto Primavera", "Spicy Arrabbiata", "Mushroom Truffle Pasta"], [1, 2, 3, 4, 5], 8, 520),
-  Salads: createProducts("salads", ["Morrow Garden Salad", "Caesar Crunch", "Mediterranean Salad", "Avocado Green Bowl", "Grilled Chicken Salad"], [1, 2, 3, 4, 5], 7, 260),
-  Chicken: createProducts("chicken", ["Golden Chicken", "Spicy Chicken Bites", "Herb Grilled Chicken", "Crispy Chicken Plate"], [1, 2, 3, 4], 9, 510),
-  Desserts: createProducts("desserts", ["Morrow Sweet Slice", "Chocolate Dream", "Berry Delight", "Caramel Cloud"], [1, 2, 4, 5], 5, 330),
-  Drinks: createProducts("drink", ["Morrow Cola", "Cloud Lemonade", "Orange Splash", "Berry Fizz", "Tropical Cooler", "Mint Lime", "Peach Iced Tea", "Mango Chill", "Still Water", "Sparkling Water"], [1, 2, 3, 4, 5, 6, 7, 8, 9, 10], 2, 80),
-  Coffee: createProducts("coffee", ["Morrow Espresso", "Classic Americano", "Creamy Cappuccino", "Caffè Latte", "Caramel Macchiato", "Oat Cold Brew"], [1, 2, 3, 4, 5, 6], 3, 70),
-};
-
-const categoryCopy: Record<string, string> = {
-  Pizza: "Stone-baked & ready", Burgers: "Big flavour, made fresh", Pasta: "Comfort in every bite", Salads: "Fresh, crisp & colourful",
-  Chicken: "Golden, tender & delicious", Desserts: "One more good thing", Drinks: "Cool things, quickly", Coffee: "Freshly brewed for you",
-};
-
-const featuredCategories = categories.map(category => ({ ...category, copy: categoryCopy[category.name], itemCount: catalog[category.name]?.length ?? 0 }));
 
 function createProductImage(symbol: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><rect width="400" height="400" fill="#eee8dc"/><circle cx="200" cy="200" r="112" fill="#2e6d55"/><text x="200" y="228" text-anchor="middle" font-family="Arial,sans-serif" font-size="112" font-weight="700" fill="white">${symbol}</text></svg>`;
@@ -79,30 +24,38 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori, on
   const { language, direction } = useLanguage();
   const { items, addItem } = useCart();
   const { isProcessing, sendMessage } = useNoriConversation();
-  const [category, setCategory] = useState(() => sessionStorage.getItem("morrow:nori-entry-category") ?? "Pizza");
+  const [category, setCategory] = useState(() => sessionStorage.getItem("morrow:nori-entry-category") ?? "");
   const [view, setView] = useState<"categories" | "products">("categories");
   const [toast, setToast] = useState("");
-  const [sharedMenu, setSharedMenu] = useState<NormalizedMenu>(getLocalMenu);
+  const [sharedMenu, setSharedMenu] = useState<NormalizedMenu | null>(null);
+  const [menuError, setMenuError] = useState("");
   const toastTimerRef = useRef<number>();
   useEffect(() => {
     let active = true;
     void loadMenu().then(result => {
-      if (active && result.ok) setSharedMenu(result.data);
+      if (!active) return;
+      if (result.ok) {
+        setSharedMenu(result.data);
+        setCategory(current => result.data.categories.some(category => category.id === current)
+          ? current
+          : result.data.categories[0]?.id || "");
+      } else setMenuError(result.error.message);
     });
     return () => { active = false; };
   }, []);
-  const sourceCategories: Record<string, string[]> = { Pizza: ["pizza"], Burgers: ["burger"], Pasta: ["pasta"], Salads: ["salad", "healthy_bowl"], Chicken: ["side"], Desserts: ["dessert"], Drinks: ["cold_drink"], Coffee: ["hot_drink"] };
-  const products: Product[] = sharedMenu.products.filter(product => sourceCategories[category]?.includes(product.category)).map(product => ({
+  const menuCategories = sharedMenu?.categories ?? [];
+  const products: Product[] = (sharedMenu?.products ?? []).filter(product => product.category.replace(/_/g, "-") === menuCategories.find(item => item.id === category)?.slug).map(product => ({
     id: product.id, name: product.name, description: product.description, price: product.price, calories: product.calories,
     badge: product.dietaryTags.includes("vegetarian") ? "VEGETARIAN" : undefined, symbol: product.name.charAt(0), image: product.image,
   }));
   const count = items.reduce((sum, item) => sum + item.qty, 0);
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const currency = useMemo(() => new Intl.NumberFormat(language === "tr" ? "tr-TR" : language === "ar" ? "ar-SA" : "en-US", { style: "currency", currency: "EUR" }), [language]);
+  const currency = useMemo(() => new Intl.NumberFormat(language === "tr" ? "tr-TR" : language === "ar" ? "ar-SA" : "en-US", { style: "currency", currency: sharedMenu?.currency ?? "EUR" }), [language, sharedMenu?.currency]);
 
-  const chooseCategory = (name: string) => { setCategory(name); sessionStorage.setItem("morrow:nori-entry-category", name); setView("products"); };
+  const chooseCategory = (id: string) => { setCategory(id); sessionStorage.setItem("morrow:nori-entry-category", id); setView("products"); };
+  const selectedCategory = menuCategories.find(item => item.id === category);
   const addProduct = (product: Product) => {
-    addItem({ id: product.id, name: product.name, price: product.price, basePrice: product.price, calories: product.calories, category, image: product.image ?? createProductImage(product.symbol) });
+    addItem({ id: product.id, name: product.name, price: product.price, basePrice: product.price, calories: product.calories, category: selectedCategory?.name ?? "", image: product.image ?? createProductImage(product.symbol) });
     setToast(`${product.name} added`);
     window.clearTimeout(toastTimerRef.current);
     toastTimerRef.current = window.setTimeout(() => setToast(""), 1800);
@@ -120,11 +73,11 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori, on
         </header>
 
         <div className="grid min-h-[calc(100dvh-5rem)] grid-cols-[88px_minmax(0,1fr)] sm:grid-cols-[120px_minmax(0,1fr)]">
-          <aside className="relative border-e border-white/10 bg-[#0e130c] p-2 pb-28"><p className="px-2 pb-2 pt-2 font-['Space_Mono'] text-[8px] tracking-[.14em] text-white/35">MENU</p><nav className="space-y-2" aria-label="Menu categories">{categories.map(({ name, icon: Icon }) => <button type="button" key={name} onClick={() => chooseCategory(name)} aria-pressed={category === name} className={`flex min-h-[78px] w-full flex-col items-center justify-center rounded-2xl border px-1 py-2 transition active:scale-95 focus-visible:outline focus-visible:outline-3 focus-visible:outline-[#d7ff7a] ${category === name ? "border-[#d7ff7a]/50 bg-[#d7ff7a]/10 shadow-[0_5px_20px_rgba(215,255,122,.08)]" : "border-transparent hover:bg-white/5"}`}><span className={`grid size-11 place-items-center rounded-full ${category === name ? "bg-[#d7ff7a] text-[#17200f]" : "bg-white/5 text-white/45"}`}><Icon size={21} aria-hidden="true" /></span><span className={`mt-1.5 text-[9px] leading-3 sm:text-[10px] ${category === name ? "font-bold text-[#d7ff7a]" : "text-white/45"}`}>{name}</span></button>)}</nav></aside>
+          <aside className="relative border-e border-white/10 bg-[#0e130c] p-2 pb-28"><p className="px-2 pb-2 pt-2 font-['Space_Mono'] text-[8px] tracking-[.14em] text-white/35">MENU</p><nav className="space-y-2" aria-label="Menu categories">{menuCategories.map(item => <button type="button" key={item.id} onClick={() => chooseCategory(item.id)} aria-pressed={category === item.id} className={`flex min-h-[78px] w-full flex-col items-center justify-center rounded-2xl border px-1 py-2 transition active:scale-95 focus-visible:outline focus-visible:outline-3 focus-visible:outline-[#d7ff7a] ${category === item.id ? "border-[#d7ff7a]/50 bg-[#d7ff7a]/10 shadow-[0_5px_20px_rgba(215,255,122,.08)]" : "border-transparent hover:bg-white/5"}`}><span className={`grid size-11 place-items-center rounded-full text-xl ${category === item.id ? "bg-[#d7ff7a] text-[#17200f]" : "bg-white/5 text-white/45"}`}>{item.image ? <img src={item.image} alt="" className="size-10 rounded-full object-cover" /> : item.name.charAt(0)}</span><span className={`mt-1.5 text-[9px] leading-3 sm:text-[10px] ${category === item.id ? "font-bold text-[#d7ff7a]" : "text-white/45"}`}>{item.name}</span></button>)}</nav></aside>
 
-          <section className="relative min-w-0 pb-28"><div className="p-3 sm:p-5"><div className="flex items-start justify-between gap-3"><div><p className="font-['Space_Mono'] text-[8px] tracking-[.14em] text-[#d7ff7a] sm:text-[9px]">{view === "products" ? "CATEGORY SELECTED" : "CHOOSE A CATEGORY"}</p><h1 className="mt-1 text-[clamp(1.45rem,4vw,2.2rem)] font-semibold tracking-[-.04em] text-white">{view === "products" ? category : "What are you craving?"}</h1></div><button type="button" onClick={() => setView("categories")} className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">Categories</button></div>
+          <section className="relative min-w-0 pb-28"><div className="p-3 sm:p-5"><div className="flex items-start justify-between gap-3"><div><p className="font-['Space_Mono'] text-[8px] tracking-[.14em] text-[#d7ff7a] sm:text-[9px]">{view === "products" ? "CATEGORY SELECTED" : "CHOOSE A CATEGORY"}</p><h1 className="mt-1 text-[clamp(1.45rem,4vw,2.2rem)] font-semibold tracking-[-.04em] text-white">{view === "products" ? selectedCategory?.name : "What are you craving?"}</h1></div><button type="button" onClick={() => setView("categories")} className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">Categories</button></div>
             {config?.settings.aiAssistantEnabled && <NoriBanner onOpen={onNori} onOpenChat={onNoriChat} isProcessing={isProcessing} sendMessage={sendMessage} language={language} voiceEnabled={config.settings.voiceAssistantEnabled !== false} />}
-            {view === "categories" ? <CategoryLanding onChoose={chooseCategory} selected={category} /> : <ProductGrid products={products} currency={currency} onAdd={addProduct} />}
+            {menuError ? <div role="alert" className="mt-8 rounded-2xl border border-red-400/20 bg-red-400/10 p-5 text-sm text-red-200">{menuError}</div> : !sharedMenu ? <div className="mt-8 text-sm text-white/40">Loading menu...</div> : view === "categories" ? <CategoryLanding menu={sharedMenu} onChoose={chooseCategory} selected={category} /> : <ProductGrid products={products} currency={currency} onAdd={addProduct} />}
           </div></section>
         </div>
 
@@ -195,19 +148,20 @@ function NoriBanner({ onOpenChat, isProcessing, sendMessage, language, voiceEnab
   </section>;
 }
 
-function CategoryLanding({ onChoose, selected }: { onChoose: (name: string) => void; selected: string }) {
-  return <div className="mt-6 grid grid-cols-1 gap-x-4 gap-y-5 min-[560px]:grid-cols-2">{featuredCategories.map(({ name, copy, icon: Icon, image, itemCount }) => {
-    const isSelected = selected === name;
-    return <button type="button" key={name} onClick={() => onChoose(name)} aria-pressed={isSelected} className="group relative h-[clamp(11rem,20vh,13.5rem)] overflow-visible rounded-[24px] text-start transition duration-300 ease-out hover:-translate-y-1.5 hover:scale-[1.03] active:scale-[.99] focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]">
+function CategoryLanding({ menu, onChoose, selected }: { menu: NormalizedMenu; onChoose: (id: string) => void; selected: string }) {
+  return <div className="mt-6 grid grid-cols-1 gap-x-4 gap-y-5 min-[560px]:grid-cols-2">{menu.categories.map(category => {
+    const isSelected = selected === category.id;
+    const itemCount = menu.products.filter(product => product.category.replace(/_/g, "-") === category.slug).length;
+    return <button type="button" key={category.id} onClick={() => onChoose(category.id)} aria-pressed={isSelected} className="group relative h-[clamp(11rem,20vh,13.5rem)] overflow-visible rounded-[24px] text-start transition duration-300 ease-out hover:-translate-y-1.5 hover:scale-[1.03] active:scale-[.99] focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]">
       <span className={`absolute inset-0 overflow-hidden rounded-[24px] border transition duration-300 ${isSelected ? "border-[#d7ff7a]/70 bg-[#17200f] shadow-[0_16px_38px_rgba(120,170,62,.14)]" : "border-white/[.09] bg-[#10150f] shadow-[0_12px_30px_rgba(0,0,0,.22)] group-hover:border-[#d7ff7a]/30 group-hover:bg-[#131a11] group-hover:shadow-[0_18px_42px_rgba(120,170,62,.14)]"}`}>
         <span className="absolute inset-0 bg-[radial-gradient(circle_at_76%_30%,rgba(215,251,105,.18),transparent_43%),linear-gradient(145deg,rgba(255,255,255,.035),transparent_55%)]" aria-hidden="true" />
         <span className="absolute inset-x-0 bottom-0 z-10 h-[72%] bg-gradient-to-t from-[#080b08] via-[#080b08]/78 to-transparent" aria-hidden="true" />
         {isSelected && <span className="absolute inset-x-5 top-0 z-30 h-0.5 rounded-b-full bg-[#d7ff7a] shadow-[0_0_12px_rgba(215,251,105,.42)]" aria-hidden="true" />}
       </span>
-      <img src={image} alt="" className="pointer-events-none absolute -end-[4%] -top-[10%] z-[5] h-[82%] w-[62%] object-contain drop-shadow-[0_16px_14px_rgba(0,0,0,.34)] transition duration-500 ease-out group-hover:-translate-y-1.5 group-hover:translate-x-1 group-hover:scale-[1.045]" />
+      {category.image && <img src={category.image} alt="" className="pointer-events-none absolute -end-[4%] -top-[10%] z-[5] h-[82%] w-[62%] object-contain drop-shadow-[0_16px_14px_rgba(0,0,0,.34)] transition duration-500 ease-out group-hover:-translate-y-1.5 group-hover:translate-x-1 group-hover:scale-[1.045]" />}
       <span className="absolute inset-x-5 bottom-5 z-20">
-        <span className="flex items-center gap-2.5"><span className="grid size-8 place-items-center rounded-xl border border-[#d7ff7a]/20 bg-[#d7ff7a]/10 text-[#d7ff7a]"><Icon size={16} strokeWidth={1.8} aria-hidden="true" /></span><strong className="text-xl font-bold tracking-[-.025em] text-white">{name}</strong></span>
-        <span className="mt-2 block max-w-[72%] text-[11px] leading-4 text-white/52">{copy}</span>
+        <span className="flex items-center gap-2.5"><span className="grid size-8 place-items-center rounded-xl border border-[#d7ff7a]/20 bg-[#d7ff7a]/10 text-[#d7ff7a]">{category.name.charAt(0)}</span><strong className="text-xl font-bold tracking-[-.025em] text-white">{category.name}</strong></span>
+        <span className="mt-2 block max-w-[72%] text-[11px] leading-4 text-white/52">{category.description}</span>
         <span className="mt-2 block font-['Space_Mono'] text-[9px] font-bold uppercase tracking-[.13em] text-[#d7ff7a]/80">{itemCount} Items</span>
       </span>
     </button>;

@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Banknote, CreditCard, Minus, Plus, Printer, Receipt, Search, ShoppingCart, Trash2, WalletCards, X } from "lucide-react";
 import { toast, Toaster } from "sonner";
-import { cashierCategories, cashierMenu, type CashierMenuProduct } from "../data/cashierMenu";
 import MorrowLogo from "../components/branding/MorrowLogo";
 import CashierReceipt, { printCashierReceipt, type CashierReceiptData } from "../components/cashier/CashierReceipt";
 import { useCashierOrders } from "../hooks/useRealtimeOrders";
 import { createOrder } from "../services/supabase/orderService";
 import { useAuth } from "../auth/AuthContext";
+import { loadMenu } from "../services/supabase/menuService";
+import type { NormalizedMenuProduct } from "../services/supabase/menuModels";
+
+type CashierMenuProduct = NormalizedMenuProduct & { cashierCategory: string; needsConfiguration: boolean };
 
 type PaymentMethod = "Cash" | "Card";
 type CashierOrderItem = { id: string; productId: string; name: string; image: string; category: string; unitPrice: number; quantity: number; customizations: string[]; customizationOptionIds: string[] };
@@ -45,11 +48,14 @@ export default function CashierDashboard() {
   const [selectedOrder,setSelectedOrder]=useState<CashierOrder|null>(null);
   const [completedReceipt,setCompletedReceipt]=useState<CashierReceiptData|null>(null);
   const [submitting,setSubmitting]=useState(false);
+  const [menuProducts,setMenuProducts]=useState<CashierMenuProduct[]>([]);
+  const [menuCategories,setMenuCategories]=useState<string[]>([]);
   const [idempotencyKey,setIdempotencyKey]=useState(()=>crypto.randomUUID());
   const searchRef=useRef<HTMLInputElement>(null);
 
-  const categories=useMemo(()=>["All",...cashierCategories],[]);
-  const visibleProducts=useMemo(()=>{const query=search.trim().toLowerCase();return cashierMenu.filter(product=>(product.needsConfiguration||product.available&&product.inStock)&&(category==="All"||product.cashierCategory===category)&&(!query||product.name.toLowerCase().includes(query)||product.cashierCategory.toLowerCase().includes(query)||product.keywords.some(keyword=>keyword.includes(query))));},[category,search]);
+  useEffect(()=>{let active=true;void loadMenu({force:true}).then(result=>{if(!active)return;if(result.ok){const names=new Map(result.data.categories.map(item=>[item.slug,item.name]));setMenuCategories(result.data.categories.map(item=>item.name));setMenuProducts(result.data.products.map(product=>({...product,cashierCategory:names.get(product.category.replace(/_/g,"-"))??product.category,needsConfiguration:false})));}else toast.error(result.error.message);});return()=>{active=false;};},[]);
+  const categories=useMemo(()=>["All",...menuCategories],[menuCategories]);
+  const visibleProducts=useMemo(()=>{const query=search.trim().toLowerCase();return menuProducts.filter(product=>(product.needsConfiguration||product.available&&product.inStock)&&(category==="All"||product.cashierCategory===category)&&(!query||product.name.toLowerCase().includes(query)||product.cashierCategory.toLowerCase().includes(query)||product.keywords.some(keyword=>keyword.includes(query))));},[category,search,menuProducts]);
   const subtotal=orderItems.reduce((sum,item)=>sum+item.unitPrice*item.quantity,0);
   const tax=subtotal*TAX_RATE;
   const total=subtotal+tax;

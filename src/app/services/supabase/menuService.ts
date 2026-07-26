@@ -25,7 +25,7 @@ export async function loadMenu(options: { signal?: AbortSignal; force?: boolean 
 }
 
 async function loadPreferredMenu(signal?: AbortSignal): Promise<RepositoryResult<NormalizedMenu>> {
-  if (!supabase) return localFallback("Supabase is not configured.");
+  if (!supabase) return repositoryFailure("configuration", "Menu database is not configured.");
   try {
     let categoryQuery = supabase.from("categories").select("*").eq("is_active", true).order("display_order");
     let productQuery = supabase.from("products").select("*").eq("is_active", true).eq("is_available", true);
@@ -54,17 +54,17 @@ async function loadPreferredMenu(signal?: AbortSignal): Promise<RepositoryResult
       console.error(
         `[MORROW] Supabase menu errors:\n${JSON.stringify(menuErrors, null, 2)}`,
       );
-      return localFallback("Supabase menu request failed.");
+      return repositoryFailure("network", "Menu could not be loaded from the database.", menuErrors);
     }
     const mapped = mapDatabaseMenu(categories.data, products.data, groups.data, options.data);
-    if (!validateMenu(mapped)) return localFallback("Supabase returned an incomplete menu.");
+    if (!validateMenu(mapped)) return repositoryFailure("invalid_data", "The database returned an invalid menu.");
     return { ok: true, data: mapped, source: "supabase" };
   } catch (cause) {
     if (signal?.aborted) {
       return repositoryFailure("aborted", "Menu request was cancelled.", cause);
     }
     console.error("[MORROW] Unexpected Supabase menu error:", cause);
-    return localFallback("Supabase menu request failed.");
+    return repositoryFailure("network", "Menu could not be loaded from the database.", cause);
   }
 }
 
@@ -76,11 +76,6 @@ function formatSupabaseError(error: { code?: string; message?: string; details?:
     details: error.details ?? null,
     hint: error.hint ?? null,
   };
-}
-
-function localFallback(reason: string): RepositoryResult<NormalizedMenu> {
-  if (import.meta.env?.DEV) console.warn(`[MORROW] ${reason} Using the complete local menu fallback.`);
-  return { ok: true, data: getLocalMenu(), source: "local" };
 }
 
 type LocalProduct = (typeof localCatalog.products)[number];
@@ -104,9 +99,9 @@ function mapLocalProduct(product: LocalProduct): NormalizedMenuProduct {
     customizationGroups: product.customizationGroups.map((group, groupIndex) => ({
       id: group.id, name: group.name, required: group.required, minSelections: group.minSelections, maxSelections: group.maxSelections, displayOrder: groupIndex,
       options: group.options.map((option, optionIndex) => ({
-        id: option.id, name: option.name, priceDelta: option.priceAdjustment, available: option.available, displayOrder: optionIndex,
+        id: option.id, name: option.name, priceDelta: option.priceAdjustment, priceAdjustment: option.priceAdjustment, available: option.available, displayOrder: optionIndex,
         allergensAdded: list(option.allergensAdded), allergensRemoved: list(option.allergensRemoved),
-        nutritionAdjustment: option.nutritionAdjustment, isDefault: option.default,
+        nutritionAdjustment: option.nutritionAdjustment, isDefault: option.default, default: option.default,
       })),
     })),
   };
@@ -135,9 +130,9 @@ function mapDatabaseMenu(categories: Array<Record<string, unknown>>, products: A
         maxSelections: Number(group.maximum_selections), displayOrder: Number(group.display_order),
         options: (optionsByGroup.get(String(group.id)) ?? []).map(option => {
           const optionMetadata = object(option.metadata);
-          return { id: String(option.source_id), databaseId: String(option.id), name: String(option.name), priceDelta: Number(option.price_delta), available: Boolean(option.is_available),
+          return { id: String(option.source_id), databaseId: String(option.id), name: String(option.name), priceDelta: Number(option.price_delta), priceAdjustment: Number(option.price_delta), available: Boolean(option.is_available),
             displayOrder: Number(option.display_order), allergensAdded: strings(optionMetadata.allergensAdded), allergensRemoved: strings(optionMetadata.allergensRemoved),
-            nutritionAdjustment: numbers(optionMetadata.nutritionAdjustment), isDefault: Boolean(optionMetadata.default) };
+            nutritionAdjustment: numbers(optionMetadata.nutritionAdjustment), isDefault: Boolean(optionMetadata.default), default: Boolean(optionMetadata.default) };
         }),
       })),
     };
@@ -146,7 +141,7 @@ function mapDatabaseMenu(categories: Array<Record<string, unknown>>, products: A
 }
 
 export function validateMenu(menu: NormalizedMenu) {
-  return menu.categories.length > 0 && menu.products.length > 0 && new Set(menu.products.map(product => product.id)).size === menu.products.length
+  return new Set(menu.products.map(product => product.id)).size === menu.products.length
     && menu.products.every(product => product.id && product.name && product.category && Number.isFinite(product.price) && product.price >= 0 && product.currency.length === 3);
 }
 function title(value: string) { return value.split("_").map(part => part[0]?.toUpperCase() + part.slice(1)).join(" "); }

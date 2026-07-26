@@ -30,13 +30,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import {
-  dashboardStats,
-  initialCategories,
-  initialProducts,
-  recentOrders,
-  systemStatuses,
-} from "../../admin/data/adminMockData";
 import { mockDeviceService } from "../../admin/services/deviceService";
 import {
   isValidEmail,
@@ -53,12 +46,33 @@ import {
   applyProductImageFallback,
   resolveProductImage,
 } from "../services/productImageResolver";
-import {
-  invalidateMenuCache,
-  loadMenu,
-} from "../services/supabase/menuService";
-import type { NormalizedMenuProduct } from "../services/supabase/menuModels";
+import { invalidateMenuCache } from "../services/supabase/menuService";
 import AdminNotifications from "./AdminNotifications";
+import {
+  createCategory,
+  deleteCategory,
+  getCategories,
+  updateCategory,
+  type MenuCategory,
+} from "../services/categoryService";
+import {
+  createProduct,
+  deleteProduct,
+  getProducts,
+  uploadMenuImage,
+  updateProduct,
+  type MenuProduct,
+} from "../services/productService";
+import { Skeleton } from "../components/ui/skeleton";
+import {
+  formatDashboardCurrency,
+  formatDashboardItemCount,
+  formatDashboardOrderNumber,
+  loadAdminDashboard,
+  mapOrderStatus,
+  subscribeToAdminDashboard,
+  type AdminDashboardData,
+} from "../services/supabase/adminDashboardService";
 
 type AdminSection =
   | "dashboard"
@@ -108,6 +122,7 @@ function StatusBadge({
 }: {
   status: OrderStatus | SystemStatus | string;
 }) {
+  const normalizedStatus = status.toLowerCase();
   const good = [
     "completed",
     "ready",
@@ -117,14 +132,14 @@ function StatusBadge({
     "Active",
     "enabled",
     "Enabled",
-  ].includes(status);
+  ].map(value => value.toLowerCase()).includes(normalizedStatus);
   const warn = [
     "preparing",
     "coming_soon",
     "mock",
     "Coming Soon",
     "Mock Mode",
-  ].includes(status);
+  ].map(value => value.toLowerCase()).includes(normalizedStatus);
   return (
     <span
       className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize ${good ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300" : warn ? "border-amber-400/20 bg-amber-400/10 text-amber-300" : "border-white/10 bg-white/5 text-white/45"}`}
@@ -196,28 +211,61 @@ function Toggle({
 }
 
 function DashboardPage() {
+  const [data, setData] = useState<AdminDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [online, setOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    let active = true;
+    let unsubscribe: () => void = () => undefined;
+    const refresh = async () => {
+      const result = await loadAdminDashboard();
+      if (!active) return;
+      if (result.ok) {
+        setData(result.data);
+        setError(null);
+        unsubscribe();
+        unsubscribe = subscribeToAdminDashboard(result.data.branchId, refresh, refresh, refresh);
+      } else setError(result.error.message);
+      setLoading(false);
+    };
+    const updateOnline = () => setOnline(navigator.onLine);
+    window.addEventListener("online", updateOnline);
+    window.addEventListener("offline", updateOnline);
+    void refresh();
+    return () => {
+      active = false;
+      unsubscribe();
+      window.removeEventListener("online", updateOnline);
+      window.removeEventListener("offline", updateOnline);
+    };
+  }, []);
+  const stats = data ? [
+    ["Today's Sales", formatDashboardCurrency(data.currency, data.todaySales), "Total order value today"],
+    ["Today's Orders", String(data.todayOrders), "Completed and active orders"],
+    ["Kiosk Name", "Morrow Kiosk 01", "Active device name"],
+    ["Kiosk Number", "KSK - 001", "Device identifier"],
+  ] : [];
+  const statuses = data ? [
+    ["Kiosk App", data.kioskStatus],
+    ["Internet", online ? "Connected" : "Offline"],
+    ["Kitchen Display", data.kitchenStatus],
+    ["Device Configuration", data.deviceConfigurationStatus],
+    ["Payment Terminal", data.paymentTerminalStatus],
+    ["Notifications", data.notificationsStatus],
+  ] : [];
   return (
     <>
       <PageHeader title="Dashboard" subtitle="Restaurant Overview" />
+      {error && <div role="alert" className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[
-          [
-            "Today’s Sales",
-            money.format(dashboardStats.todaySales),
-            "Total sales today",
-          ],
-          [
-            "Today’s Orders",
-            dashboardStats.todayOrders,
-            "Completed and active orders",
-          ],
-          ["Kiosk Name", dashboardStats.kioskName, "Active device name"],
-          ["Kiosk Number", dashboardStats.kioskNumber, "Device identifier"],
-        ].map(([title, value, sub]) => (
+        {loading ? Array.from({ length: 4 }, (_, index) => (
+          <div key={index} className={`${card} p-5`}>
+            <Skeleton className="h-3 w-24 bg-white/10" /><Skeleton className="mt-4 h-8 w-32 bg-white/10" /><Skeleton className="mt-2 h-3 w-28 bg-white/10" />
+          </div>
+        )) : stats.map(([title, value, sub]) => (
           <div key={title} className={`${card} p-5`}>
-            <p className="text-xs font-bold uppercase tracking-wider text-white/35">
-              {title}
-            </p>
+            <p className="text-xs font-bold uppercase tracking-wider text-white/35">{title}</p>
             <p className="mt-3 text-2xl font-black text-[#d7fb69]">{value}</p>
             <p className="mt-1 text-xs text-white/35">{sub}</p>
           </div>
@@ -228,29 +276,21 @@ function DashboardPage() {
           <h2 className="p-5 text-sm font-bold">Recent Orders</h2>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-sm">
-              <thead className="border-y border-white/5 text-xs uppercase text-white/30">
-                <tr>
-                  {["Order ID", "Time", "Items", "Total", "Status"].map((h) => (
-                    <th key={h} className="px-5 py-3">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
+              <thead className="border-y border-white/5 text-xs uppercase text-white/30"><tr>
+                {["Order ID", "Time", "Items", "Total", "Status"].map(h => <th key={h} className="px-5 py-3">{h}</th>)}
+              </tr></thead>
               <tbody>
-                {recentOrders.map((o) => (
-                  <tr key={o.id} className="border-b border-white/5">
-                    <td className="px-5 py-3 font-mono text-white/60">
-                      {o.id}
-                    </td>
-                    <td className="px-5 py-3">{o.time}</td>
-                    <td className="px-5 py-3">{o.itemCount} items</td>
-                    <td className="px-5 py-3 font-bold">
-                      {money.format(o.total)}
-                    </td>
-                    <td className="px-5 py-3">
-                      <StatusBadge status={o.status} />
-                    </td>
+                {loading ? Array.from({ length: 5 }, (_, index) => (
+                  <tr key={index} className="border-b border-white/5"><td colSpan={5} className="px-5 py-3"><Skeleton className="h-5 w-full bg-white/10" /></td></tr>
+                )) : !data?.recentOrders.length ? (
+                  <tr><td colSpan={5} className="px-5 py-10 text-center text-white/35">No orders yet today.</td></tr>
+                ) : data.recentOrders.map(order => (
+                  <tr key={order.id} className="border-b border-white/5">
+                    <td className="px-5 py-3 font-mono text-white/60">{formatDashboardOrderNumber(order.orderNumber)}</td>
+                    <td className="px-5 py-3">{new Intl.DateTimeFormat(undefined, { timeZone: data.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(order.createdAt))}</td>
+                    <td className="px-5 py-3">{formatDashboardItemCount(order.itemCount)}</td>
+                    <td className="px-5 py-3 font-bold">{formatDashboardCurrency(data.currency, order.total)}</td>
+                    <td className="px-5 py-3"><StatusBadge status={mapOrderStatus(order.status)} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -259,13 +299,11 @@ function DashboardPage() {
         </section>
         <section className={`${card} p-5`}>
           <h2 className="mb-3 text-sm font-bold">System Status</h2>
-          {systemStatuses.map((s) => (
-            <div
-              key={s.label}
-              className="flex items-center justify-between border-b border-white/5 py-3 last:border-0"
-            >
-              <span className="text-sm text-white/70">{s.label}</span>
-              <StatusBadge status={s.status} />
+          {loading ? Array.from({ length: 6 }, (_, index) => (
+            <div key={index} className="flex items-center justify-between border-b border-white/5 py-3"><Skeleton className="h-4 w-28 bg-white/10" /><Skeleton className="h-6 w-20 rounded-full bg-white/10" /></div>
+          )) : statuses.map(([label, status]) => (
+            <div key={label} className="flex items-center justify-between border-b border-white/5 py-3 last:border-0">
+              <span className="text-sm text-white/70">{label}</span><StatusBadge status={status} />
             </div>
           ))}
         </section>
@@ -290,7 +328,7 @@ function AdminSelect({
       <SelectTrigger className="mt-1 h-10 rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/[0.08] focus:border-[#d7fb69]/60 focus:ring-[#d7fb69]/20">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent className="rounded-xl border-white/10 bg-[#111511] text-white shadow-2xl">
+      <SelectContent className="z-[10001] rounded-xl border-white/10 bg-[#111511] text-white shadow-2xl">
         {options.map((option) => (
           <SelectItem
             key={option}
@@ -317,20 +355,6 @@ const blankProduct: AdminProduct = {
   protein: 0,
   allergens: [],
 };
-function toAdminProduct(product: NormalizedMenuProduct): AdminProduct {
-  return {
-    id: product.id,
-    name: product.name,
-    description: product.description,
-    category: product.category,
-    price: product.price,
-    image: product.image,
-    available: product.available && product.inStock,
-    calories: product.calories,
-    protein: product.protein,
-    allergens: product.allergens,
-  };
-}
 function ProductThumbnail({ product }: { product: AdminProduct }) {
   return (
     <img
@@ -345,58 +369,38 @@ function ProductThumbnail({ product }: { product: AdminProduct }) {
 }
 function ProductForm({
   value,
+  categories,
   onSave,
   onClose,
 }: {
   value: AdminProduct;
+  categories: MenuCategory[];
   onSave: (v: AdminProduct) => void;
   onClose: () => void;
 }) {
-  const commonCategories = [
-    "Pizza",
-    "Burgers",
-    "Pasta",
-    "Bowls",
-    "Sides",
-    "Drinks",
-    "Desserts",
-  ];
-  const initialCategory = commonCategories.some(
-    (c) => c.toLowerCase() === value.category.toLowerCase(),
-  )
-    ? (commonCategories.find(
-        (c) => c.toLowerCase() === value.category.toLowerCase(),
-      ) ?? value.category)
-    : value.category
-      ? "Other..."
-      : "";
   const [p, setP] = useState(value);
-  const [categoryChoice, setCategoryChoice] = useState(initialCategory);
-  const [customCategory, setCustomCategory] = useState(
-    initialCategory === "Other..." ? value.category : "",
-  );
-  const selectImage = (file?: File) => {
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const selectImage = async (file?: File) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) {
-      toast.error("Choose a valid image file.");
-      return;
+    setUploadingImage(true);
+    try {
+      const uploaded = await uploadMenuImage(file);
+      setP(current => ({ ...current, image: uploaded.url }));
+      toast.success("Image uploaded.");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Image upload failed.");
+    } finally {
+      setUploadingImage(false);
     }
-    const reader = new FileReader();
-    reader.onload = () =>
-      setP((current) => ({ ...current, image: String(reader.result) }));
-    reader.readAsDataURL(file);
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    const category =
-      categoryChoice === "Other..."
-        ? customCategory.trim()
-        : categoryChoice.trim();
-    if (!p.name.trim() || !category || p.price < 0) {
+    const selectedCategory = categories.find(category => category.id === p.categoryId);
+    if (!p.name.trim() || !selectedCategory || p.price < 0) {
       toast.error("Name, category, and a valid price are required.");
       return;
     }
-    onSave({ ...p, category, id: p.id || crypto.randomUUID() });
+    onSave({ ...p, category: selectedCategory.name });
   };
   return (
     <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
@@ -418,21 +422,16 @@ function ProductForm({
       </label>
       <div className="text-xs text-white/50">
         Category
-        <AdminSelect
-          value={categoryChoice}
-          onChange={setCategoryChoice}
-          options={[...commonCategories, "Other..."]}
-          placeholder="Search or select a category"
-        />
-        {categoryChoice === "Other..." && (
-          <input
-            aria-label="Custom category name"
-            placeholder="Custom category name"
-            className={`${input} mt-2`}
-            value={customCategory}
-            onChange={(e) => setCustomCategory(e.target.value)}
-          />
-        )}
+        <Select value={p.categoryId ?? ""} onValueChange={categoryId => setP({ ...p, categoryId })}>
+          <SelectTrigger className="mt-1 h-10 rounded-xl border-white/10 bg-white/5 text-white">
+            <SelectValue placeholder="Select a category" />
+          </SelectTrigger>
+          <SelectContent className="z-[10001] rounded-xl border-white/10 bg-[#111511] text-white">
+            {categories.filter(category => category.isActive).map(category => (
+              <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       <label className="text-xs text-white/50">
         Price
@@ -465,13 +464,13 @@ function ProductForm({
               type="file"
               accept="image/*"
               className="sr-only"
-              onChange={(e) => selectImage(e.target.files?.[0])}
+              onChange={(e) => { void selectImage(e.target.files?.[0]); }}
             />
             <label
               htmlFor="product-image-upload"
               className={`${button} inline-flex cursor-pointer border border-white/10 bg-white/5 hover:bg-white/10`}
             >
-              Choose Image
+              {uploadingImage ? "Uploading..." : "Choose Image"}
             </label>
             <p className="mt-2 text-[10px] text-white/30">
               Preview only — not uploaded.
@@ -530,7 +529,7 @@ function ProductForm({
         >
           Cancel
         </button>
-        <button className={`${button} bg-[#d7fb69] text-[#17200f]`}>
+        <button disabled={uploadingImage} className={`${button} bg-[#d7fb69] text-[#17200f]`}>
           Save Product
         </button>
       </div>
@@ -538,25 +537,46 @@ function ProductForm({
   );
 }
 function MenuPage() {
-  const [products, setProducts] = useState(initialProducts);
+  const [products, setProducts] = useState<AdminProduct[]>([]);
+  const [categories, setCategories] = useState<MenuCategory[]>([]);
+  const [loadingMenu, setLoadingMenu] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState<AdminProduct | undefined>(undefined);
   const [deleting, setDeleting] = useState<AdminProduct | null>(null);
+  const refresh = async () => {
+    const [productRows, categoryRows] = await Promise.all([getProducts(), getCategories()]);
+    const categoryNames = new Map(categoryRows.map(category => [category.id, category.name]));
+    setCategories(categoryRows);
+    setProducts(productRows.map(product => ({
+      id: product.id, name: product.name, description: product.description,
+      categoryId: product.categoryId, category: categoryNames.get(product.categoryId) ?? "Unknown",
+      price: product.price, image: product.image, available: product.isAvailable,
+      calories: product.calories, protein: product.protein, allergens: product.allergens,
+    })));
+  };
   useEffect(() => {
-    const controller = new AbortController();
-    void loadMenu({ signal: controller.signal, force: true }).then((result) => {
-      if (result.ok) setProducts(result.data.products.map(toAdminProduct));
-    });
-    return () => controller.abort();
+    let active = true;
+    void refresh().catch(cause => {
+      if (active) toast.error(cause instanceof Error ? cause.message : "Menu could not be loaded.");
+    }).finally(() => { if (active) setLoadingMenu(false); });
+    return () => { active = false; };
   }, []);
-  const save = (p: AdminProduct) => {
-    setProducts((old) =>
-      old.some((x) => x.id === p.id)
-        ? old.map((x) => (x.id === p.id ? p : x))
-        : [p, ...old],
-    );
-    invalidateMenuCache();
-    setEditing(undefined);
-    toast.success("Product saved in demo state.");
+  const save = async (p: AdminProduct) => {
+    if (!p.categoryId) return toast.error("Select a valid category.");
+    setSaving(true);
+    try {
+      const payload = { name: p.name, description: p.description, price: p.price, image: p.image, categoryId: p.categoryId, isAvailable: p.available, sortOrder: 0, calories: p.calories, protein: p.protein, allergens: p.allergens };
+      if (p.id) await updateProduct(p.id, payload);
+      else await createProduct(payload);
+      invalidateMenuCache();
+      await refresh();
+      setEditing(undefined);
+      toast.success("Product saved.");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Product could not be saved.");
+    } finally {
+      setSaving(false);
+    }
   };
   return (
     <>
@@ -565,7 +585,8 @@ function MenuPage() {
         subtitle="Manage kiosk products"
         action={
           <button
-            onClick={() => setEditing({ ...blankProduct })}
+            onClick={() => setEditing({ ...blankProduct, categoryId: categories.find(category => category.isActive)?.id })}
+            disabled={loadingMenu || categories.length === 0}
             className={`${button} flex items-center gap-2 bg-[#d7fb69] text-[#17200f]`}
           >
             <Plus size={16} />
@@ -592,7 +613,9 @@ function MenuPage() {
               </tr>
             </thead>
             <tbody>
-              {products.length === 0 ? (
+            {loadingMenu ? (
+              <tr><td colSpan={5} className="p-10 text-center text-white/35">Loading menu...</td></tr>
+            ) : products.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-10 text-center text-white/35">
                     No products yet.
@@ -615,15 +638,7 @@ function MenuPage() {
                     </td>
                     <td className="px-5 py-3">
                       <button
-                        onClick={() =>
-                          setProducts((old) =>
-                            old.map((x) =>
-                              x.id === p.id
-                                ? { ...x, available: !x.available }
-                                : x,
-                            ),
-                          )
-                        }
+                        onClick={() => { void save({ ...p, available: !p.available }); }}
                       >
                         <StatusBadge
                           status={p.available ? "Active" : "Unavailable"}
@@ -662,6 +677,7 @@ function MenuPage() {
         >
           <ProductForm
             value={editing}
+            categories={categories}
             onSave={save}
             onClose={() => setEditing(undefined)}
           />
@@ -678,11 +694,16 @@ function MenuPage() {
               Cancel
             </button>
             <button
-              onClick={() => {
-                setProducts((x) => x.filter((p) => p.id !== deleting.id));
-                setDeleting(null);
-                toast.success("Product deleted.");
-              }}
+              disabled={saving}
+              onClick={() => { void (async () => {
+                setSaving(true);
+                try {
+                  await deleteProduct(deleting.id); invalidateMenuCache(); await refresh();
+                  setDeleting(null); toast.success("Product deleted.");
+                } catch (cause) {
+                  toast.error(cause instanceof Error ? cause.message : "Product could not be deleted.");
+                } finally { setSaving(false); }
+              })(); }}
               className={`${button} bg-red-500 text-white`}
             >
               Delete
@@ -695,27 +716,43 @@ function MenuPage() {
 }
 
 function CategoriesPage() {
-  const [items, setItems] = useState(initialCategories);
+  const [items, setItems] = useState<AdminCategory[]>([]);
+  const [products, setCategoryProducts] = useState<MenuProduct[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(true);
+  const [savingCategory, setSavingCategory] = useState(false);
   const [edit, setEdit] = useState<AdminCategory | undefined>(undefined);
   const [del, setDel] = useState<AdminCategory | null>(null);
+  const refresh = async () => {
+    const [categoryRows, productRows] = await Promise.all([getCategories(), getProducts()]);
+    setItems(categoryRows.map(category => ({ id: category.id, name: category.name, description: category.description, image: category.image, icon: category.icon, displayOrder: category.sortOrder, active: category.isActive })));
+    setCategoryProducts(productRows);
+  };
+  useEffect(() => {
+    let active = true;
+    void refresh().catch(cause => { if (active) toast.error(cause instanceof Error ? cause.message : "Categories could not be loaded."); })
+      .finally(() => { if (active) setLoadingCategories(false); });
+    return () => { active = false; };
+  }, []);
   const counts = useMemo(
-    () =>
-      Object.fromEntries(
-        initialProducts
-          .map((p) => p.category)
-          .map((c) => [
-            c,
-            initialProducts.filter((p) => p.category === c).length,
-          ]),
-      ),
-    [],
+    () => Object.fromEntries(items.map(category => [category.id, products.filter(product => product.categoryId === category.id).length])),
+    [items, products],
   );
-  const move = (i: number, d: number) => {
+  const categoryPayload = (category: AdminCategory, order = category.displayOrder) => ({
+    name: category.name, slug: category.name.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
+    description: category.description, image: category.image ?? "", icon: category.icon,
+    sortOrder: order, isActive: category.active,
+  });
+  const move = async (i: number, d: number) => {
     const n = [...items],
       j = i + d;
     if (j < 0 || j >= n.length) return;
     [n[i], n[j]] = [n[j], n[i]];
-    setItems(n.map((x, k) => ({ ...x, displayOrder: k + 1 })));
+    setSavingCategory(true);
+    try {
+      await Promise.all(n.map((category, index) => updateCategory(category.id, categoryPayload(category, index + 1))));
+      await refresh();
+    } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Category order could not be saved."); }
+    finally { setSavingCategory(false); }
   };
   return (
     <>
@@ -753,7 +790,7 @@ function CategoriesPage() {
             </tr>
           </thead>
           <tbody>
-            {items.map((c, i) => (
+            {loadingCategories ? <tr><td colSpan={5} className="p-10 text-center text-white/35">Loading categories...</td></tr> : items.map((c, i) => (
               <tr key={c.id} className="border-b border-white/5">
                 <td className="px-5 py-4 font-medium">{c.name}</td>
                 <td className="px-5 py-4 text-white/50">
@@ -762,13 +799,13 @@ function CategoriesPage() {
                 <td className="px-5 py-4">{c.displayOrder}</td>
                 <td className="px-5 py-4">
                   <button
-                    onClick={() =>
-                      setItems((x) =>
-                        x.map((y) =>
-                          y.id === c.id ? { ...y, active: !y.active } : y,
-                        ),
-                      )
-                    }
+                    disabled={savingCategory}
+                    onClick={() => { void (async () => {
+                      setSavingCategory(true);
+                      try { await updateCategory(c.id, categoryPayload({ ...c, active: !c.active })); invalidateMenuCache(); await refresh(); }
+                      catch (cause) { toast.error(cause instanceof Error ? cause.message : "Category could not be updated."); }
+                      finally { setSavingCategory(false); }
+                    })(); }}
                   >
                     <StatusBadge status={c.active ? "Active" : "Disabled"} />
                   </button>
@@ -778,7 +815,7 @@ function CategoriesPage() {
                     <button
                       disabled={i === 0}
                       aria-label="Move up"
-                      onClick={() => move(i, -1)}
+                      onClick={() => { void move(i, -1); }}
                       className="p-2 disabled:opacity-20"
                     >
                       <ChevronUp size={15} />
@@ -786,7 +823,7 @@ function CategoriesPage() {
                     <button
                       disabled={i === items.length - 1}
                       aria-label="Move down"
-                      onClick={() => move(i, 1)}
+                      onClick={() => { void move(i, 1); }}
                       className="p-2 disabled:opacity-20"
                     >
                       <ChevronDown size={15} />
@@ -820,15 +857,15 @@ function CategoriesPage() {
           <CategoryForm
             value={edit}
             onClose={() => setEdit(undefined)}
-            onSave={(v) => {
-              setItems((x) =>
-                x.some((y) => y.id === v.id)
-                  ? x.map((y) => (y.id === v.id ? v : y))
-                  : [...x, { ...v, id: v.id || crypto.randomUUID() }],
-              );
-              setEdit(undefined);
-              toast.success("Category saved.");
-            }}
+            onSave={(v) => { void (async () => {
+              setSavingCategory(true);
+              try {
+                if (v.id) await updateCategory(v.id, categoryPayload(v));
+                else await createCategory(categoryPayload(v));
+                invalidateMenuCache(); await refresh(); setEdit(undefined); toast.success("Category saved.");
+              } catch (cause) { toast.error(cause instanceof Error ? cause.message : "Category could not be saved."); }
+              finally { setSavingCategory(false); }
+            })(); }}
           />
         </Modal>
       )}
@@ -843,10 +880,13 @@ function CategoriesPage() {
               Cancel
             </button>
             <button
-              onClick={() => {
-                setItems((x) => x.filter((y) => y.id !== del.id));
-                setDel(null);
-              }}
+              disabled={savingCategory}
+              onClick={() => { void (async () => {
+                setSavingCategory(true);
+                try { await deleteCategory(del.id); invalidateMenuCache(); await refresh(); setDel(null); toast.success("Category deleted."); }
+                catch (cause) { toast.error(cause instanceof Error ? cause.message : "Category could not be deleted."); }
+                finally { setSavingCategory(false); }
+              })(); }}
               className={`${button} bg-red-500`}
             >
               Delete

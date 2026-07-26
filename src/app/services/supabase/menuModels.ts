@@ -1,6 +1,6 @@
 export type NormalizedMenuOption = {
-  id: string; databaseId?: string; name: string; priceDelta: number; available: boolean; displayOrder: number;
-  allergensAdded: string[]; allergensRemoved: string[]; nutritionAdjustment: Record<string, number>; isDefault: boolean;
+  id: string; databaseId?: string; name: string; priceDelta: number; priceAdjustment: number; available: boolean; displayOrder: number;
+  allergensAdded: string[]; allergensRemoved: string[]; nutritionAdjustment: Record<string, number>; isDefault: boolean; default: boolean;
 };
 export type NormalizedMenuGroup = {
   id: string; name: string; required: boolean; minSelections: number; maxSelections: number; displayOrder: number; options: NormalizedMenuOption[];
