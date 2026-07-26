@@ -13,6 +13,7 @@ import {
   LayoutDashboard,
   Mail,
   Menu as MenuIcon,
+  PackageOpen,
   Pencil,
   Plus,
   Settings as SettingsIcon,
@@ -89,10 +90,10 @@ const nav = [
   ["settings", "Settings", SettingsIcon],
 ] as const;
 const input =
-  "w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none transition focus:border-[#d7fb69]/60 focus:ring-2 focus:ring-[#d7fb69]/10";
+  "admin-input w-full text-sm text-white outline-none";
 const button =
-  "rounded-xl px-4 py-2.5 text-sm font-bold transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/50 disabled:cursor-not-allowed disabled:opacity-40";
-const card = "rounded-2xl border border-white/10 bg-white/[0.04]";
+  "admin-button rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d7fb69]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0d0a] disabled:cursor-not-allowed disabled:opacity-40";
+const card = "admin-card rounded-[20px]";
 const money = new Intl.NumberFormat("en-IE", {
   style: "currency",
   currency: "EUR",
@@ -108,10 +109,10 @@ function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-center gap-4">
+    <div className="mb-7 flex flex-wrap items-end gap-4">
       <div>
-        <h1 className="text-2xl font-black">{title}</h1>
-        <p className="mt-1 text-sm text-white/40">{subtitle}</p>
+        <h1 className="text-[1.65rem] font-black tracking-[-0.035em] text-white">{title}</h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-white/45">{subtitle}</p>
       </div>
       <div className="ml-auto">{action}</div>
     </div>
@@ -140,9 +141,11 @@ function StatusBadge({
     "Coming Soon",
     "Mock Mode",
   ].map(value => value.toLowerCase()).includes(normalizedStatus);
+  const danger = ["cancelled", "failed", "offline", "disabled", "unavailable"].includes(normalizedStatus);
+  const incoming = ["incoming", "accepted", "cooking"].includes(normalizedStatus);
   return (
     <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold capitalize ${good ? "border-emerald-400/20 bg-emerald-400/10 text-emerald-300" : warn ? "border-amber-400/20 bg-amber-400/10 text-amber-300" : "border-white/10 bg-white/5 text-white/45"}`}
+      className={`admin-status-dot ${normalizedStatus === "online" ? "admin-status-pulse" : ""} inline-flex min-h-6 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold capitalize tracking-wide ${good ? "border-emerald-400/15 bg-emerald-400/[.09] text-emerald-300" : warn ? "border-amber-400/15 bg-amber-400/[.09] text-amber-300" : danger ? "border-red-400/15 bg-red-400/[.09] text-red-300" : incoming ? "border-[#d7fb69]/15 bg-[#d7fb69]/[.08] text-[#d7fb69]" : "border-white/[.07] bg-white/[.035] text-white/50"}`}
     >
       {status.replace(/_/g, " ")}
     </span>
@@ -159,7 +162,7 @@ function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/70 p-4"
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-[2px]"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -167,9 +170,9 @@ function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border border-white/10 bg-[#111511] p-5 shadow-2xl">
+      <div className="admin-dialog max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[20px] p-6">
         <div className="mb-5 flex items-center">
-          <h2 className="text-lg font-bold">{title}</h2>
+          <h2 className="text-lg font-bold tracking-[-.02em]">{title}</h2>
           <button
             aria-label="Close"
             onClick={onClose}
@@ -193,17 +196,17 @@ function Toggle({
   label: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 text-sm">
+    <label className="flex cursor-pointer items-center justify-between gap-4 text-sm text-white/75">
       <span>{label}</span>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`h-6 w-11 rounded-full p-1 transition ${checked ? "bg-[#d7fb69]" : "bg-white/15"}`}
+        className={`h-6 w-11 rounded-full border p-1 transition-[background-color,border-color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7fb69]/50 ${checked ? "border-[#d7fb69]/45 bg-[#d7fb69]" : "border-white/10 bg-white/10"}`}
       >
         <span
-          className={`block size-4 rounded-full bg-[#17200f] transition ${checked ? "translate-x-5" : ""}`}
+          className={`block size-4 rounded-full bg-[#17200f] shadow-sm transition-transform duration-150 ease-out ${checked ? "translate-x-5" : ""}`}
         />
       </button>
     </label>
@@ -266,8 +269,8 @@ function DashboardPage() {
         )) : stats.map(([title, value, sub]) => (
           <div key={title} className={`${card} p-5`}>
             <p className="text-xs font-bold uppercase tracking-wider text-white/35">{title}</p>
-            <p className="mt-3 text-2xl font-black text-[#d7fb69]">{value}</p>
-            <p className="mt-1 text-xs text-white/35">{sub}</p>
+            <p className="mt-4 text-[1.75rem] font-black tracking-[-.035em] text-[#d7fb69]">{value}</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-white/38">{sub}</p>
           </div>
         ))}
       </div>
@@ -325,7 +328,7 @@ function AdminSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="mt-1 h-10 rounded-xl border-white/10 bg-white/5 text-white hover:bg-white/[0.08] focus:border-[#d7fb69]/60 focus:ring-[#d7fb69]/20">
+      <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-white">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent className="z-[10001] rounded-xl border-white/10 bg-[#111511] text-white shadow-2xl">
@@ -423,7 +426,7 @@ function ProductForm({
       <div className="text-xs text-white/50">
         Category
         <Select value={p.categoryId ?? ""} onValueChange={categoryId => setP({ ...p, categoryId })}>
-          <SelectTrigger className="mt-1 h-10 rounded-xl border-white/10 bg-white/5 text-white">
+          <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-white">
             <SelectValue placeholder="Select a category" />
           </SelectTrigger>
           <SelectContent className="z-[10001] rounded-xl border-white/10 bg-[#111511] text-white">
@@ -614,11 +617,21 @@ function MenuPage() {
             </thead>
             <tbody>
             {loadingMenu ? (
-              <tr><td colSpan={5} className="p-10 text-center text-white/35">Loading menu...</td></tr>
+              Array.from({ length: 5 }, (_, index) => (
+                <tr key={index} className="border-b border-white/5">
+                  <td colSpan={5} className="px-5 py-4">
+                    <Skeleton className="h-10 w-full rounded-lg bg-white/[.055]" />
+                  </td>
+                </tr>
+              ))
             ) : products.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="p-10 text-center text-white/35">
-                    No products yet.
+                  <td colSpan={5} className="p-12 text-center">
+                    <div className="mx-auto max-w-xs rounded-2xl border border-dashed border-white/10 bg-white/[.018] px-6 py-7">
+                      <PackageOpen className="mx-auto mb-3 text-white/25" size={22} />
+                      <p className="text-sm font-semibold text-white/65">No products yet</p>
+                      <p className="mt-1 text-xs text-white/35">Add your first product to populate the menu.</p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -790,7 +803,11 @@ function CategoriesPage() {
             </tr>
           </thead>
           <tbody>
-            {loadingCategories ? <tr><td colSpan={5} className="p-10 text-center text-white/35">Loading categories...</td></tr> : items.map((c, i) => (
+            {loadingCategories ? Array.from({ length: 5 }, (_, index) => (
+              <tr key={index} className="border-b border-white/5"><td colSpan={5} className="px-5 py-4"><Skeleton className="h-10 w-full rounded-lg bg-white/[.055]" /></td></tr>
+            )) : items.length === 0 ? (
+              <tr><td colSpan={5} className="p-12 text-center"><div className="mx-auto max-w-xs rounded-2xl border border-dashed border-white/10 bg-white/[.018] px-6 py-7"><Tags className="mx-auto mb-3 text-white/25" size={22} /><p className="text-sm font-semibold text-white/65">No categories yet</p><p className="mt-1 text-xs text-white/35">Create a category to organize your menu.</p></div></td></tr>
+            ) : items.map((c, i) => (
               <tr key={c.id} className="border-b border-white/5">
                 <td className="px-5 py-4 font-medium">{c.name}</td>
                 <td className="px-5 py-4 text-white/50">
@@ -1561,10 +1578,10 @@ export default function Dashboard({ section, onNavigate }: Props) {
     settings: <SettingsPage />,
   };
   return (
-    <div className="min-h-screen bg-[#080a08] text-[#f0f0eb] font-['DM_Sans'] md:flex">
+    <div className="morrow-admin min-h-screen text-[#f5f5f1] font-['DM_Sans'] md:flex">
       <Toaster theme="dark" position="top-right" />
-      <aside className="border-b border-white/5 bg-[#090b09] md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col md:border-b-0 md:border-r">
-        <div className="flex items-center justify-between border-b border-white/5 px-5 py-5">
+      <aside className="border-b border-white/[.05] bg-[#0d0f0c] md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col md:border-b-0 md:border-r">
+        <div className="flex items-center justify-between border-b border-white/[.045] px-5 py-6">
           <div>
             <MorrowLogo variant="full" priority className="h-auto w-36" />
             <p className="mt-1 text-[10px] text-white/30">Admin Panel</p>
@@ -1573,14 +1590,14 @@ export default function Dashboard({ section, onNavigate }: Props) {
         </div>
         <nav
           aria-label="Admin navigation"
-          className="flex gap-1 overflow-x-auto p-3 md:flex-1 md:flex-col"
+          className="flex gap-1.5 overflow-x-auto p-3 md:flex-1 md:flex-col md:py-5"
         >
           {nav.map(([id, label, Icon]) => (
             <button
               key={id}
               onClick={() => onNavigate(`/admin/${id}`)}
               aria-current={section === id ? "page" : undefined}
-              className={`flex shrink-0 items-center gap-2.5 rounded-xl px-3 py-2.5 text-sm transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/40 ${section === id ? "bg-[#d7fb69] font-bold text-[#17200f]" : "text-white/50 hover:bg-white/5 hover:text-white"}`}
+              className={`relative flex min-h-11 shrink-0 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition-all duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d7fb69]/45 ${section === id ? "bg-[#d7fb69]/[.11] font-bold text-[#d7fb69] before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-[#d7fb69] before:shadow-[0_0_10px_rgba(215,251,105,.28)]" : "text-white/48 hover:bg-white/[.045] hover:text-white/85"}`}
             >
               <Icon size={17} />
               {label}
@@ -1588,7 +1605,7 @@ export default function Dashboard({ section, onNavigate }: Props) {
           ))}
         </nav>
         <div className="hidden border-t border-white/5 p-4 md:block">
-          <div className="flex items-center gap-3 rounded-xl bg-white/5 p-3">
+          <div className="flex items-center gap-3 rounded-xl border border-white/[.045] bg-white/[.025] p-3">
             <div className="grid size-8 place-items-center rounded-full bg-[#d7fb69]/15 text-xs font-bold text-[#d7fb69]">
               A
             </div>
@@ -1599,7 +1616,7 @@ export default function Dashboard({ section, onNavigate }: Props) {
           </div>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 p-4 pb-28 sm:p-6 lg:p-8">
+      <main className="min-w-0 flex-1 p-4 pb-28 sm:p-7 lg:p-10">
         <div className="mx-auto w-full max-w-[1440px]">{pages[section]}</div>
       </main>
     </div>

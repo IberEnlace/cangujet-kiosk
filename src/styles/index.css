@@ -1,6 +1,7 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+@import './globals.css';
 
 @keyframes receipt-slide {
   from { transform: translate(-50%, 4rem); }

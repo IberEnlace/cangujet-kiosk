@@ -5,9 +5,9 @@ import type { NotificationDeliveryLogRow } from "../../lib/supabase/database.typ
 import { useAuth } from "../auth/AuthContext";
 import { getNotificationSettings, getRecentDeliveryLogs, isValidNotificationEmail, saveNotificationSettings, sendDailyReportNow, sendTestNotification } from "../services/supabase/notificationService";
 
-const input = "w-full rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm outline-none transition focus:border-[#d7fb69]/60";
-const button = "rounded-xl px-4 py-2.5 text-sm font-bold transition disabled:cursor-not-allowed disabled:opacity-40";
-const card = "rounded-2xl border border-white/10 bg-white/[0.04] p-6";
+const input = "admin-input w-full text-sm text-white outline-none";
+const button = "admin-button rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d7fb69]/55 disabled:cursor-not-allowed disabled:opacity-40";
+const card = "admin-card rounded-[20px] p-6";
 const defaults: NotificationSettings = { restaurantEmail: "", secondaryEmail: "", dailySalesReport: true, weeklySalesSummary: false, orderFailureAlerts: true, paymentFailureAlerts: true, kioskOfflineAlerts: true, kitchenDisplayOfflineAlerts: true, deviceSyncFailureAlerts: true, dailyReportTime: "22:00" };
 
 export default function AdminNotifications() {
@@ -88,7 +88,7 @@ export default function AdminNotifications() {
     ["kitchenDisplayOfflineAlerts", "Kitchen Display Offline Alerts"], ["deviceSyncFailureAlerts", "Device Sync Failure Alerts"],
   ];
   return <>
-    <div className="mb-6"><h1 className="text-2xl font-black">Notifications</h1><p className="mt-1 text-sm text-white/40">Manage restaurant reports and system alerts</p></div>
+    <div className="mb-7"><h1 className="text-[1.65rem] font-black tracking-[-.035em]">Notifications</h1><p className="mt-1.5 text-sm leading-relaxed text-white/45">Manage restaurant reports and system alerts</p></div>
     <div className="grid max-w-5xl gap-5 lg:grid-cols-2">
       <section className={card}><h2 className="mb-5 font-bold">Notification Email</h2><div className="grid gap-4"><Field label="Restaurant Email" value={settings.restaurantEmail} onChange={restaurantEmail => setSettings({ ...settings, restaurantEmail })}/><Field label="Secondary Email (optional)" value={settings.secondaryEmail} onChange={secondaryEmail => setSettings({ ...settings, secondaryEmail })}/><label className="text-xs text-white/50">Daily Report Time<input type="time" className={`${input} mt-1`} value={settings.dailyReportTime} onChange={event => setSettings({ ...settings, dailyReportTime: event.target.value })}/></label></div></section>
       <section className={card}><h2 className="mb-5 font-bold">Notification Preferences</h2><div className="space-y-4">{preferences.map(([key, label]) => <Toggle key={key} label={label} checked={Boolean(settings[key])} onChange={checked => setSettings({ ...settings, [key]: checked })}/>)}</div></section>
