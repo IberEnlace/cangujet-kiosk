@@ -61,7 +61,7 @@
   .cashier-quantity:hover { border-color: rgba(215,251,105,.3); background: rgba(215,251,105,.09); }
   .cashier-quantity:active { transform: scale(.94); }
   .cashier-dialog {
-    border: 2px solid rgba(215,251,105,.55) !important; background: transparent !important;
+    border: 2px solid rgba(112, 111, 111, 0.342) !important; background: transparent !important;
     border-hover: 2px solid rgba(215,251,105,.75) !important;
     outline: 1px solid rgba(255,255,255,.1);
     outline-offset: -5px;
