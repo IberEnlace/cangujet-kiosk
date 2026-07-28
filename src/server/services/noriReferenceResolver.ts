@@ -19,12 +19,10 @@ export function resolveNoriReference(input: string, state: NoriConversationState
     const active = [state.selectedMealId, state.selectedDrinkId].filter((id): id is string => Boolean(id));
     if (active.length > 1) {
       const result: NoriReferenceResolution = { phrase, resolvedType: "ambiguous", resolvedIds: active, ambiguous: true, clarificationQuestion: "Would you like me to use the meal or the drink?" };
-      logReference(result); return result;
+      return result;
     }
     ids = active.length ? active : state.selectedProductId ? [state.selectedProductId] : [];
   }
   const result: NoriReferenceResolution = { phrase, resolvedType: ids.length > 1 ? "products" : ids.length === 1 ? "product" : "none", resolvedIds: ids, ambiguous: false };
-  logReference(result); return result;
+  return result;
 }
-
-function logReference(result: NoriReferenceResolution) { console.log("[NORI][REFERENCE]", result); }

@@ -25,11 +25,6 @@ export function executeNoriCartActions(
   const executedActionIds = options.executedActionIds ?? defaultExecutedAddActionIds;
   const results: Array<{ actionId: string; status: "success" | "failed"; productId: string }> = [];
   for (const action of actions) {
-    console.log("[NORI][ACTION_INSPECTION]", {
-      type: action.type,
-      productId: "productId" in action ? action.productId : undefined,
-      actionId: "actionId" in action ? action.actionId : undefined,
-    });
     if (action.type === "clear_cart") {
       if (executedActionIds.has(action.actionId)) {
         results.push({ actionId: action.actionId, status: "success", productId: "" });
@@ -52,12 +47,7 @@ export function executeNoriCartActions(
       continue;
     }
     const product = noriMenuProducts.find(item => item.id === action.productId);
-    console.log("[NORI][PRODUCT_LOOKUP]", {
-      requested: action.productId,
-      availableIds: noriMenuProducts.map(item => item.id),
-    });
     if (!product) {
-      console.error("[NORI][PRODUCT_RESOLUTION_ERROR]", action.productId);
       results.push({ actionId: action.actionId, status: "failed", productId: action.productId });
       continue;
     }
@@ -118,13 +108,11 @@ export function executeNoriCartActions(
       continue;
     }
     if (action.type !== "add_to_cart") continue;
-    console.log("[NORI][EXECUTING_CART_ACTION]", action);
     const mappedItem = mapNoriAddActionToCartItem(action);
     if (!mappedItem) {
       results.push({ actionId: action.actionId, status: "failed", productId: action.productId });
       continue;
     }
-    console.log("[NORI][CART_CONTEXT_BEFORE_ADD]", options.cartRef?.current);
     for (let count = 0; count < action.quantity; count += 1) {
       adapter.addItem(mappedItem);
     }
@@ -135,13 +123,10 @@ export function executeNoriCartActions(
         continue;
       }
       options.cartRef.current = nextCart;
-      console.log("[NORI][CART_REF_AFTER_ADD]", options.cartRef.current);
     }
     executedActionIds.add(action.actionId);
-    console.log("[NORI][CART_ACTION_EXECUTED]", action.actionId);
     results.push({ actionId: action.actionId, status: "success", productId: product.id });
   }
-  console.log("[NORI][CART_ACTION_RESULT]", results);
   return results;
 }
 
@@ -150,7 +135,6 @@ export function mapNoriAddActionToCartItem(
 ): Omit<CartItem, "qty"> | null {
   const product = noriMenuProducts.find(item => item.id === action.productId);
   if (!product) {
-    console.error("[NORI][PRODUCT_RESOLUTION_ERROR]", action.productId);
     return null;
   }
   const customizations = Object.fromEntries(action.customizations.map(value => [value.groupId, value.optionName]));

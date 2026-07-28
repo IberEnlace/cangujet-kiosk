@@ -12,21 +12,13 @@ export async function postNoriChat(
 ): Promise<NoriChatResponse> {
   const requestId = options.requestId ?? createNoriRequestId();
   const fetchImpl = options.fetchImpl ?? fetch;
-  console.log("[NORI][CLIENT_REQUEST_START]", { requestId, message: request.message });
-  try {
-    const response = await fetchImpl("/api/nori/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Nori-Request-Id": requestId },
-      body: JSON.stringify(request),
-    });
-    if (!response.ok) throw new Error("Nori API request failed.");
-    const parsedResponse = await response.json() as NoriChatResponse;
-    console.log("[NORI][PARSED_RESPONSE]", parsedResponse);
-    console.log("[NORI][RESPONSE_ACTIONS]", parsedResponse.actions);
-    return parsedResponse;
-  } finally {
-    console.log("[NORI][CLIENT_REQUEST_FINISH]", { requestId, message: request.message });
-  }
+  const response = await fetchImpl("/api/nori/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "X-Nori-Request-Id": requestId },
+    body: JSON.stringify(request),
+  });
+  if (!response.ok) throw new Error("Nori API request failed.");
+  return await response.json() as NoriChatResponse;
 }
 
 export function shouldSubmitNoriKey(event: { key: string; shiftKey: boolean; isComposing?: boolean }): boolean {

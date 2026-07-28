@@ -1,12 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getLanguageOption, isSupportedLanguage, type SupportedLanguage } from "../config/languages";
+import { getLanguageOption, normalizeSupportedLanguage, type SupportedLanguage } from "../config/languages";
 import { useDevice } from "./DeviceContext";
 
 const LANGUAGE_STORAGE_KEY = "morrow_customer_language";
 
 interface LanguageContextValue {
   language: SupportedLanguage;
-  direction: "ltr" | "rtl";
+  direction: "ltr";
   setLanguage: (language: SupportedLanguage) => void;
   resetLanguage: () => void;
 }
@@ -16,13 +16,15 @@ const LanguageContext = createContext<LanguageContextValue | null>(null);
 function restoreLanguage(fallback: SupportedLanguage): SupportedLanguage {
   try {
     const stored = sessionStorage.getItem(LANGUAGE_STORAGE_KEY);
-    return isSupportedLanguage(stored) ? stored : fallback;
+    const restored = normalizeSupportedLanguage(stored, fallback);
+    if (stored !== null && stored !== restored) sessionStorage.setItem(LANGUAGE_STORAGE_KEY, restored);
+    return restored;
   } catch { return fallback; }
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
   const { config } = useDevice();
-  const defaultLanguage = config?.settings.defaultLanguage ?? "en";
+  const defaultLanguage = normalizeSupportedLanguage(config?.settings.defaultLanguage);
   const [language, setLanguageState] = useState<SupportedLanguage>(() => restoreLanguage(defaultLanguage));
   const direction = getLanguageOption(language).direction;
 
@@ -36,9 +38,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     try { sessionStorage.removeItem(LANGUAGE_STORAGE_KEY); } catch { /* Storage may be disabled in kiosk privacy mode. */ }
   }, [defaultLanguage]);
 
-  useEffect(() => { if (config && !config.settings.enabledLanguages.includes(language)) setLanguage(defaultLanguage); }, [config, defaultLanguage, language, setLanguage]);
+  useEffect(() => {
+    if (!config) return;
+    const enabledLanguages = config.settings.enabledLanguages.map(value => normalizeSupportedLanguage(value));
+    if (!enabledLanguages.includes(language)) setLanguage(defaultLanguage);
+  }, [config, defaultLanguage, language, setLanguage]);
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
     document.documentElement.lang = language;
     document.documentElement.dir = direction;
   }, [direction, language]);

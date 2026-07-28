@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { noriMenuProducts } from "../../app/services/noriMenuEngine";
 import type {
+  NoriChatRequest,
   NoriConversationState,
+  NoriLanguage,
   NoriSelectedCustomization,
   NoriWarning,
 } from "../types/noriChat";
@@ -98,9 +100,9 @@ test("returns an English response for English language", () => {
   assert.match(reply, /documented kids meal/i);
 });
 
-test("returns an Arabic response for Arabic language", () => {
-  const reply = recommendation("Show vegan meals", [veganBurger], "ar");
-  assert.match(reply, /خيار نباتي|نباتي بالكامل/);
+test("returns a Turkish response for Turkish language", () => {
+  const reply = recommendation("Vegan bir yemek öner", [veganBurger], "tr");
+  assert.match(reply, /vegan bir seçenektir/i);
   assert.match(reply, /Garden Chickpea Burger/);
 });
 
@@ -121,12 +123,12 @@ test("asks one drink-temperature clarification question", () => {
   );
 });
 
-test("translates clarification to Arabic", () => {
+test("translates clarification to Turkish", () => {
   const reply = buildClarificationResponse(
     "Would you like a hot drink or a cold drink?",
-    "ar",
+    "tr",
   );
-  assert.equal(reply, "هل تفضّل مشروبًا ساخنًا أم باردًا؟");
+  assert.equal(reply, "Sıcak bir içecek mi, soğuk bir içecek mi tercih edersiniz?");
 });
 
 test("distinguishes a direct allergen", () => {
@@ -157,12 +159,12 @@ test("never guarantees allergy safety when no risk is documented", () => {
   assert.match(reply, /complete safety cannot be guaranteed/i);
 });
 
-test("returns an Arabic allergy warning", () => {
+test("returns a Turkish allergy warning", () => {
   const reply = buildAllergyResponse(bowl, allergenCheck({
     crossContact: ["Milk"],
-  }), "ar");
-  assert.match(reply, /تلامس متبادل/);
-  assert.match(reply, /موظفي المطعم/);
+  }), "tr");
+  assert.match(reply, /çapraz temas/i);
+  assert.match(reply, /restoran personeli/i);
 });
 
 test("states that a customization is documented", () => {
@@ -199,10 +201,10 @@ test("preserves customization cross-contact warning", () => {
   assert.match(reply, /Cross-contact risk still remains/i);
 });
 
-test("returns an Arabic customization response", () => {
-  const reply = customization("ar");
-  assert.match(reply, /خيار No dressing موثق/);
-  assert.match(reply, /التلامس المتبادل/);
+test("returns a Turkish customization response", () => {
+  const reply = customization("tr");
+  assert.match(reply, /belgelenmiş bir seçenektir/i);
+  assert.match(reply, /Çapraz temas riski/i);
 });
 
 test("builds a cart confirmation with product and quantity", () => {
@@ -257,9 +259,9 @@ test("builds a cart failure response", () => {
   );
 });
 
-test("builds an Arabic cart success response", () => {
-  const reply = buildCartExecutionResponse([bowl.name], true, "ar");
-  assert.match(reply, /تمت إضافة/);
+test("builds a Turkish cart success response", () => {
+  const reply = buildCartExecutionResponse([bowl.name], true, "tr");
+  assert.match(reply, /sepetinize eklendi/i);
 });
 
 test("checkout lists item name, quantity, and line total", () => {
@@ -291,10 +293,10 @@ test("checkout does not request card details in chat", () => {
   assert.match(reply, /secure payment screen/i);
 });
 
-test("checkout supports Arabic", () => {
-  const reply = checkout("ar", true);
-  assert.match(reply, /المجموع الفرعي/);
-  assert.match(reply, /شاشة الدفع الآمنة/);
+test("checkout supports Turkish", () => {
+  const reply = checkout("tr", true);
+  assert.match(reply, /Ara toplam/i);
+  assert.match(reply, /Güvenli ödeme ekranı/i);
 });
 
 test("tracks recently recommended product IDs", async () => {
@@ -328,7 +330,7 @@ test("agent never returns more than three recommendations", async () => {
 function recommendation(
   message: string,
   products: typeof noriMenuProducts,
-  language = "en",
+  language: NoriLanguage = "en",
 ) {
   return buildRecommendationResponse({
     products,
@@ -337,7 +339,7 @@ function recommendation(
   });
 }
 
-function customization(language: string) {
+function customization(language: NoriLanguage) {
   return buildCustomizationResponse(
     bowl,
     noDressing,
@@ -347,7 +349,7 @@ function customization(language: string) {
 }
 
 function checkout(
-  language: string,
+  language: NoriLanguage,
   confirmation: boolean,
   customizationNames: string[] = [],
   warnings: NoriWarning[] = [],
@@ -398,7 +400,7 @@ function state(): NoriConversationState {
 function request(
   message: string,
   conversationState?: NoriConversationState,
-) {
+): NoriChatRequest {
   return {
     message,
     cart: [],

@@ -3,6 +3,7 @@ import type { AIProvider, AIProviderContext, AIToolCall } from "../../types/aiPr
 import type { NoriChatRequest, NoriChatResponse } from "../../types/noriChat";
 import { isAllowedNoriTool, validateNoriToolCall } from "../noriToolLayer";
 import { buildProviderResponse } from "./providerResponseUtils";
+import { getNoriLanguageInstruction } from "../../../shared/languages";
 
 const TOOL_DEFINITIONS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   tool("searchProducts", "Search the Morrow menu using product names, descriptions, categories, tags, keywords, and vector tags.", {
@@ -60,7 +61,7 @@ export class OpenAIProvider implements AIProvider {
       "Select the minimum set of approved tools needed to answer the customer.",
       "You are only a routing layer. Do not answer with menu facts.",
       "Never infer product data, cart state, order status, prices, nutrition, allergens, or availability.",
-      `Language: ${request.language}`,
+      getNoriLanguageInstruction(request.language),
       `Active allergens: ${JSON.stringify(request.activeAllergens)}`,
       `Cart product IDs and quantities: ${JSON.stringify(request.cart)}`,
     ].join("\n");

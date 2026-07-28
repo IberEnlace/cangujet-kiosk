@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { restaurantAIConfig } from "../../app/data/aiMenu";
-import type { NoriIntent } from "../types/noriChat";
+import type { NoriChatRequest, NoriIntent } from "../types/noriChat";
 import { createState, NoriAgentService } from "./noriAgentService";
 import { normalizeNoriInput, routeNoriIntent } from "./noriIntentRouter";
 import { interpretNoriRequest } from "./noriRequestInterpreter";
@@ -67,7 +67,7 @@ test("phase4 beef negation excludes beef products", async () => {
   assert.ok(result.recommendedProducts.every(item => ![item.description, ...item.ingredients].join(" ").toLowerCase().includes("beef")));
 });
 
-const request = (message: string, conversationState?: ReturnType<typeof state>) => ({ message, cart: [], activeAllergens: [], language: "en", conversationState });
+const request = (message: string, conversationState?: ReturnType<typeof state>): NoriChatRequest => ({ message, cart: [], activeAllergens: [], language: "en", conversationState });
 
 test("phase4.1 budget-only input saves context and asks one clarification", async () => {
   const result = await new NoriAgentService().process(request("I only have $3."));

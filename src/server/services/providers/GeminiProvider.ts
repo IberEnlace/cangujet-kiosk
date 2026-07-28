@@ -7,6 +7,7 @@ import type { AIProvider, AIProviderContext, AIToolCall } from "../../types/aiPr
 import type { NoriChatRequest, NoriChatResponse } from "../../types/noriChat";
 import { allowedNoriTools, executeNoriTool, isAllowedNoriTool } from "../noriToolLayer";
 import { buildProviderResponse } from "./providerResponseUtils";
+import { getNoriLanguageInstruction } from "../../../shared/languages";
 
 const FUNCTION_DECLARATIONS: FunctionDeclaration[] = [
   declaration("searchProducts", "Search menu products using the query.", { query: stringSchema() }, ["query"]),
@@ -47,14 +48,10 @@ export class GeminiProvider implements AIProvider {
   private toolCalls: AIToolCall[] = [];
 
   constructor(apiKey = process.env.GEMINI_API_KEY) {
-    console.log("[NORI] GeminiProvider created");
-    console.log("[NORI] Provider =", process.env.NORI_AI_PROVIDER);
-    console.log("[NORI] API Key exists =", !!apiKey);
     if (!apiKey) throw new Error("GEMINI_API_KEY is required when NORI_AI_PROVIDER=gemini.");
     this.client = new GoogleGenAI({ apiKey });
     this.model = process.env.NORI_GEMINI_MODEL ?? "gemini-3.5-flash";
     this.timeoutMs = Number(process.env.NORI_AI_TIMEOUT_MS ?? 15_000);
-    console.log("[NORI] Model =", this.model);
   }
 
   buildPrompt(request: NoriChatRequest): string {
@@ -62,7 +59,7 @@ export class GeminiProvider implements AIProvider {
       "Select the minimum approved Nori menu tools required for the request.",
       "Do not answer with product facts. Do not create or modify product data.",
       "All products, prices, nutrition, allergens, availability, stock, cart state, and order status come from server tools only.",
-      `Language: ${request.language}`,
+      getNoriLanguageInstruction(request.language),
       `Active allergens: ${JSON.stringify(request.activeAllergens)}`,
       `Cart product IDs and quantities: ${JSON.stringify(request.cart)}`,
     ].join("\n");
@@ -90,17 +87,7 @@ export class GeminiProvider implements AIProvider {
       if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("Gemini tool arguments must be an object.");
       const toolCall: AIToolCall = { name: functionCall.name, arguments: args };
 
-      console.log("========== TOOL CALL ==========");
-      console.log("Tool:", toolCall.name);
-      console.log("Arguments:", toolCall.arguments);
-      console.log("===============================");
-
-      const result = executeNoriTool(toolCall);
-
-      console.log("========== TOOL RESULT ==========");
-      console.log(result);
-      console.log("================================");
-
+      executeNoriTool(toolCall);
       return toolCall;
     });
     return this.toolCalls;

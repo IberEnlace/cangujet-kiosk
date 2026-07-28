@@ -1444,7 +1444,7 @@ function SettingsPage() {
                 onChange={(language) =>
                   setRestaurant({ ...restaurant, language })
                 }
-                options={["English", "Turkish", "Arabic"]}
+                options={["English", "Turkish"]}
               />
             </label>
             <label className="text-xs text-white/50">

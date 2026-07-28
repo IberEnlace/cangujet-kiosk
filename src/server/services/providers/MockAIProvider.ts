@@ -4,6 +4,7 @@ import {
 } from "../../../app/services/noriMenuEngine";
 import type { AIProvider, AIProviderContext, AIToolCall } from "../../types/aiProvider";
 import type { NoriAction, NoriChatRequest, NoriChatResponse, NoriWarning } from "../../types/noriChat";
+import { getNoriLanguageInstruction } from "../../../shared/languages";
 
 function createWarnings(products: NoriChatResponse["recommendedProducts"], allergens: string[]): NoriWarning[] {
   return products.flatMap(product => {
@@ -21,7 +22,7 @@ export class MockAIProvider implements AIProvider {
     return [
       "You are Nori, Morrow Restaurant's menu assistant.",
       "Use only approved menu tools. Never invent menu facts.",
-      `Language: ${request.language}.`,
+      getNoriLanguageInstruction(request.language),
       `Active allergens: ${request.activeAllergens.join(", ") || "none"}.`,
       `Customer message: ${request.message}`,
     ].join("\n");
@@ -40,7 +41,7 @@ export class MockAIProvider implements AIProvider {
       productId: product.id,
       quantity: 1,
       customizations: [],
-      label: `Add ${product.name}`,
+      label: context.request.language === "tr" ? `${product.name} ürününü ekle` : `Add ${product.name}`,
     }));
     if (result.upsellItem) actions.push({
       type: "add_to_cart",
@@ -48,10 +49,10 @@ export class MockAIProvider implements AIProvider {
       productId: result.upsellItem.id,
       quantity: 1,
       customizations: [],
-      label: `Pair with ${result.upsellItem.name}`,
+      label: context.request.language === "tr" ? `${result.upsellItem.name} ile eşleştir` : `Pair with ${result.upsellItem.name}`,
     });
-    if (warnings.length) actions.push({ type: "REVIEW_ALLERGENS", productIds: [...new Set(warnings.map(warning => warning.productId))], label: "Review allergen warnings" });
-    if (context.request.cart.length) actions.push({ type: "OPEN_CART", label: "Review cart" });
+    if (warnings.length) actions.push({ type: "REVIEW_ALLERGENS", productIds: [...new Set(warnings.map(warning => warning.productId))], label: context.request.language === "tr" ? "Alerjen uyarılarını incele" : "Review allergen warnings" });
+    if (context.request.cart.length) actions.push({ type: "OPEN_CART", label: context.request.language === "tr" ? "Sepeti incele" : "Review cart" });
     const conversationState = context.request.conversationState ?? {
       preferredLanguage: context.request.language,
       activeAllergens: context.request.activeAllergens,
@@ -62,6 +63,11 @@ export class MockAIProvider implements AIProvider {
       selectedCartItemId: null, latestAddedCartItemId: null, latestSuccessfulMutation: null, executedActionIds: [],
       recentlyRecommendedProductIds: [],
     };
-    return { intent: "recommendation", reply: result.response, recommendedProducts: result.recommendations, actions, warnings, conversationState };
+    const reply = context.request.language === "tr"
+      ? result.recommendations.length
+        ? `Menüde ${result.recommendations.map(product => product.name).join(", ")} seçeneklerini buldum.`
+        : "Bu isteğe uyan uygun bir menü ürünü bulamadım."
+      : result.response;
+    return { intent: "recommendation", reply, recommendedProducts: result.recommendations, actions, warnings, conversationState };
   }
 }

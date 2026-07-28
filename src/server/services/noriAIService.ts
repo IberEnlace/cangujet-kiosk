@@ -16,35 +16,30 @@ export class NoriAIService {
   async chat(request: NoriChatRequest): Promise<NoriChatResponse> {
     try {
       return await this.agent.process(request);
-    } catch (error) {
-      console.log("[NORI] Planning source: MockAIProvider (service fallback)");
-      console.error("Nori AI provider failed; using the local mock provider.", error);
+    } catch {
+      if (process.env.NODE_ENV !== "production") console.warn("Nori provider failed; using the local fallback.");
       return new NoriAgentService(this.fallbackProvider).process(request);
     }
   }
 }
 
 function createProvider(): AIProvider {
-  console.log("[NORI] Selected provider:", process.env.NORI_AI_PROVIDER);
   const providerName = (process.env.NORI_AI_PROVIDER ?? "mock").toLowerCase();
   if (providerName === "openai") {
-    console.log("[NORI] Planning source configured: OpenAIProvider");
     try { return new OpenAIProvider(); }
-    catch (error) {
-      console.error("OpenAI provider could not be initialized; using mock provider.", error);
+    catch {
+      if (process.env.NODE_ENV !== "production") console.warn("OpenAI provider could not be initialized; using the local fallback.");
       return new MockAIProvider();
     }
   }
   if (providerName === "gemini") {
-    console.log("[NORI] Planning source configured: GeminiProvider");
     try { return new GeminiProvider(); }
-    catch (error) {
-      console.error("Gemini provider could not be initialized; using mock provider.", error);
+    catch {
+      if (process.env.NODE_ENV !== "production") console.warn("Gemini provider could not be initialized; using the local fallback.");
       return new MockAIProvider();
     }
   }
-  if (providerName !== "mock") console.warn(`Unknown NORI_AI_PROVIDER "${providerName}"; using mock provider.`);
-  console.log("[NORI] Planning source configured: MockAIProvider");
+  if (providerName !== "mock" && process.env.NODE_ENV !== "production") console.warn("Unknown Nori provider; using the local fallback.");
   return new MockAIProvider();
 }
 

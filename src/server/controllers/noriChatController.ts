@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { noriAIService } from "../services/noriAIService";
 import type { NoriChatError, NoriChatRequest, NoriChatResponse } from "../types/noriChat";
 import { normalizeNoriRequestCart } from "../services/noriCartNormalizer";
+import { normalizeSupportedLanguage } from "../../shared/languages";
 
 function isChatRequest(value: unknown): value is NoriChatRequest {
   if (!value || typeof value !== "object") return false;
@@ -42,15 +43,15 @@ export async function noriChatController(
     const rawCart = rawBody && typeof rawBody === "object" && "cart" in rawBody
       ? (rawBody as { cart?: unknown }).cart
       : undefined;
-    console.log("[NORI][RAW_REQUEST_CART]", rawCart);
     const normalizedCart = normalizeNoriRequestCart(rawCart);
-    console.log("[NORI][NORMALIZED_REQUEST_CART]", normalizedCart);
-    console.log("[NORI][CART_NORMALIZATION_COUNTS]", {
-      raw: Array.isArray(rawCart) ? rawCart.length : 0,
-      normalized: normalizedCart.length,
-    });
     const normalizedBody = rawBody && typeof rawBody === "object"
-      ? { ...rawBody, cart: normalizedCart }
+      ? {
+        ...rawBody,
+        cart: normalizedCart,
+        language: normalizeSupportedLanguage(
+          "language" in rawBody ? (rawBody as { language?: unknown }).language : undefined,
+        ),
+      }
       : rawBody;
     if (!isChatRequest(normalizedBody)) {
       response.status(400).json({ error: "Invalid Nori chat request." });

@@ -40,7 +40,7 @@ const CONTINUATION = /\b(also|and|keep it|same requirements|with that|under the 
 const REFERENCE = /\b(it|this|that option|the first one|first option|selected item|that one)\b/;
 
 export function interpretNoriRequest(message: string, state: NoriConversationState): NoriRequestInterpretation {
-  const text = normalize(message);
+  const text = normalize(message, state.preferredLanguage);
   const isContinuation = CONTINUATION.test(text);
   const referencesPreviousProduct = REFERENCE.test(text);
   const mergesClarification = Boolean(state.awaitingConstraintClarification && state.clarificationState?.status === "answered");
@@ -48,14 +48,14 @@ export function interpretNoriRequest(message: string, state: NoriConversationSta
   const dietaryTags = isContinuation || mergesClarification ? [...state.dietaryPreferences] : [...persistentDietary];
   if (/\bvegan\b|\bfully plant based\b/.test(text)) add(dietaryTags, "vegan");
   else if (/\bplant based\b/.test(text)) add(dietaryTags, "vegan");
-  if (/\bvegetarian\b|\b(i do not|i don't|dont) eat meat\b|\bdon't feel like eating meat\b/.test(text)) add(dietaryTags, "vegetarian");
+  if (/\bvegetarian\b|\bvejetaryen\b|\b(i do not|i don't|dont) eat meat\b|\bdon't feel like eating meat\b/.test(text)) add(dietaryTags, "vegetarian");
 
   const maxBudget = number(text, /(?:budget(?:\s+is)?|have|with)\s*\$?\s*(\d+(?:\.\d+)?)/)
     ?? number(text, /(?:under|up to|max)\s*\$\s*(\d+(?:\.\d+)?)/)
     ?? (isContinuation ? state.maxBudget : state.maxBudget);
   const minProtein = number(text, /(?:at least|over|above|more than)?\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\s*(?:of\s*)?protein/)
     ?? number(text, /actually,?\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?(?:\s*(?:of\s*)?protein)?\s+is enough/)
-    ?? (/\b(after the gym|post workout|post-workout|high protein|high-protein)\b/.test(text) ? 20 : isContinuation || mergesClarification ? state.minProtein : null);
+    ?? (/\b(after the gym|post workout|post-workout|high protein|high-protein|protein oranı yüksek|yüksek proteinli)\b/.test(text) ? 20 : isContinuation || mergesClarification ? state.minProtein : null);
   const maxCalories = number(text, /(?:under|max|below|less than)\s*(\d+(?:\.\d+)?)\s*(?:cal|calories)/)
     ?? (isContinuation || mergesClarification ? state.maxCalories : null);
 
@@ -78,7 +78,7 @@ export function interpretNoriRequest(message: string, state: NoriConversationSta
   if (wantsHandheldFood && wantsFillingMeal && !categories.length) categories.push("burger");
   const wantsLightMeal = /\b(light|fresh)\b/.test(text);
   const kids = /\b(kid|kids|child|children)\b/.test(text) || ((isContinuation || mergesClarification) && state.requestedKids);
-  const spicy = /\b(spicy|chili|jalapeno|hot food)\b/.test(text) || ((isContinuation || mergesClarification) && state.requestedSpicy);
+  const spicy = /\b(spicy|chili|jalapeno|hot food|acılı|acı)\b/.test(text) || ((isContinuation || mergesClarification) && state.requestedSpicy);
   const wantsDrink = /\b(drinks?|beverages?|coffee|latte|juice|water)\b/.test(text) || ((isContinuation || mergesClarification) && state.requestedDrink);
   const wantsDessert = categories.includes("dessert") || ((isContinuation || mergesClarification) && state.requestedDessert);
   const ambiguousFilling = wantsFillingMeal && !wantsHandheldFood && !preferredIngredients.length && !categories.length;
@@ -132,6 +132,8 @@ export function isStableDietaryStatement(message: string) {
   return /\b(i am|i'm|im) vegan\b|\b(i am|i'm|im) vegetarian\b|\b(i do not|i don't|dont) eat meat\b/.test(text);
 }
 
-function normalize(value: string) { return value.toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim(); }
+function normalize(value: string, language: NoriConversationState["preferredLanguage"] = "en") {
+  return value.normalize("NFC").toLocaleLowerCase(language === "tr" ? "tr-TR" : "en-US").replace(/[_-]+/g, " ").replace(/\s+/g, " ").trim();
+}
 function number(text: string, pattern: RegExp) { const match = text.match(pattern); return match ? Number(match[1]) : null; }
 function add(values: string[], value: string) { if (!values.includes(value)) values.push(value); }

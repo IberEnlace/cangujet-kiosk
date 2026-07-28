@@ -1,12 +1,9 @@
 import type { AIFoodItem } from "../../app/data/aiMenu";
 import type { AllergenCheck } from "../../app/services/noriMenuEngine";
-import type {
-  NoriLanguage,
-  NoriSelectedCustomization,
-  NoriWarning,
-} from "../types/noriChat";
-import type { NoriRequestInterpretation } from "./noriRequestInterpreter";
+import { formatNumber } from "../../shared/languages";
+import type { NoriLanguage, NoriSelectedCustomization, NoriWarning } from "../types/noriChat";
 import type { calculateCustomizedProduct } from "./noriCustomizationService";
+import type { NoriRequestInterpretation } from "./noriRequestInterpreter";
 
 type CustomizedCalculation = ReturnType<typeof calculateCustomizedProduct>;
 
@@ -29,115 +26,88 @@ export function buildRecommendationResponse(input: {
 }) {
   const { interpretation, language, companion, warnings = [] } = input;
   const products = input.products.slice(0, 3);
-  const arabic = isArabic(language);
-  if (!products.length && !arabic) {
-    const { minProtein, maxBudget, categories } = interpretation.constraints;
-    const reply = minProtein !== null && categories.includes("hot_drink")
-      ? `No documented hot drink provides at least ${minProtein}g of protein. Would you like a meal instead, or would you like to remove the protein requirement?`
-      : minProtein !== null && maxBudget !== null
-      ? `No documented item matches both at least ${minProtein}g of protein and a $${maxBudget} budget. Would you like to raise the budget or lower the protein target?`
-      : minProtein !== null
-        ? `No documented item matches at least ${minProtein}g of protein. Would you like to lower the protein target or choose another priority?`
-        : maxBudget !== null
-          ? `No documented item matches all of those conditions within a $${maxBudget} budget. Would you like to raise the budget or change another condition?`
-          : "No documented item matches all of those conditions. Which condition would you like to change?";
-    return logResponse("recommendation", "no_match", [], language, reply);
-  }
+  const turkish = language === "tr";
   if (!products.length) {
-    const reason = input.noMatchReason
-      ? arabic
-        ? ` لأن أقرب الخيارات كانت: ${input.noMatchReason}`
-        : ` because the closest options were ${input.noMatchReason}`
-      : "";
-    return logResponse(
-      "recommendation",
-      "no_match",
-      [],
-      language,
-      arabic
-        ? `لم أجد خيارًا موثقًا يطابق كل الشروط${reason}. يمكنني تخفيف شرط واحد بأمان.`
-        : `I could not find a documented option matching every requirement${reason}. I can safely relax one condition.`,
-    );
+    const { minProtein, maxBudget, categories } = interpretation.constraints;
+    let reply: string;
+    if (turkish) {
+      reply = minProtein !== null && categories.includes("hot_drink")
+        ? `En az ${number(minProtein, language)} g protein içeren belgelenmiş bir sıcak içecek yok. Bunun yerine bir yemek seçmek veya protein koşulunu kaldırmak ister misiniz?`
+        : minProtein !== null && maxBudget !== null
+          ? `Hem en az ${number(minProtein, language)} g protein hem de $${money(maxBudget, language)} bütçe koşuluna uyan belgelenmiş bir ürün yok. Bütçeyi artırmak mı, protein hedefini düşürmek mi istersiniz?`
+          : minProtein !== null
+            ? `En az ${number(minProtein, language)} g protein koşuluna uyan belgelenmiş bir ürün yok. Protein hedefini düşürmek veya başka bir öncelik seçmek ister misiniz?`
+            : maxBudget !== null
+              ? `$${money(maxBudget, language)} bütçeyle tüm koşullara uyan belgelenmiş bir ürün yok. Bütçeyi artırmak veya başka bir koşulu değiştirmek ister misiniz?`
+              : "Tüm koşullara uyan belgelenmiş bir ürün yok. Hangi koşulu değiştirmek istersiniz?";
+    } else {
+      reply = minProtein !== null && categories.includes("hot_drink")
+        ? `No documented hot drink provides at least ${number(minProtein, language)}g of protein. Would you like a meal instead, or would you like to remove the protein requirement?`
+        : minProtein !== null && maxBudget !== null
+          ? `No documented item matches both at least ${number(minProtein, language)}g of protein and a $${money(maxBudget, language)} budget. Would you like to raise the budget or lower the protein target?`
+          : minProtein !== null
+            ? `No documented item matches at least ${number(minProtein, language)}g of protein. Would you like to lower the protein target or choose another priority?`
+            : maxBudget !== null
+              ? `No documented item matches all of those conditions within a $${money(maxBudget, language)} budget. Would you like to raise the budget or change another condition?`
+              : "No documented item matches all of those conditions. Which condition would you like to change?";
+    }
+    return reply;
   }
 
   const [best, ...alternatives] = products;
   const template = recommendationTemplate(interpretation);
-  const opening = arabic
-    ? arabicOpening(best, template, interpretation)
+  const opening = turkish
+    ? turkishOpening(best, template, interpretation)
     : englishOpening(best, template, interpretation);
-  const reasons = reasonParts(best, interpretation, arabic, template).slice(0, 3);
+  const reasons = reasonParts(best, interpretation, language, template).slice(0, 3);
   const explanation = reasons.length
-    ? `${/[.!?؟]$/.test(opening) ? " " : ". "}${capitalizeSentence(reasons.join(arabic ? "، و" : ", and "))}.`
-    : /[.!?؟]$/.test(opening) ? "" : ".";
+    ? `${/[.!?]$/.test(opening) ? " " : ". "}${capitalizeSentence(reasons.join(turkish ? " ve " : ", and "))}.`
+    : /[.!?]$/.test(opening) ? "" : ".";
   const alternativeText = alternatives.length
-    ? arabic
-      ? ` ومن البدائل ${alternatives.map(product => `${product.name} بسعر $${money(product.price)}`).join(" أو ")}.`
-      : ` Other good matches are ${alternatives.map(product => `${product.name} at $${money(product.price)}`).join(" or ")}.`
+    ? turkish
+      ? ` Diğer uygun seçenekler: ${alternatives.map(product => `${product.name} ($${money(product.price, language)})`).join(" veya ")}.`
+      : ` Other good matches are ${alternatives.map(product => `${product.name} at $${money(product.price, language)}`).join(" or ")}.`
     : "";
   const companionText = companion
-    ? arabic
-      ? ` ويمكن إضافة ${companion.name} بسعر $${money(companion.price)} ليصبح المجموع $${money(best.price + companion.price)}.`
-      : ` Add ${companion.name} for $${money(companion.price)}, bringing the pair to $${money(best.price + companion.price)}.`
+    ? turkish
+      ? ` $${money(companion.price, language)} karşılığında ${companion.name} eklenirse ikisinin toplamı $${money(best.price + companion.price, language)} olur.`
+      : ` Add ${companion.name} for $${money(companion.price, language)}, bringing the pair to $${money(best.price + companion.price, language)}.`
     : "";
-  const warningText = warnings.length
-    ? ` ${formatWarning(warnings[0], language)}`
-    : "";
-
-  return logResponse(
-    "recommendation",
-    template,
-    products,
-    language,
-    `${opening}${explanation}${alternativeText}${companionText}${warningText}`,
-  );
+  const warningText = warnings.length ? ` ${formatWarning(warnings[0], language)}` : "";
+  return `${opening}${explanation}${alternativeText}${companionText}${warningText}`;
 }
 
 export function buildClarificationResponse(question: string, language: NoriLanguage) {
-  const normalized = question.toLowerCase();
-  let reply = question;
-  if (isArabic(language)) {
-    reply = normalized.includes("hot drink")
-      ? "هل تفضّل مشروبًا ساخنًا أم باردًا؟"
-      : normalized.includes("beef")
-        ? "هل تفضّل وجبة لحم بقري، دجاج، أم خيارًا نباتيًا؟"
-        : "هل يمكنك توضيح الخيار الذي تفضّله؟";
-  }
-  return logResponse("recommendation", "clarification", [], language, reply);
+  if (language !== "tr") return question;
+  const normalized = question.toLocaleLowerCase("en-US");
+  if (normalized.includes("hot drink")) return "Sıcak bir içecek mi, soğuk bir içecek mi tercih edersiniz?";
+  if (normalized.includes("beef")) return "Dana etli, tavuklu veya vejetaryen bir yemek mi tercih edersiniz?";
+  return "Hangi seçeneği tercih ettiğinizi biraz daha açıklar mısınız?";
 }
 
-export function buildAllergyResponse(
-  product: AIFoodItem,
-  check: AllergenCheck,
-  language: NoriLanguage,
-) {
-  const severe = isArabic(language)
-    ? " للحساسية الشديدة، يرجى التأكد من موظفي المطعم."
+export function buildAllergyResponse(product: AIFoodItem, check: AllergenCheck, language: NoriLanguage) {
+  const turkish = language === "tr";
+  const severe = turkish
+    ? " Ciddi bir alerjiniz varsa lütfen restoran personeliyle doğrulayın."
     : " For a severe allergy, please confirm with restaurant staff.";
-  let template = "allergy_clear";
-  let reply: string;
-
   if (check.contains.length) {
-    template = "allergy_contains";
-    reply = isArabic(language)
-      ? `${product.name} يحتوي مباشرةً على ${join(check.contains)}.${severe}`
+    return turkish
+      ? `${product.name} doğrudan ${join(check.contains)} içerir.${severe}`
       : `${product.name} directly contains ${join(check.contains)}.${severe}`;
-  } else if (check.mayContain.length) {
-    template = "allergy_may_contain";
-    reply = isArabic(language)
-      ? `${product.name} لا يذكرها كمكوّن مباشر، لكنه قد يحتوي على ${join(check.mayContain)}.${severe}`
-      : `${product.name} does not list it as a direct ingredient, but may contain ${join(check.mayContain)}.${severe}`;
-  } else if (check.crossContact.length) {
-    template = "allergy_cross_contact";
-    reply = isArabic(language)
-      ? `${product.name} لا يذكرها كمكوّن مباشر، لكن يوجد تلامس متبادل موثق مع ${join(check.crossContact)} بسبب المعدات المشتركة.${severe}`
-      : `${product.name} does not list it as a direct ingredient, but shared-equipment cross-contact with ${join(check.crossContact)} is documented.${severe}`;
-  } else {
-    reply = isArabic(language)
-      ? `${product.name} لا يحتوي على تطابق موثق مع الحساسية المحددة، لكن لا يمكن ضمان الأمان الكامل.${severe}`
-      : `${product.name} has no documented match for the selected allergens, but complete safety cannot be guaranteed.${severe}`;
   }
-
-  return logResponse("allergen_check", template, [product], language, reply);
+  if (check.mayContain.length) {
+    return turkish
+      ? `${product.name} bunları doğrudan içerik olarak listelemiyor ancak ${join(check.mayContain)} içerebilir.${severe}`
+      : `${product.name} does not list it as a direct ingredient, but may contain ${join(check.mayContain)}.${severe}`;
+  }
+  if (check.crossContact.length) {
+    return turkish
+      ? `${product.name} bunları doğrudan içerik olarak listelemiyor ancak ortak ekipman nedeniyle ${join(check.crossContact)} ile çapraz temas riski belgelenmiştir.${severe}`
+      : `${product.name} does not list it as a direct ingredient, but shared-equipment cross-contact with ${join(check.crossContact)} is documented.${severe}`;
+  }
+  return turkish
+    ? `${product.name} için seçili alerjenlerle belgelenmiş bir eşleşme yoktur ancak tam güvenlik garanti edilemez.${severe}`
+    : `${product.name} has no documented match for the selected allergens, but complete safety cannot be guaranteed.${severe}`;
 }
 
 export function buildCustomizationResponse(
@@ -146,37 +116,34 @@ export function buildCustomizationResponse(
   calculation: CustomizedCalculation,
   language: NoriLanguage,
 ) {
-  const arabic = isArabic(language);
+  const turkish = language === "tr";
   const priceText = customization.priceAdjustment === 0
-    ? arabic ? "يبقى السعر كما هو" : "the price stays the same"
-    : arabic
-      ? `يتغير السعر بمقدار ${signedMoney(customization.priceAdjustment)} ليصبح $${money(calculation.adjustedPrice)}`
-      : `the price changes by ${signedMoney(customization.priceAdjustment)} to $${money(calculation.adjustedPrice)}`;
-  const nutritionChanges = [
-    calculation.adjustedNutrition.calories !== product.cal ? `calories change from ${product.cal} to ${calculation.adjustedNutrition.calories}` : "",
-    calculation.adjustedNutrition.proteinGrams !== product.proteinGrams ? `protein changes from ${product.proteinGrams}g to ${calculation.adjustedNutrition.proteinGrams}g` : "",
-  ].filter(Boolean);
-  const nutritionText = nutritionChanges.length ? `, ${nutritionChanges.join(", and ")}` : "";
+    ? turkish ? "fiyat değişmez" : "the price stays the same"
+    : turkish
+      ? `fiyat ${signedMoney(customization.priceAdjustment, language)} değişerek $${money(calculation.adjustedPrice, language)} olur`
+      : `the price changes by ${signedMoney(customization.priceAdjustment, language)} to $${money(calculation.adjustedPrice, language)}`;
+  const nutritionChanges = turkish
+    ? [
+      calculation.adjustedNutrition.calories !== product.cal ? `kalori ${number(product.cal, language)} değerinden ${number(calculation.adjustedNutrition.calories, language)} değerine çıkar` : "",
+      calculation.adjustedNutrition.proteinGrams !== product.proteinGrams ? `protein ${number(product.proteinGrams, language)} g değerinden ${number(calculation.adjustedNutrition.proteinGrams, language)} g değerine çıkar` : "",
+    ].filter(Boolean)
+    : [
+      calculation.adjustedNutrition.calories !== product.cal ? `calories change from ${number(product.cal, language)} to ${number(calculation.adjustedNutrition.calories, language)}` : "",
+      calculation.adjustedNutrition.proteinGrams !== product.proteinGrams ? `protein changes from ${number(product.proteinGrams, language)}g to ${number(calculation.adjustedNutrition.proteinGrams, language)}g` : "",
+    ].filter(Boolean);
+  const nutritionText = nutritionChanges.length ? `, ${nutritionChanges.join(turkish ? " ve " : ", and ")}` : "";
   const allergenText = customization.allergensRemoved.length
-    ? arabic
-      ? `، وتُزال ${join(customization.allergensRemoved)} من الوصفة الموثقة`
+    ? turkish
+      ? `; belgelenmiş tariften ${join(customization.allergensRemoved)} çıkarılır`
       : `, and ${join(customization.allergensRemoved)} are removed from the documented recipe`
     : customization.allergensAdded.length
-      ? arabic
-        ? `، وتُضاف ${join(customization.allergensAdded)} إلى مسببات الحساسية الموثقة`
+      ? turkish
+        ? `; belgelenmiş alerjenlere ${join(customization.allergensAdded)} eklenir`
         : `, and ${join(customization.allergensAdded)} are added to the documented allergens`
       : "";
-  const reply = arabic
-    ? `نعم. خيار ${customization.optionName} موثق لـ ${product.name}. ${priceText}، ${nutritionText}${allergenText}. يبقى خطر التلامس المتبادل قائمًا.`
+  return turkish
+    ? `Evet. ${customization.optionName}, ${product.name} için belgelenmiş bir seçenektir; ${priceText}${nutritionText}${allergenText}. Çapraz temas riski devam eder.`
     : `Yes. ${customization.optionName} is documented for ${product.name}; ${priceText}${nutritionText}${allergenText}. Cross-contact risk still remains.`;
-
-  return logResponse(
-    "customization_question",
-    customization.nutritionAdjustment.calories === 0 ? "customization_same_nutrition" : "customization_adjusted",
-    [product],
-    language,
-    reply,
-  );
 }
 
 export function buildCartConfirmationResponse(input: {
@@ -184,45 +151,36 @@ export function buildCartConfirmationResponse(input: {
   quantity: number;
   customizations: NoriSelectedCustomization[];
   adjustedUnitPrice: number;
-  adjustedNutrition?: {
-    calories: number;
-    proteinGrams: number;
-  };
+  adjustedNutrition?: { calories: number; proteinGrams: number };
   language: NoriLanguage;
 }) {
+  const turkish = input.language === "tr";
   const customizationText = input.customizations.length
-    ? ` ${isArabic(input.language) ? "مع" : "with"} ${input.customizations.map(item => item.optionName).join(", ")}`
+    ? ` ${turkish ? "şu seçeneklerle:" : "with"} ${input.customizations.map(item => item.optionName).join(", ")}`
     : "";
   const total = input.adjustedUnitPrice * input.quantity;
   const nutritionText = input.adjustedNutrition
-    ? isArabic(input.language)
-      ? ` (${input.adjustedNutrition.calories} سعرة، ${input.adjustedNutrition.proteinGrams}غ بروتين)`
-      : ` (${input.adjustedNutrition.calories} calories, ${input.adjustedNutrition.proteinGrams}g protein)`
+    ? turkish
+      ? ` (${number(input.adjustedNutrition.calories, input.language)} kalori, ${number(input.adjustedNutrition.proteinGrams, input.language)} g protein)`
+      : ` (${number(input.adjustedNutrition.calories, input.language)} calories, ${number(input.adjustedNutrition.proteinGrams, input.language)}g protein)`
     : "";
   const safetyText = input.customizations.length
-    ? isArabic(input.language)
-      ? " وتبقى تحذيرات التلامس المتبادل قائمة."
-      : " Cross-contact warnings still apply."
+    ? turkish ? " Çapraz temas uyarıları geçerliliğini korur." : " Cross-contact warnings still apply."
     : "";
-  const reply = isArabic(input.language)
-    ? `يرجى التأكيد: إضافة ${input.quantity} من ${input.product.name}${customizationText} بسعر إجمالي $${money(total)}${nutritionText}.${safetyText}`
-    : `Please confirm: add ${input.quantity} ${input.product.name}${customizationText} for $${money(total)}${nutritionText}.${safetyText}`;
-  return logResponse("add_to_cart", "cart_confirmation", [input.product], input.language, reply);
+  return turkish
+    ? `Lütfen onaylayın: ${input.quantity} adet ${input.product.name}${customizationText}, toplam $${money(total, input.language)}${nutritionText}.${safetyText}`
+    : `Please confirm: add ${input.quantity} ${input.product.name}${customizationText} for $${money(total, input.language)}${nutritionText}.${safetyText}`;
 }
 
-export function buildCartExecutionResponse(
-  productNames: string[],
-  success: boolean,
-  language: NoriLanguage,
-) {
-  const reply = success
-    ? isArabic(language)
-      ? `تمت إضافة ${productNames.join(" و")} إلى سلتك.`
-      : `${productNames.join(" and ")} ${productNames.length === 1 ? "was" : "were"} added to your cart.`
-    : isArabic(language)
-      ? "تعذرت إضافة العناصر إلى سلتك. يرجى المحاولة مرة أخرى."
+export function buildCartExecutionResponse(productNames: string[], success: boolean, language: NoriLanguage) {
+  if (!success) {
+    return language === "tr"
+      ? "Ürünü sepetinize ekleyemedim. Lütfen tekrar deneyin."
       : "I could not add the item to your cart. Please try again.";
-  return logResponse("add_to_cart", success ? "cart_success" : "cart_failure", [], language, reply);
+  }
+  return language === "tr"
+    ? `${productNames.join(" ve ")} sepetinize eklendi.`
+    : `${productNames.join(" and ")} ${productNames.length === 1 ? "was" : "were"} added to your cart.`;
 }
 
 export function buildCheckoutResponse(input: {
@@ -233,33 +191,24 @@ export function buildCheckoutResponse(input: {
   language: NoriLanguage;
   confirmation: boolean;
 }) {
+  const turkish = input.language === "tr";
   const lineText = input.lines.map(line => {
-    const customization = line.customizationNames.length
-      ? ` (${line.customizationNames.join(", ")})`
-      : "";
-    return `${line.quantity}x ${line.product.name}${customization}: $${money(line.lineTotal)}`;
+    const customization = line.customizationNames.length ? ` (${line.customizationNames.join(", ")})` : "";
+    return `${line.quantity}x ${line.product.name}${customization}: $${money(line.lineTotal, input.language)}`;
   }).join("; ");
   const warnings = input.lines.flatMap(line => line.warnings);
   const warningText = warnings.length
-    ? isArabic(input.language)
-      ? ` توجد تحذيرات حساسية موثقة: ${warnings.map(warning => formatWarning(warning, input.language)).join(" ")}`
+    ? turkish
+      ? ` Belgelenmiş alerjen uyarıları bulunuyor: ${warnings.map(warning => formatWarning(warning, input.language)).join(" ")}`
       : ` Documented allergen warnings apply: ${warnings.map(warning => formatWarning(warning, input.language)).join(" ")}`
     : "";
-  const totals = isArabic(input.language)
-    ? `المجموع الفرعي $${money(input.subtotal)}، الضريبة $${money(input.tax)}، الإجمالي $${money(input.total)}.`
-    : `Subtotal $${money(input.subtotal)}, estimated tax $${money(input.tax)}, total $${money(input.total)}.`;
+  const totals = turkish
+    ? `Ara toplam $${money(input.subtotal, input.language)}, tahmini vergi $${money(input.tax, input.language)}, toplam $${money(input.total, input.language)}.`
+    : `Subtotal $${money(input.subtotal, input.language)}, estimated tax $${money(input.tax, input.language)}, total $${money(input.total, input.language)}.`;
   const confirmation = input.confirmation
-    ? isArabic(input.language)
-      ? " أكّد للانتقال إلى شاشة الدفع الآمنة."
-      : " Confirm to open the secure payment screen."
+    ? turkish ? " Güvenli ödeme ekranını açmak için onaylayın." : " Confirm to open the secure payment screen."
     : "";
-  return logResponse(
-    "checkout",
-    "checkout_summary",
-    input.lines.map(line => line.product),
-    input.language,
-    `${lineText}. ${totals}${warningText}${confirmation}`,
-  );
+  return `${lineText}. ${totals}${warningText}${confirmation}`;
 }
 
 function recommendationTemplate(interpretation: NoriRequestInterpretation) {
@@ -273,115 +222,62 @@ function recommendationTemplate(interpretation: NoriRequestInterpretation) {
   return "general";
 }
 
-function englishOpening(
-  product: AIFoodItem,
-  template: string,
-  interpretation: NoriRequestInterpretation,
-) {
+function englishOpening(product: AIFoodItem, template: string, interpretation: NoriRequestInterpretation) {
   switch (template) {
-    case "budget":
-      return `Within your $${money(interpretation.constraints.maxBudget ?? product.price)} budget, ${product.name} stands out at $${money(product.price)}`;
-    case "high_protein":
-      return `The best high-protein match is ${product.name} with ${product.proteinGrams}g protein`;
-    case "low_calorie":
-      return `${product.name} fits your calorie limit at ${product.cal} calories`;
-    case "vegan":
-      return `For a plant-based choice, ${product.name} is a documented vegan option at $${money(product.price)}`;
-    case "kids":
-      return `${product.name} is a documented kids meal`;
-    case "spicy":
-      return `If you enjoy some heat, ${product.name} is a strong spicy choice`;
-    default:
-      return `${product.name} is my leading recommendation.`;
+    case "budget": return `Within your $${money(interpretation.constraints.maxBudget ?? product.price, "en")} budget, ${product.name} stands out at $${money(product.price, "en")}`;
+    case "high_protein": return `The best high-protein match is ${product.name} with ${number(product.proteinGrams, "en")}g protein`;
+    case "low_calorie": return `${product.name} fits your calorie limit at ${number(product.cal, "en")} calories`;
+    case "vegan": return `For a plant-based choice, ${product.name} is a documented vegan option at $${money(product.price, "en")}`;
+    case "kids": return `${product.name} is a documented kids meal`;
+    case "spicy": return `If you enjoy some heat, ${product.name} is a strong spicy choice`;
+    default: return `${product.name} is my leading recommendation.`;
   }
 }
 
-function arabicOpening(
-  product: AIFoodItem,
-  template: string,
-  interpretation: NoriRequestInterpretation,
-) {
+function turkishOpening(product: AIFoodItem, template: string, interpretation: NoriRequestInterpretation) {
   switch (template) {
-    case "budget":
-      return `ضمن ميزانيتك البالغة $${money(interpretation.constraints.maxBudget ?? product.price)}، يبرز ${product.name} بسعر $${money(product.price)}`;
-    case "high_protein":
-      return `أفضل خيار غني بالبروتين هو ${product.name} مع ${product.proteinGrams}غ بروتين`;
-    case "low_calorie":
-      return `${product.name} يناسب حد السعرات مع ${product.cal} سعرة`;
-    case "vegan":
-      return `${product.name} خيار نباتي بالكامل وموثق بسعر $${money(product.price)}`;
-    case "kids":
-      return `${product.name} وجبة أطفال موثقة`;
-    case "spicy":
-      return `إذا كنت تحب الطعام الحار، فإن ${product.name} خيار مناسب`;
-    default:
-      return `${product.name} هو اقتراحي الأول`;
+    case "budget": return `$${money(interpretation.constraints.maxBudget ?? product.price, "tr")} bütçeniz içinde $${money(product.price, "tr")} fiyatlı ${product.name} öne çıkıyor`;
+    case "high_protein": return `En uygun yüksek proteinli seçenek, ${number(product.proteinGrams, "tr")} g protein içeren ${product.name}`;
+    case "low_calorie": return `${product.name}, ${number(product.cal, "tr")} kaloriyle kalori sınırınıza uyuyor`;
+    case "vegan": return `Bitki bazlı bir seçim olarak ${product.name}, $${money(product.price, "tr")} fiyatlı belgelenmiş vegan bir seçenektir`;
+    case "kids": return `${product.name}, belgelenmiş bir çocuk menüsüdür`;
+    case "spicy": return `Acı seviyorsanız ${product.name} güçlü bir seçenektir`;
+    default: return `${product.name} ilk önerimdir.`;
   }
 }
 
-function reasonParts(
-  product: AIFoodItem,
-  interpretation: NoriRequestInterpretation,
-  arabic: boolean,
-  template: string,
-) {
+function reasonParts(product: AIFoodItem, interpretation: NoriRequestInterpretation, language: NoriLanguage, template: string) {
   const constraints = interpretation.constraints;
+  const turkish = language === "tr";
   const reasons: string[] = [];
-  if (constraints.maxBudget !== null && template !== "budget") {
-    reasons.push(arabic ? `سعره $${money(product.price)}` : `It costs $${money(product.price)}`);
-  }
-  if (constraints.minProtein !== null && template !== "high_protein") {
-    reasons.push(arabic ? `يحتوي ${product.proteinGrams}غ بروتين` : `it provides ${product.proteinGrams}g protein`);
-  }
-  if (constraints.maxCalories !== null && template !== "low_calorie") {
-    reasons.push(arabic ? `يحتوي ${product.cal} سعرة` : `it has ${product.cal} calories`);
-  }
-  if (constraints.dietaryTags.includes("vegan") && template !== "vegan") {
-    reasons.push(arabic ? "موثق كنباتي بالكامل" : "it is documented vegan");
-  } else if (constraints.dietaryTags.includes("vegetarian")) {
-    reasons.push(arabic ? "موثق كنباتي" : "it is documented vegetarian");
-  }
-  if (constraints.kids && template !== "kids") {
-    reasons.push(arabic ? "مصنف ضمن وجبات الأطفال" : "it is listed in the kids category");
-  }
-  if (constraints.spicy && template !== "spicy") {
-    reasons.push(arabic ? `مستوى التوابل الموثق ${product.spiceLevel}` : `its documented spice level is ${product.spiceLevel}`);
-  }
-  if (!reasons.length && template === "general") {
-    reasons.push(arabic ? `سعره $${money(product.price)}` : `It costs $${money(product.price)}`);
-  }
+  if (constraints.maxBudget !== null && template !== "budget") reasons.push(turkish ? `fiyatı $${money(product.price, language)}` : `It costs $${money(product.price, language)}`);
+  if (constraints.minProtein !== null && template !== "high_protein") reasons.push(turkish ? `${number(product.proteinGrams, language)} g protein sağlar` : `it provides ${number(product.proteinGrams, language)}g protein`);
+  if (constraints.maxCalories !== null && template !== "low_calorie") reasons.push(turkish ? `${number(product.cal, language)} kaloridir` : `it has ${number(product.cal, language)} calories`);
+  if (constraints.dietaryTags.includes("vegan") && template !== "vegan") reasons.push(turkish ? "vegan olduğu belgelenmiştir" : "it is documented vegan");
+  else if (constraints.dietaryTags.includes("vegetarian")) reasons.push(turkish ? "vejetaryen olduğu belgelenmiştir" : "it is documented vegetarian");
+  if (constraints.kids && template !== "kids") reasons.push(turkish ? "çocuk menüsü kategorisindedir" : "it is listed in the kids category");
+  if (constraints.spicy && template !== "spicy") reasons.push(turkish ? `belgelenmiş acılık seviyesi ${product.spiceLevel}` : `its documented spice level is ${product.spiceLevel}`);
+  if (!reasons.length && template === "general") reasons.push(turkish ? `fiyatı $${money(product.price, language)}` : `It costs $${money(product.price, language)}`);
   return reasons;
-}
-
-function logResponse(
-  intent: string,
-  template: string,
-  products: AIFoodItem[],
-  language: NoriLanguage,
-  reply: string,
-) {
-  console.log("[NORI][RESPONSE]");
-  console.log("intent:", intent);
-  console.log("template:", template);
-  console.log("products:", products.map(product => product.id));
-  console.log("language:", language);
-  return reply;
 }
 
 function capitalizeSentence(value: string) {
   return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
 }
 
-function isArabic(language: NoriLanguage) {
-  return language.toLowerCase().startsWith("ar");
+function number(value: number, language: NoriLanguage) {
+  return formatNumber(value, language);
 }
 
-function money(value: number) {
-  return value.toFixed(2);
+function money(value: number, language: NoriLanguage) {
+  return new Intl.NumberFormat(language === "tr" ? "tr-TR" : "en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(value);
 }
 
-function signedMoney(value: number) {
-  return `${value >= 0 ? "+" : "-"}$${Math.abs(value).toFixed(2)}`;
+function signedMoney(value: number, language: NoriLanguage) {
+  return `${value >= 0 ? "+" : "-"}$${money(Math.abs(value), language)}`;
 }
 
 function join(values: string[]) {
@@ -389,20 +285,12 @@ function join(values: string[]) {
 }
 
 function formatWarning(warning: NoriWarning, language: NoriLanguage) {
-  if (isArabic(language)) {
-    if (warning.type === "contains") {
-      return `${warning.productName} يحتوي على ${join(warning.allergens)}.`;
-    }
-    if (warning.type === "may_contain") {
-      return `${warning.productName} قد يحتوي على ${join(warning.allergens)}.`;
-    }
-    return `${warning.productName} لديه خطر تلامس متبادل موثق مع ${join(warning.allergens)}.`;
+  if (language === "tr") {
+    if (warning.type === "contains") return `${warning.productName}, ${join(warning.allergens)} içerir.`;
+    if (warning.type === "may_contain") return `${warning.productName}, ${join(warning.allergens)} içerebilir.`;
+    return `${warning.productName} için ${join(warning.allergens)} ile belgelenmiş çapraz temas riski vardır.`;
   }
-  if (warning.type === "contains") {
-    return `${warning.productName} contains ${join(warning.allergens)}.`;
-  }
-  if (warning.type === "may_contain") {
-    return `${warning.productName} may contain ${join(warning.allergens)}.`;
-  }
+  if (warning.type === "contains") return `${warning.productName} contains ${join(warning.allergens)}.`;
+  if (warning.type === "may_contain") return `${warning.productName} may contain ${join(warning.allergens)}.`;
   return `${warning.productName} has documented cross-contact with ${join(warning.allergens)}.`;
 }

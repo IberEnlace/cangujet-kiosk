@@ -1,4 +1,4 @@
-import { isSupportedLanguage } from "../../config/languages";
+import { isSupportedLanguage, normalizeSupportedLanguage } from "../../config/languages";
 import { isOrderType } from "../../config/serviceOptions";
 import { DeviceConfigurationError, type DevicePaymentMethod, type KioskDeviceConfig } from "../../types/device";
 import { DEVICE_CONFIG_STORAGE_KEY, type DeviceConfigurationService } from "./DeviceConfigurationService";
@@ -20,7 +20,7 @@ export class MockDeviceConfigurationService implements DeviceConfigurationServic
       deviceId: "device-ist-001", kioskId: "kiosk-ist-01", kioskName: "Morrow Downtown Kiosk 01",
       branchId: "branch-ist-downtown", branchName: "Istanbul Branch", restaurantId: "morrow-restaurant-01",
       restaurantName: "MORROW", currency: "EUR", locale: "en-TR", timezone: "Europe/Istanbul", menuVersion: "2026.07",
-      settings: { enabledLanguages: ["en", "tr", "ar"], defaultLanguage: "en", allowedOrderTypes: ["dine_in", "take_away"], allowedPaymentMethods: PAYMENT_METHODS, receiptPrintingEnabled: true, aiAssistantEnabled: true, voiceAssistantEnabled: true },
+      settings: { enabledLanguages: ["en", "tr"], defaultLanguage: "en", allowedOrderTypes: ["dine_in", "take_away"], allowedPaymentMethods: PAYMENT_METHODS, receiptPrintingEnabled: true, aiAssistantEnabled: true, voiceAssistantEnabled: true },
       configuredAt: now,
     };
   }
@@ -38,7 +38,27 @@ export class MockDeviceConfigurationService implements DeviceConfigurationServic
   }
 
   getSavedConfiguration(): KioskDeviceConfig | null {
-    try { const raw = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY); if (!raw) return null; const parsed: unknown = JSON.parse(raw); return this.isConfigurationValid(parsed) ? parsed : null; } catch { return null; }
+    try {
+      const raw = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY);
+      if (!raw) return null;
+      const parsed: unknown = JSON.parse(raw);
+      if (!isRecord(parsed) || !isRecord(parsed.settings)) return null;
+      const legacyLanguages = Array.isArray(parsed.settings.enabledLanguages) ? parsed.settings.enabledLanguages : [];
+      const enabledLanguages = [...new Set(legacyLanguages.map(value => normalizeSupportedLanguage(value)))];
+      const defaultLanguage = normalizeSupportedLanguage(parsed.settings.defaultLanguage);
+      if (!enabledLanguages.includes(defaultLanguage)) enabledLanguages.push(defaultLanguage);
+      const migrated = {
+        ...parsed,
+        settings: {
+          ...parsed.settings,
+          enabledLanguages: enabledLanguages.length ? enabledLanguages : ["en"],
+          defaultLanguage,
+        },
+      };
+      if (!this.isConfigurationValid(migrated)) return null;
+      if (JSON.stringify(migrated) !== JSON.stringify(parsed)) localStorage.setItem(DEVICE_CONFIG_STORAGE_KEY, JSON.stringify(migrated));
+      return migrated;
+    } catch { return null; }
   }
   saveConfiguration(config: KioskDeviceConfig) { if (!this.isConfigurationValid(config)) throw new DeviceConfigurationError("configuration_error"); localStorage.setItem(DEVICE_CONFIG_STORAGE_KEY, JSON.stringify(config)); }
   clearConfiguration() { localStorage.removeItem(DEVICE_CONFIG_STORAGE_KEY); }

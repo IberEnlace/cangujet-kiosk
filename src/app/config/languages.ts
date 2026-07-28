@@ -1,23 +1,44 @@
-export type SupportedLanguage = "en" | "tr" | "ar";
+import {
+  LANGUAGE_CONFIG,
+  SUPPORTED_LANGUAGE_CODES,
+  getLanguageDefinition,
+  isSupportedLanguage,
+  normalizeSupportedLanguage,
+  type SupportedLanguage,
+} from "../../shared/languages";
 
 export interface LanguageOption {
   code: SupportedLanguage;
   name: string;
   nativeName: string;
-  direction: "ltr" | "rtl";
+  direction: "ltr";
   speechLocale: string;
 }
 
-export const supportedLanguages: readonly LanguageOption[] = [
-  { code: "en", name: "English", nativeName: "English", direction: "ltr", speechLocale: "en-US" },
-  { code: "tr", name: "Turkish", nativeName: "Türkçe", direction: "ltr", speechLocale: "tr-TR" },
-  { code: "ar", name: "Arabic", nativeName: "العربية", direction: "rtl", speechLocale: "ar-SA" },
-] as const;
-
-export function isSupportedLanguage(value: string | null): value is SupportedLanguage {
-  return supportedLanguages.some(language => language.code === value);
-}
+export const supportedLanguages: readonly LanguageOption[] = SUPPORTED_LANGUAGE_CODES.map(code => ({
+  code,
+  name: LANGUAGE_CONFIG[code].label,
+  nativeName: LANGUAGE_CONFIG[code].nativeLabel,
+  direction: LANGUAGE_CONFIG[code].direction,
+  speechLocale: LANGUAGE_CONFIG[code].speechRecognitionLocale,
+}));
 
 export function getLanguageOption(code: SupportedLanguage): LanguageOption {
-  return supportedLanguages.find(language => language.code === code) ?? supportedLanguages[0];
+  const language = getLanguageDefinition(code);
+  return {
+    code: language.code,
+    name: language.label,
+    nativeName: language.nativeLabel,
+    direction: language.direction,
+    speechLocale: language.speechRecognitionLocale,
+  };
 }
+
+export {
+  LANGUAGE_CONFIG,
+  SUPPORTED_LANGUAGE_CODES,
+  getLanguageDefinition,
+  isSupportedLanguage,
+  normalizeSupportedLanguage,
+};
+export type { SupportedLanguage };

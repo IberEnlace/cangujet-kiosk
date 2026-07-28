@@ -27,7 +27,6 @@ export function validateNoriCandidates(products: AIFoodItem[], constraints: Nori
   const rejected: Array<{ product: AIFoodItem; reasons: NoriValidationReason[] }> = [];
   const valid = products.filter(product => {
     const reasons = validateNoriCandidate(product, constraints);
-    console.log("[NORI][VALIDATION]", { candidate: product.id, passed: reasons.length === 0, failedReasons: reasons });
     if (reasons.length) rejected.push({ product, reasons });
     return reasons.length === 0;
   });

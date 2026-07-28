@@ -158,7 +158,6 @@ Language Selection
 Support
 
 English
-Arabic
 Turkish
 
 Expandable to more languages.

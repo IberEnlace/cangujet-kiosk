@@ -29,11 +29,23 @@
   100% { transform: scale(1.28); opacity: 0; }
 }
 
+@keyframes nori-voice-wave {
+  0%, 100% { height: .35rem; opacity: .42; }
+  50% { height: 1.65rem; opacity: 1; }
+}
+
 .nori-voice-orbit:not(.is-listening) .nori-mic-button { animation: nori-breathe 3.2s ease-in-out infinite; }
 .nori-listening-ring { animation: nori-ring 1.8s ease-out infinite; }
 .nori-listening-ring-delay { animation-delay: .7s; }
+.nori-voice-ring { animation: nori-ring 1.9s ease-out infinite; }
+.nori-voice-ring-delay { animation-delay: .8s; }
+.nori-voice-visualizer.is-speaking .nori-voice-ring { animation-duration: 1.35s; }
+.nori-wave span { height: .35rem; animation: nori-voice-wave .9s ease-in-out infinite; }
+.nori-voice-visualizer.is-speaking .nori-wave span { animation-duration: .7s; }
 
 @media (prefers-reduced-motion: reduce) {
   .nori-voice-orbit .nori-mic-button,
-  .nori-listening-ring { animation: none !important; }
+  .nori-listening-ring,
+  .nori-voice-ring,
+  .nori-wave span { animation: none !important; }
 }

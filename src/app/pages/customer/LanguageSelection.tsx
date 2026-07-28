@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, Globe2 } from "lucide-react";
+import { ArrowLeft, Check, Globe2 } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { supportedLanguages, type SupportedLanguage } from "../../config/languages";
 import { useLanguage } from "../../context/LanguageContext";
@@ -13,7 +13,7 @@ interface LanguageSelectionProps {
 }
 
 export default function LanguageSelection({ onBack, onContinue }: LanguageSelectionProps) {
-  const { language, direction, setLanguage, resetLanguage } = useLanguage();
+  const { language, setLanguage, resetLanguage } = useLanguage();
   const { config } = useDevice();
   const availableLanguages = supportedLanguages.filter(option => config?.settings.enabledLanguages.includes(option.code));
   const translation = useCustomerTranslation().languageSelection;
@@ -40,7 +40,7 @@ export default function LanguageSelection({ onBack, onContinue }: LanguageSelect
     onBack();
   };
 
-  const BackArrow = direction === "rtl" ? ArrowRight : ArrowLeft;
+  const BackArrow = ArrowLeft;
   return (
     <motion.main initial={{ opacity: 0 }} animate={{ opacity: selectedLanguage ? 0 : 1 }} transition={{ duration: reducedMotion ? .1 : .38 }}
       className="relative isolate min-h-[100dvh] overflow-hidden bg-[#0b1009] font-['DM_Sans'] text-white">

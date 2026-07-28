@@ -28,10 +28,9 @@ type Message = {
 };
 
 export default function AIAssistant({ onBackToSelection }: { onBackToSelection?: () => void }) {
-  const { items: cart, addItem, removeItem, updateQty, clearCart, subtotal, updateCustomizations, providerInstanceId } = useCart();
+  const { items: cart, addItem, removeItem, updateQty, clearCart, subtotal, updateCustomizations } = useCart();
   const cartRef = useRef(cart);
   useEffect(() => { cartRef.current = cart; }, [cart]);
-  useEffect(() => { console.log("[CART][PROVIDER_INSTANCE]", providerInstanceId); }, [providerInstanceId]);
   const executedActionIdsRef = useRef<Set<string>>(new Set());
   const actionResultsRef = useRef<NoriChatRequest["actionResults"]>([]);
   const isSendingRef = useRef(false);
@@ -76,8 +75,6 @@ export default function AIAssistant({ onBackToSelection }: { onBackToSelection?:
     setInputVal("");
 
     const currentCart = serializeNoriCart(cartRef.current);
-    console.log("[NORI][CART_BEFORE_REQUEST]", cartRef.current);
-    console.log("[NORI][SERIALIZED_CART]", currentCart);
     const request: NoriChatRequest = {
       message: queryText,
       cart: currentCart,

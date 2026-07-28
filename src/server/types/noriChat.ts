@@ -1,6 +1,7 @@
 import type { AIFoodItem, AINutrition } from "../../app/data/aiMenu";
+import type { SupportedLanguage } from "../../shared/languages";
 
-export type NoriLanguage = "en" | "ar" | "tr" | string;
+export type NoriLanguage = SupportedLanguage;
 
 export type NoriCartItem = {
   productId: string;

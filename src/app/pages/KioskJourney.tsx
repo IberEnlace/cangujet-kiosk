@@ -11,6 +11,7 @@ import type { NoriChatRequest, NoriConversationState } from "../../server/types/
 import { executeNoriCartActions, serializeNoriCart } from "../services/noriCartActions";
 import { postNoriChat, shouldSubmitNoriKey } from "../services/noriChatClient";
 import MorrowLogo from "../components/branding/MorrowLogo";
+import { supportedLanguages } from "../config/languages";
 
 // Premium Unsplash Images for Kiosk Menu
 const burgerImg = "/images/products/burger%20(2).png";
@@ -57,7 +58,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
   const executedActionIdsRef = useRef(new Set<string>());
   const actionResultsRef = useRef<NoriChatRequest["actionResults"]>([]);
   const [screen, setScreen] = useState(initialScreen);
-  const [lang, setLang] = useState(language === "ar" ? "العربية" : language === "tr" ? "Türkçe" : "English");
+  const [lang, setLang] = useState(language === "tr" ? "Türkçe" : "English");
   const [accessibilitySettings, setAccessibilitySettings] = useState({
     largeText: false,
     highContrast: false,
@@ -283,17 +284,18 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
             <p className="text-white/50 text-sm mt-3">You can easily change this setting at any point during your transaction.</p>
 
             <div className="grid gap-4 mt-10">
-              {[
-                { code: "en", name: "English", greet: "Welcome & Enjoy" },
-                { code: "ar", name: "العربية", greet: "مرحباً بك وبالعافية" },
-                { code: "tr", name: "Türkçe", greet: "Hoş geldiniz, Afiyet olsun" },
-                { code: "de", name: "Deutsch", greet: "Willkommen & Guten Appetit" }
-              ].map(x => (
+              {supportedLanguages.map(option => {
+                const x = {
+                  code: option.code,
+                  name: option.nativeName,
+                  greet: option.code === "tr" ? "Hoş geldiniz, afiyet olsun" : "Welcome & Enjoy",
+                };
+                return (
                 <button 
                   key={x.code}
                   onClick={() => {
                     setLang(x.name);
-                    setLanguage(x.name === "العربية" ? "ar" : x.name === "Türkçe" ? "tr" : "en");
+                    setLanguage(x.code);
                     setScreen("Access");
                   }}
                   className={`flex items-center justify-between p-6 rounded-2xl border text-left transition-all ${
@@ -313,7 +315,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
                   </div>
                   <ChevronRight size={20} className={lang === x.name ? "text-[#d7ff7a]" : "text-white/20"} />
                 </button>
-              ))}
+              );})}
             </div>
           </div>
 

@@ -1,15 +1,39 @@
-import type { NoriConversationState, NoriIntent } from "../types/noriChat";
+import type { NoriConversationState, NoriIntent, NoriLanguage } from "../types/noriChat";
 
 export type NoriIntentDecision = { intent: NoriIntent; confidence: number; reason: string; normalizedInput: string };
 
-export function normalizeNoriInput(input: string) {
-  return input.toLowerCase().replace(/[_-]+/g, " ").replace(/^an i\b/, "can i").replace(/^alf sweet\b/, "half sweet").replace(/\s+/g, " ").trim();
+export function normalizeNoriInput(input: string, language: NoriLanguage = "en") {
+  return input
+    .normalize("NFC")
+    .toLocaleLowerCase(language === "tr" ? "tr-TR" : "en-US")
+    .replace(/’/g, "'")
+    .replace(/[_-]+/g, " ")
+    .replace(/^an i\b/, "can i")
+    .replace(/^alf sweet\b/, "half sweet")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export function routeNoriIntent(input: string, state: NoriConversationState): NoriIntentDecision {
-  const text = normalizeNoriInput(input);
+  const text = normalizeNoriInput(input, state.preferredLanguage);
   const pending = state.pendingAction;
   const decide = (intent: NoriIntent, reason: string, confidence = .96): NoriIntentDecision => ({ intent, reason, confidence, normalizedInput: text });
+  if (pending && /^(evet|onaylıyorum|tamam|ekle|devam et)$/.test(text)) return decide("confirmation", "Turkish confirmation for valid pending action", .99);
+  if (pending && /^(hayır|iptal et|vazgeçtim|bunu ekleme)$/.test(text)) return decide("cancellation", "Turkish cancellation for valid pending action", .99);
+  if (/(?:ödemeye geç|siparişi tamamla|kasaya devam et)/.test(text)) return decide("checkout", "Turkish checkout command", .99);
+  if (/sepeti temizle/.test(text)) return decide("clear_cart", "Turkish cart clear command", .99);
+  if (/(?:sepetten çıkar|içeceği kaldır)/.test(text)) return decide("remove_from_cart", "Turkish cart removal command", .99);
+  if (/(?:bir tane daha ekle|adedi (?:iki|2) yap)/.test(text)) return decide("update_quantity", "Turkish quantity command", .99);
+  if (/(?:bunu|onu|ilkini|ikinci seçeneği)\s+(?:sepete )?ekle|onu istiyorum/.test(text)) return decide("add_to_cart", "Turkish cart add command", .99);
+  if (/(?:peyniri çıkar|soğansız olsun|ekstra peynir ekle|sosu çıkar|büyük boy yap|acısı az olsun)/.test(text)) return decide("customization_question", "Turkish customization command", .99);
+  if (/(?:ilk iki seçeneği karşılaştır|ilk iki seçenek)/.test(text)) return decide("compare_products", "Turkish recent-result comparison", .99);
+  if (/(?:hangisi daha sağlıklı|hangisinde daha fazla protein var|spor için hangisi daha iyi)/.test(text)) return decide("comparison_follow_up", "Turkish comparison follow-up", .99);
+  if (/(?:protein oranı yüksek|en yüksek protein|yüksek proteinli)/.test(text)) return decide("highest_protein", "Turkish high-protein request", .99);
+  if (/(?:sağlıklı bir şey öner|sağlıklı.*öner)/.test(text)) return decide("healthy_recommendation", "Turkish healthy recommendation", .99);
+  if (/(?:acılı bir şey istiyorum|acı.*(?:öner|istiyorum))/.test(text)) return decide("recommendation", "Turkish spicy recommendation", .98);
+  if (/vejetaryen seçenekler neler/.test(text)) return decide("recommendation", "Turkish vegetarian recommendation", .98);
+  if (/(?:bütçeme uygun|bütçe.*öner)/.test(text)) return decide("recommendation", "Turkish budget recommendation", .98);
+  if (/(?:ilkini seç|ikinci seçeneği ekle)/.test(text)) return decide("product_details", "Turkish selection reference", .99);
   if (pending && /^(yes|confirm|okay|ok|sure|proceed|do it|apply it)[.! ]*$/.test(text)) return decide("confirmation", "confirmation for valid pending action", .99);
   if (pending && /^(no|cancel|never mind|do not add it)[.! ]*$/.test(text)) return decide("cancellation", "cancellation for valid pending action", .99);
   if (/^(start over|new order)[.! ]*$|\b(clear my preferences|forget my budget)\b/.test(text)) return decide("clarification_answer", "explicit state reset command", .99);
@@ -62,8 +86,4 @@ export function routeNoriIntent(input: string, state: NoriConversationState): No
   if (/\b(select|choose|pick) (?:the )?(?:first|second|1st|2nd) (?:option|one|item)\b/.test(text)) return decide("product_details", "selection reference");
   if (/\b(best|recommend|suggest|meal|food|burger|pizza|pasta|salad|drink|vegan|vegetarian|kids?|spicy|dessert|budget|under \$|after the gym|post workout|light|fresh|filling|starving|comfort food|fried|eat beef|eat meat)\b/.test(text)) return decide("recommendation", "explicit menu discovery request", .9);
   return decide("unsupported", "no supported intent matched", .9);
-}
-
-export function logIntentDecision(input: string, decision: NoriIntentDecision) {
-  console.log("[NORI][INTENT]", { input, normalizedInput: decision.normalizedInput, intent: decision.intent, confidence: decision.confidence, reason: decision.reason });
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, ArrowRight, Check, ChevronRight, Languages, Package, UtensilsCrossed } from "lucide-react";
+import { ArrowLeft, Check, ChevronRight, Languages, Package, UtensilsCrossed } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { serviceOptions } from "../../config/serviceOptions";
 import { useCart, type OrderType } from "../../context/CartContext";
@@ -14,7 +14,7 @@ export default function ServiceSelection({ onBack, onContinue }: ServiceSelectio
   const { orderType, setOrderType } = useCart();
   const { config } = useDevice();
   const availableServiceOptions = serviceOptions.filter(option => config?.settings.allowedOrderTypes.includes(option.id));
-  const { language, direction } = useLanguage();
+  const { language } = useLanguage();
   const translation = useCustomerTranslation().serviceSelection;
   const reducedMotion = useReducedMotion();
   const [selected, setSelected] = useState<OrderType | null>(null);
@@ -38,7 +38,7 @@ export default function ServiceSelection({ onBack, onContinue }: ServiceSelectio
     onBack();
   };
 
-  const BackArrow = direction === "rtl" ? ArrowRight : ArrowLeft;
+  const BackArrow = ArrowLeft;
   return (
     <motion.main initial={{ opacity: 0 }} animate={{ opacity: selected ? 0 : 1 }} transition={{ duration: reducedMotion ? .1 : .38 }}
       className="relative isolate min-h-[100dvh] overflow-hidden bg-[#0b1009] font-['DM_Sans'] text-white">
@@ -76,7 +76,7 @@ export default function ServiceSelection({ onBack, onContinue }: ServiceSelectio
                     {isSelected ? <Check className="size-10" strokeWidth={3} aria-hidden="true" /> : <Icon className="size-[clamp(2.3rem,5vw,4rem)]" strokeWidth={1.6} aria-hidden="true" />}
                   </span>
                   <span className="min-w-0 flex-1 landscape:flex-none"><strong className="block text-[clamp(1.6rem,3.5vw,2.5rem)] font-bold">{translation[option.titleKey]}</strong><span className="mt-2 block text-[clamp(.9rem,1.7vw,1.15rem)] leading-relaxed text-white/48">{translation[option.descriptionKey]}</span>{isSelected && <span className="mt-3 block text-xs font-bold uppercase tracking-wider text-[#d7ff7a]">{translation.selected}</span>}</span>
-                  {!isSelected && <ChevronRight className={`ms-auto shrink-0 text-white/20 transition group-hover:text-[#d7ff7a] ${direction === "rtl" ? "rotate-180" : ""} landscape:absolute landscape:bottom-7 landscape:end-7`} size={28} aria-hidden="true" />}
+                  {!isSelected && <ChevronRight className="ms-auto shrink-0 text-white/20 transition group-hover:text-[#d7ff7a] landscape:absolute landscape:bottom-7 landscape:end-7" size={28} aria-hidden="true" />}
                 </motion.button>
               );
             })}

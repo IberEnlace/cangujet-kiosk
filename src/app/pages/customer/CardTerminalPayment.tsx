@@ -3,6 +3,7 @@ import { ArrowLeft, Check, X } from "lucide-react";
 import { DotLottieReact, setWasmUrl, type DotLottie } from "@lottiefiles/dotlottie-react";
 import { useCart } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
+import { LANGUAGE_CONFIG } from "../../config/languages";
 import { getCustomerTranslation } from "../../i18n/customerTranslations";
 import { MockPaymentTerminalService } from "../../services/payment/MockPaymentTerminalService";
 import type { CardPaymentStatus } from "../../types/payment";
@@ -74,7 +75,7 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[900px] flex-col px-5 py-6 sm:px-10 sm:py-10">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-3"><MorrowLogo variant="symbol" priority className="size-12 object-contain" /><p className="text-xs text-white/40">Secure terminal payment</p></div>
-          <p className="text-xl font-bold text-[#d7ff7a] sm:text-2xl">{new Intl.NumberFormat(language === "tr" ? "tr-TR" : language === "ar" ? "ar-SA" : "en-US", { style: "currency", currency: "EUR" }).format(total)}</p>
+          <p className="text-xl font-bold text-[#d7ff7a] sm:text-2xl">{new Intl.NumberFormat(LANGUAGE_CONFIG[language].locale, { style: "currency", currency: "EUR" }).format(total)}</p>
         </header>
 
         <section className="flex flex-1 flex-col items-center justify-center py-10 text-center">

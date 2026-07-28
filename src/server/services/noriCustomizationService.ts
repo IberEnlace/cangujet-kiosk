@@ -26,7 +26,7 @@ export type CustomizationMatch = {
 };
 
 export function interpretCustomization(product: AIFoodItem, message: string): CustomizationMatch | null {
-  const text = normalize(message);
+  const text = normalize(canonicalCustomizationRequest(message));
   const terms = expandTerms(text);
   const requestedConcept = Object.entries(SYNONYMS).find(([key, aliases]) => text.includes(key) || aliases.some(alias => text.includes(alias)))?.[0];
   if (!terms.length) return null;
@@ -54,11 +54,6 @@ export function interpretCustomization(product: AIFoodItem, message: string): Cu
     allergensAdded: match.option.allergensAdded,
     allergensRemoved: match.option.allergensRemoved,
   };
-  console.log("[NORI][CUSTOMIZATION]");
-  console.log("productId:", product.id);
-  console.log("requested change:", message);
-  console.log("matched group:", match.group.id);
-  console.log("matched option:", match.option.id);
   return { product, ...match, selection };
 }
 
@@ -137,6 +132,17 @@ function optionScore(option: AIProductCustomizationOption, modes: string[], requ
   if ((request.includes("remove") || request.includes("without") || request.startsWith("no ")) && text.includes("no ")) score += 25;
   if ((request.includes("mild") || request.includes("less spicy")) && text.includes("light sauce")) score += 30;
   return score;
+}
+
+function canonicalCustomizationRequest(message: string) {
+  const text = message.normalize("NFC").toLocaleLowerCase("tr-TR");
+  return text
+    .replace(/peyniri çıkar/g, "remove cheese")
+    .replace(/soğansız olsun/g, "no onions")
+    .replace(/ekstra peynir ekle/g, "extra cheese")
+    .replace(/sosu çıkar/g, "remove sauce")
+    .replace(/büyük boy yap/g, "large size")
+    .replace(/acısı az olsun/g, "make it less spicy");
 }
 function conceptCompatible(concept: string, searchable: string) {
   if ([concept, ...(SYNONYMS[concept] ?? [])].some(term => searchable.includes(normalize(term)))) return true;

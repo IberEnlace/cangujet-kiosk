@@ -36,13 +36,17 @@ export function buildProviderResponse(toolCalls: AIToolCall[], request: NoriChat
     productId: product.id,
     quantity: 1,
     customizations: [],
-    label: `Add ${product.name}`,
+    label: request.language === "tr" ? `${product.name} ürününü ekle` : `Add ${product.name}`,
   }));
-  if (warnings.length) actions.push({ type: "REVIEW_ALLERGENS", productIds: [...new Set(warnings.map(warning => warning.productId))], label: "Review allergen warnings" });
-  if (request.cart.length) actions.push({ type: "OPEN_CART", label: "Review cart" });
-  const reply = products.length
-    ? `I found ${products.length} available menu option${products.length === 1 ? "" : "s"} using the Morrow menu.${warnings.length ? " Please review the allergen and cross-contact warnings before adding an item." : ""}`
-    : "I could not find an available menu item matching that request. Try changing one of your filters.";
+  if (warnings.length) actions.push({ type: "REVIEW_ALLERGENS", productIds: [...new Set(warnings.map(warning => warning.productId))], label: request.language === "tr" ? "Alerjen uyarılarını incele" : "Review allergen warnings" });
+  if (request.cart.length) actions.push({ type: "OPEN_CART", label: request.language === "tr" ? "Sepeti incele" : "Review cart" });
+  const reply = request.language === "tr"
+    ? products.length
+      ? `Morrow menüsünde ${products.length} uygun seçenek buldum.${warnings.length ? " Bir ürün eklemeden önce alerjen ve çapraz temas uyarılarını inceleyin." : ""}`
+      : "Bu isteğe uyan uygun bir menü ürünü bulamadım. Filtrelerden birini değiştirmeyi deneyin."
+    : products.length
+      ? `I found ${products.length} available menu option${products.length === 1 ? "" : "s"} using the Morrow menu.${warnings.length ? " Please review the allergen and cross-contact warnings before adding an item." : ""}`
+      : "I could not find an available menu item matching that request. Try changing one of your filters.";
   const conversationState = request.conversationState ?? {
     preferredLanguage: request.language,
     activeAllergens: request.activeAllergens,

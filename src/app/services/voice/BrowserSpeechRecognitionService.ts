@@ -1,34 +1,120 @@
 import type { NoriSpeechRecognitionResult, NoriSpeechRecognitionService } from "./NoriSpeechRecognitionService";
 
-interface BrowserRecognitionAlternative { transcript: string; confidence: number; }
-interface BrowserRecognitionResult { isFinal: boolean; readonly length: number; [index: number]: BrowserRecognitionAlternative; }
-interface BrowserRecognitionResultList { readonly length: number; [index: number]: BrowserRecognitionResult; }
-interface BrowserRecognitionEvent extends Event { results: BrowserRecognitionResultList; }
-interface BrowserRecognitionErrorEvent extends Event { error: string; }
-interface BrowserRecognition {
-  lang: string; continuous: boolean; interimResults: boolean; maxAlternatives: number;
-  onresult: ((event: BrowserRecognitionEvent) => void) | null; onerror: ((event: BrowserRecognitionErrorEvent) => void) | null; onend: (() => void) | null;
-  start(): void; stop(): void; abort(): void;
+interface ActiveRecognition {
+  recognition: SpeechRecognition;
+  cancel: () => void;
 }
-interface RecognitionConstructor { new(): BrowserRecognition; }
-type SpeechWindow = Window & { SpeechRecognition?: RecognitionConstructor; webkitSpeechRecognition?: RecognitionConstructor };
+
+function RecognitionConstructor() {
+  if (typeof window === "undefined") return undefined;
+  return window.SpeechRecognition ?? window.webkitSpeechRecognition;
+}
+
+function detach(recognition: SpeechRecognition) {
+  recognition.onstart = null;
+  recognition.onresult = null;
+  recognition.onnomatch = null;
+  recognition.onerror = null;
+  recognition.onend = null;
+}
 
 export class BrowserSpeechRecognitionService implements NoriSpeechRecognitionService {
-  private recognition: BrowserRecognition | null = null;
-  isSupported() { const scope = window as SpeechWindow; return Boolean(scope.SpeechRecognition ?? scope.webkitSpeechRecognition); }
+  private active: ActiveRecognition | null = null;
+
+  isSupported() {
+    return Boolean(RecognitionConstructor());
+  }
+
   start(language: string): Promise<NoriSpeechRecognitionResult> {
-    const scope = window as SpeechWindow; const Recognition = scope.SpeechRecognition ?? scope.webkitSpeechRecognition;
+    const Recognition = RecognitionConstructor();
     if (!Recognition) return Promise.reject(new Error("unsupported"));
-    this.cancel(); const recognition = new Recognition(); this.recognition = recognition;
-    recognition.lang = language; recognition.continuous = false; recognition.interimResults = false; recognition.maxAlternatives = 1;
+    if (this.active) return Promise.reject(new Error("already_active"));
+
+    const recognition = new Recognition();
+    recognition.lang = language;
+    recognition.continuous = false;
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
     return new Promise((resolve, reject) => {
       let settled = false;
-      recognition.onresult = event => { const alternative = event.results[0]?.[0]; if (!alternative?.transcript.trim()) return; settled = true; resolve({ transcript: alternative.transcript.trim(), confidence: alternative.confidence }); };
-      recognition.onerror = event => { settled = true; reject(new Error(event.error === "not-allowed" || event.error === "service-not-allowed" ? "permission_denied" : event.error === "no-speech" ? "no_speech" : "error")); };
-      recognition.onend = () => { this.recognition = null; if (!settled) reject(new Error("no_speech")); };
-      recognition.start();
+      let result: NoriSpeechRecognitionResult | null = null;
+      const isCurrent = () => this.active?.recognition === recognition;
+      const finish = (error?: Error) => {
+        if (settled) return;
+        settled = true;
+        if (isCurrent()) this.active = null;
+        detach(recognition);
+        if (error) reject(error);
+        else if (result) resolve(result);
+        else reject(new Error("no_speech"));
+      };
+      const cancel = () => {
+        finish(new Error("aborted"));
+        try {
+          recognition.abort();
+        } catch {
+          // The native operation may already have closed.
+        }
+      };
+
+      this.active = { recognition, cancel };
+      recognition.onresult = event => {
+        if (!isCurrent() || settled) return;
+        const alternative = event.results[0]?.[0];
+        const transcript = alternative?.transcript.trim();
+        if (!transcript) return;
+        result = { transcript, confidence: alternative.confidence };
+        try {
+          recognition.stop();
+        } catch {
+          finish();
+        }
+      };
+      recognition.onnomatch = () => {
+        if (!isCurrent()) return;
+        try {
+          recognition.stop();
+        } catch {
+          finish(new Error("no_speech"));
+        }
+      };
+      recognition.onerror = event => {
+        if (!isCurrent()) return;
+        const code = event.error === "not-allowed"
+          ? "permission_denied"
+          : event.error === "service-not-allowed"
+            ? "service_unavailable"
+          : event.error === "audio-capture"
+            ? "microphone_not_found"
+            : event.error === "no-speech"
+              ? "no_speech"
+              : event.error === "network"
+                ? "network"
+                : event.error === "aborted"
+                  ? "aborted"
+                  : "error";
+        finish(new Error(code));
+      };
+      recognition.onend = () => {
+        if (isCurrent()) finish();
+      };
+      try {
+        recognition.start();
+      } catch {
+        finish(new Error("error"));
+      }
     });
   }
-  stop() { this.recognition?.stop(); }
-  cancel() { this.recognition?.abort(); this.recognition = null; }
+
+  stop() {
+    try {
+      this.active?.recognition.stop();
+    } catch {
+      // The native operation may already have closed.
+    }
+  }
+
+  cancel() {
+    this.active?.cancel();
+  }
 }

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, ChevronRight, LoaderCircle, Mic, MicOff, Plus, RefreshCw, ShoppingBag } from "lucide-react";
+import { Check, ChevronLeft, LoaderCircle, Mic, MicOff, Plus, RefreshCw, ShoppingBag } from "lucide-react";
 import { useCart } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
 import MorrowLogo from "../../components/branding/MorrowLogo";
 import { useDevice } from "../../context/DeviceContext";
 import { useNoriConversation } from "../../context/NoriConversationContext";
-import { getLanguageOption, type SupportedLanguage } from "../../config/languages";
+import { getLanguageOption, LANGUAGE_CONFIG, type SupportedLanguage } from "../../config/languages";
 import { BrowserSpeechRecognitionService } from "../../services/voice/BrowserSpeechRecognitionService";
 import { loadMenu } from "../../services/supabase/menuService";
 import type { NormalizedMenu } from "../../services/supabase/menuModels";
@@ -50,7 +50,7 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori, on
   }));
   const count = items.reduce((sum, item) => sum + item.qty, 0);
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const currency = useMemo(() => new Intl.NumberFormat(language === "tr" ? "tr-TR" : language === "ar" ? "ar-SA" : "en-US", { style: "currency", currency: sharedMenu?.currency ?? "EUR" }), [language, sharedMenu?.currency]);
+  const currency = useMemo(() => new Intl.NumberFormat(LANGUAGE_CONFIG[language].locale, { style: "currency", currency: sharedMenu?.currency ?? "EUR" }), [language, sharedMenu?.currency]);
 
   const chooseCategory = (id: string) => { setCategory(id); sessionStorage.setItem("morrow:nori-entry-category", id); setView("products"); };
   const selectedCategory = menuCategories.find(item => item.id === category);
@@ -61,14 +61,14 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori, on
     toastTimerRef.current = window.setTimeout(() => setToast(""), 1800);
   };
 
-  const BackIcon = direction === "rtl" ? ChevronRight : ChevronLeft;
+  const BackIcon = ChevronLeft;
   return (
     <main dir={direction} className="min-h-[100dvh] bg-[#050705] font-['DM_Sans'] text-[#f8f8f3]">
       <div className="relative mx-auto min-h-[100dvh] w-full max-w-[900px] overflow-hidden bg-[#0b1009] shadow-2xl shadow-black/40">
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_10%,rgba(215,255,122,.08),transparent_28%),linear-gradient(145deg,#10160d,#080b08_70%)]" aria-hidden="true" />
         <header className="sticky top-0 z-30 flex h-[clamp(4.6rem,7vh,6rem)] items-center justify-between border-b border-white/10 bg-[#0b1009]/92 px-3 backdrop-blur-xl sm:px-5">
           <button type="button" onClick={onBack} aria-label="Back to service selection" className="grid size-12 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/10 active:scale-95 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]"><BackIcon size={23} aria-hidden="true" /></button>
-          <div className="text-center" dir="ltr"><MorrowLogo variant="full" className="hidden h-auto w-28 sm:block" /><MorrowLogo variant="symbol" className="mx-auto size-9 object-contain sm:hidden" alt="" /><p className="mt-0.5 text-[10px] text-white/40">{language === "ar" ? "طلبك الجديد" : language === "tr" ? "Yeni siparişiniz" : "Your new order"}</p></div>
+          <div className="text-center" dir="ltr"><MorrowLogo variant="full" className="hidden h-auto w-28 sm:block" /><MorrowLogo variant="symbol" className="mx-auto size-9 object-contain sm:hidden" alt="" /><p className="mt-0.5 text-[10px] text-white/40">{language === "tr" ? "Yeni siparişiniz" : "Your new order"}</p></div>
           <div className="flex items-center gap-2">{config?.settings.aiAssistantEnabled && <button type="button" onClick={onNori} className="hidden min-h-11 rounded-xl border border-[#D7FB69]/25 bg-[#D7FB69]/8 px-3 text-xs font-bold text-[#D7FB69] min-[560px]:block">Ask Nori</button>}<button type="button" onClick={onLanguage} className="min-h-11 min-w-11 rounded-xl border border-white/10 bg-white/5 px-2 text-xs font-bold uppercase text-white/70 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]">{language}</button><button type="button" onClick={onCheckout} aria-label={`Open cart with ${count} items`} className="relative grid size-12 place-items-center rounded-2xl bg-[#d7ff7a] text-[#17200f] focus-visible:outline focus-visible:outline-4 focus-visible:outline-white"><ShoppingBag size={20} aria-hidden="true" />{count > 0 && <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ffb86c] text-[10px] font-bold text-[#34240e]">{count}</span>}</button></div>
         </header>
 
@@ -100,32 +100,57 @@ const quickPrompts = [
 
 function NoriBanner({ onOpenChat, isProcessing, sendMessage, language, voiceEnabled }: { onOpen: () => void; onOpenChat: () => void; isProcessing: boolean; sendMessage: (text: string) => Promise<string | null>; language: SupportedLanguage; voiceEnabled: boolean }) {
   const recognition = useMemo(() => new BrowserSpeechRecognitionService(), []);
+  const recognitionRequestRef = useRef(0);
+  const recognitionActiveRef = useRef(false);
+  const mountedRef = useRef(true);
   const [status, setStatus] = useState<BannerVoiceStatus>("idle");
   const [error, setError] = useState("");
-  const busy = status === "processing" || isProcessing;
-  useEffect(() => () => recognition.cancel(), [recognition]);
+  const busy = status === "requesting" || status === "processing" || isProcessing;
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      recognitionRequestRef.current += 1;
+      recognitionActiveRef.current = false;
+      recognition.cancel();
+    };
+  }, [recognition]);
   useEffect(() => { if (isProcessing) setStatus("processing"); else if (status === "processing") setStatus("idle"); }, [isProcessing, status]);
 
   const listen = async () => {
-    if (status === "listening") { recognition.cancel(); setStatus("idle"); return; }
+    if (recognitionActiveRef.current) { recognitionRequestRef.current += 1; recognitionActiveRef.current = false; recognition.cancel(); setStatus("idle"); return; }
     if (!voiceEnabled || !recognition.isSupported()) { setError("Microphone access is unavailable. You can still type your request."); setStatus("error"); return; }
+    const requestId = ++recognitionRequestRef.current;
+    recognitionActiveRef.current = true;
     setError(""); setStatus("requesting");
     try {
       const pending = recognition.start(getLanguageOption(language).speechLocale);
       setStatus("listening");
       const result = await pending;
+      if (!mountedRef.current || requestId !== recognitionRequestRef.current) return;
+      recognitionActiveRef.current = false;
       if (!result.transcript) { setError("I didn’t hear anything. Please try again."); setStatus("error"); return; }
       setStatus("processing");
       await sendMessage(result.transcript);
+      if (!mountedRef.current || requestId !== recognitionRequestRef.current) return;
       onOpenChat();
     } catch (reason) {
+      if (!mountedRef.current || requestId !== recognitionRequestRef.current) return;
+      recognitionActiveRef.current = false;
       const code = reason instanceof Error ? reason.message : "error";
-      setError(code === "permission_denied" ? "Microphone access is unavailable. You can still type your request." : code === "no_speech" ? "I didn’t hear anything. Please try again." : "Something went wrong with the microphone. Please try again.");
+      if (code === "aborted") { setStatus("idle"); return; }
+      setError(code === "permission_denied" || code === "service_unavailable" || code === "microphone_not_found"
+        ? "Microphone access is unavailable. You can still type your request."
+        : code === "no_speech"
+          ? "I didn’t hear anything. Please try again."
+          : code === "network"
+            ? "Voice recognition could not connect. Please try again."
+            : "Something went wrong with the microphone. Please try again.");
       setStatus("error");
     }
   };
   const submitPrompt = (request: string) => { if (busy) return; void sendMessage(request); onOpenChat(); };
-  const label = status === "listening" ? "Listening..." : busy ? "Finding your meal..." : status === "requesting" ? "Connecting..." : "Tap to talk";
+  const label = status === "listening" ? "Listening..." : status === "requesting" ? "Connecting..." : busy ? "Finding your meal..." : "Tap to talk";
 
   return <section aria-labelledby="nori-banner-title" className="relative mt-5 overflow-hidden rounded-[26px] border border-[#D7FB69]/20 bg-[linear-gradient(135deg,rgba(215,251,105,.095),rgba(255,255,255,.025)_58%,rgba(215,251,105,.055))] p-4 shadow-[0_18px_45px_rgba(0,0,0,.2)] sm:p-5">
     <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_88%_42%,rgba(215,251,105,.11),transparent_30%)]" aria-hidden="true" />
