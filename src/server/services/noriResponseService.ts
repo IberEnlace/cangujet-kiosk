@@ -4,6 +4,7 @@ import { formatNumber } from "../../shared/languages";
 import type { NoriLanguage, NoriSelectedCustomization, NoriWarning } from "../types/noriChat";
 import type { calculateCustomizedProduct } from "./noriCustomizationService";
 import type { NoriRequestInterpretation } from "./noriRequestInterpreter";
+import { buildNoriRecommendationExplanation } from "./noriExplanationService";
 
 type CustomizedCalculation = ReturnType<typeof calculateCustomizedProduct>;
 
@@ -55,6 +56,53 @@ export function buildRecommendationResponse(input: {
   }
 
   const [best, ...alternatives] = products;
+  const proteinPriority = interpretation.constraints.priorities.includes("protein")
+    || interpretation.constraints.minProtein !== null;
+  const pricePriority = interpretation.constraints.priorities.includes("price")
+    || interpretation.constraints.maxBudget !== null;
+  if (interpretation.constraints.priorities.length >= 2) {
+    const opening = turkish
+      ? proteinPriority && pricePriority
+        ? "Uygun fiyatlı ve protein açısından güçlü seçenekler buldum:"
+        : "Birden fazla tercihinize uyan seçenekler buldum:"
+      : proteinPriority && pricePriority
+        ? "I found options with a strong protein-to-price balance:"
+        : "I found options matching your combined preferences:";
+    const lines = products.map((product, index) =>
+      `${index + 1}. ${product.name} — ${multiSignalDetails(product, interpretation, language)}`,
+    ).join("\n");
+    const summary = turkish
+      ? proteinPriority && pricePriority
+        ? `En iyi fiyat/protein dengesi ${best.name}; çünkü ${buildNoriRecommendationExplanation(best, interpretation, language)}.`
+        : `Tercihlerinizin genel dengesine göre ${best.name} öne çıkıyor; çünkü ${buildNoriRecommendationExplanation(best, interpretation, language)}.`
+      : proteinPriority && pricePriority
+        ? `${best.name} has the strongest overall protein-to-price balance because ${buildNoriRecommendationExplanation(best, interpretation, language)}.`
+        : `${best.name} has the strongest overall balance for those preferences because ${buildNoriRecommendationExplanation(best, interpretation, language)}.`;
+    const timingText = interpretation.constraints.needsQuickService
+      ? turkish
+        ? " Menüde doğrulanmış hazırlık süreleri bulunmadığı için hız garantisi veremem."
+        : " The menu has no verified preparation times, so I cannot promise which is fastest."
+      : "";
+    const warningText = warnings.length ? ` ${formatWarning(warnings[0], language)}` : "";
+    return `${opening}\n${lines}\n${summary}${timingText}${warningText}`;
+  }
+  if (turkish && (proteinPriority || pricePriority)) {
+    const opening = proteinPriority && pricePriority
+      ? "Uygun fiyatlı ve protein açısından güçlü birkaç seçenek buldum:"
+      : proteinPriority
+        ? "Protein açısından güçlü birkaç seçenek buldum:"
+        : "Uygun fiyatlı birkaç seçenek buldum:";
+    const productLines = products.map((product, index) =>
+      `${index + 1}. ${product.name} — $${money(product.price, language)}, ${number(product.proteinGrams, language)} g protein`,
+    ).join("\n");
+    const summary = proteinPriority && pricePriority
+      ? `En iyi fiyat/protein dengesi ${best.name}; çünkü ${buildNoriRecommendationExplanation(best, interpretation, language)}.`
+      : proteinPriority
+        ? `Protein önceliğine göre en güçlü eşleşme ${best.name}; çünkü ${buildNoriRecommendationExplanation(best, interpretation, language)}.`
+        : `Fiyat önceliğine göre en güçlü eşleşme ${best.name}; çünkü ${buildNoriRecommendationExplanation(best, interpretation, language)}.`;
+    const warningText = warnings.length ? ` ${formatWarning(warnings[0], language)}` : "";
+    return `${opening}\n${productLines}\n${summary}${warningText}`;
+  }
   const template = recommendationTemplate(interpretation);
   const opening = turkish
     ? turkishOpening(best, template, interpretation)
@@ -73,14 +121,21 @@ export function buildRecommendationResponse(input: {
       ? ` $${money(companion.price, language)} karşılığında ${companion.name} eklenirse ikisinin toplamı $${money(best.price + companion.price, language)} olur.`
       : ` Add ${companion.name} for $${money(companion.price, language)}, bringing the pair to $${money(best.price + companion.price, language)}.`
     : "";
+  const timingText = interpretation.constraints.needsQuickService
+    ? turkish
+      ? " Doğrulanmış hazırlık süreleri menü verilerinde bulunmadığı için hız konusunda garanti veremem; en güncel süre için personele danışabilirsiniz."
+      : " The menu does not include verified preparation times, so I cannot promise which item is fastest; staff can confirm the current wait."
+    : "";
   const warningText = warnings.length ? ` ${formatWarning(warnings[0], language)}` : "";
-  return `${opening}${explanation}${alternativeText}${companionText}${warningText}`;
+  return `${opening}${explanation}${alternativeText}${companionText}${timingText}${warningText}`;
 }
 
 export function buildClarificationResponse(question: string, language: NoriLanguage) {
   if (language !== "tr") return question;
   const normalized = question.toLocaleLowerCase("en-US");
   if (normalized.includes("hot drink")) return "Sıcak bir içecek mi, soğuk bir içecek mi tercih edersiniz?";
+  if (normalized.includes("vegetarian pizza")) return "Dana etli, tavuklu veya vejetaryen pizza mı tercih edersiniz?";
+  if (normalized.includes("chocolate")) return "Çikolatalı mı, meyveli mi tercih edersiniz?";
   if (normalized.includes("beef")) return "Dana etli, tavuklu veya vejetaryen bir yemek mi tercih edersiniz?";
   return "Hangi seçeneği tercih ettiğinizi biraz daha açıklar mısınız?";
 }
@@ -216,6 +271,13 @@ function recommendationTemplate(interpretation: NoriRequestInterpretation) {
   if (constraints.kids) return "kids";
   if (constraints.spicy) return "spicy";
   if (constraints.dietaryTags.includes("vegan")) return "vegan";
+  if (constraints.priorities.includes("popular")) return "popular";
+  if (constraints.priorities.includes("refreshing")) return "refreshing";
+  if (constraints.priorities.includes("filling")) return "filling";
+  if (constraints.priorities.includes("light")) return "light";
+  if (constraints.priorities.includes("healthy")) return "healthy";
+  if (constraints.priorities.includes("price")) return "budget";
+  if (constraints.priorities.includes("protein")) return "high_protein";
   if (constraints.minProtein !== null) return "high_protein";
   if (constraints.maxCalories !== null) return "low_calorie";
   if (constraints.maxBudget !== null) return "budget";
@@ -224,12 +286,21 @@ function recommendationTemplate(interpretation: NoriRequestInterpretation) {
 
 function englishOpening(product: AIFoodItem, template: string, interpretation: NoriRequestInterpretation) {
   switch (template) {
-    case "budget": return `Within your $${money(interpretation.constraints.maxBudget ?? product.price, "en")} budget, ${product.name} stands out at $${money(product.price, "en")}`;
-    case "high_protein": return `The best high-protein match is ${product.name} with ${number(product.proteinGrams, "en")}g protein`;
+    case "budget": return interpretation.constraints.maxBudget !== null
+      ? `Within your $${money(interpretation.constraints.maxBudget, "en")} budget, ${product.name} stands out at $${money(product.price, "en")}`
+      : `For an affordable choice, ${product.name} stands out at $${money(product.price, "en")}`;
+    case "high_protein": return `The best match for high-protein food is ${product.name} with ${number(product.proteinGrams, "en")}g protein`;
     case "low_calorie": return `${product.name} fits your calorie limit at ${number(product.cal, "en")} calories`;
     case "vegan": return `For a plant-based choice, ${product.name} is a documented vegan option at $${money(product.price, "en")}`;
     case "kids": return `${product.name} is a documented kids meal`;
     case "spicy": return `If you enjoy some heat, ${product.name} is a strong spicy choice`;
+    case "healthy": return `${product.name} is my strongest balanced choice`;
+    case "light": return `${product.name} is my leading lighter choice`;
+    case "filling": return `${product.name} is my leading filling choice`;
+    case "refreshing": return `${product.name} is my most refreshing menu-based match`;
+    case "popular": return interpretation.constraints.asksMostOrdered
+      ? `I do not have verified order counts, but ${product.name} is the strongest match in the menu's recommendation ranking`
+      : `${product.name} is my strongest menu-based pick`;
     default: return `${product.name} is my leading recommendation.`;
   }
 }
@@ -242,6 +313,13 @@ function turkishOpening(product: AIFoodItem, template: string, interpretation: N
     case "vegan": return `Bitki bazlı bir seçim olarak ${product.name}, $${money(product.price, "tr")} fiyatlı belgelenmiş vegan bir seçenektir`;
     case "kids": return `${product.name}, belgelenmiş bir çocuk menüsüdür`;
     case "spicy": return `Acı seviyorsanız ${product.name} güçlü bir seçenektir`;
+    case "healthy": return `${product.name} en güçlü dengeli önerimdir`;
+    case "light": return `${product.name} öne çıkan hafif seçeneğimdir`;
+    case "filling": return `${product.name} öne çıkan doyurucu seçeneğimdir`;
+    case "refreshing": return `${product.name} menü verilerine göre en ferahlatıcı eşleşmedir`;
+    case "popular": return interpretation.constraints.asksMostOrdered
+      ? `Doğrulanmış sipariş sayılarım yok ancak ${product.name} menünün öneri sıralamasındaki en güçlü eşleşmedir`
+      : `${product.name} menü verilerine dayalı en güçlü seçimimdir`;
     default: return `${product.name} ilk önerimdir.`;
   }
 }
@@ -257,8 +335,39 @@ function reasonParts(product: AIFoodItem, interpretation: NoriRequestInterpretat
   else if (constraints.dietaryTags.includes("vegetarian")) reasons.push(turkish ? "vejetaryen olduğu belgelenmiştir" : "it is documented vegetarian");
   if (constraints.kids && template !== "kids") reasons.push(turkish ? "çocuk menüsü kategorisindedir" : "it is listed in the kids category");
   if (constraints.spicy && template !== "spicy") reasons.push(turkish ? `belgelenmiş acılık seviyesi ${product.spiceLevel}` : `its documented spice level is ${product.spiceLevel}`);
+  if (constraints.priorities.includes("protein") && template !== "high_protein") reasons.push(turkish ? `${number(product.proteinGrams, language)} g protein içerir` : `it provides ${number(product.proteinGrams, language)}g protein`);
+  if (constraints.priorities.includes("filling") && template === "filling") reasons.push(turkish ? `${number(product.cal, language)} kalori, ${number(product.proteinGrams, language)} g protein ve ${number(product.nutrition.fiberGrams, language)} g lif içerir` : `it combines ${number(product.cal, language)} calories, ${number(product.proteinGrams, language)}g protein, and ${number(product.nutrition.fiberGrams, language)}g fiber`);
+  if (constraints.priorities.includes("light") && template === "light") reasons.push(turkish ? `${number(product.cal, language)} kaloridir` : `it has ${number(product.cal, language)} calories`);
+  if (constraints.priorities.includes("refreshing") && template === "refreshing") reasons.push(turkish ? `içeriği ve kategorisi ferahlatıcı isteğinizle eşleşir` : `its documented category and ingredients fit a refreshing request`);
+  if (constraints.priorities.includes("healthy") && template === "healthy") reasons.push(turkish ? `${number(product.cal, language)} kalori, ${number(product.proteinGrams, language)} g protein ve ${number(product.nutrition.fiberGrams, language)} g lif içerir` : `it has ${number(product.cal, language)} calories, ${number(product.proteinGrams, language)}g protein, and ${number(product.nutrition.fiberGrams, language)}g fiber`);
   if (!reasons.length && template === "general") reasons.push(turkish ? `fiyatı $${money(product.price, language)}` : `It costs $${money(product.price, language)}`);
   return reasons;
+}
+
+function multiSignalDetails(
+  product: AIFoodItem,
+  interpretation: NoriRequestInterpretation,
+  language: NoriLanguage,
+) {
+  const turkish = language === "tr";
+  const priorities = interpretation.constraints.priorities;
+  const details: string[] = [`$${money(product.price, language)}`];
+  if (priorities.includes("protein") || priorities.includes("filling")) {
+    details.push(turkish
+      ? `${number(product.proteinGrams, language)} g protein`
+      : `${number(product.proteinGrams, language)}g protein`);
+  }
+  if (priorities.includes("light") || priorities.includes("healthy")) {
+    details.push(turkish
+      ? `${number(product.cal, language)} kalori`
+      : `${number(product.cal, language)} calories`);
+  }
+  if (priorities.includes("filling")) {
+    details.push(turkish
+      ? `${number(product.nutrition.fiberGrams, language)} g lif`
+      : `${number(product.nutrition.fiberGrams, language)}g fiber`);
+  }
+  return details.join(", ");
 }
 
 function capitalizeSentence(value: string) {

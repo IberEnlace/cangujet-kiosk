@@ -106,12 +106,10 @@ test("returns a Turkish response for Turkish language", () => {
   assert.match(reply, /Garden Chickpea Burger/);
 });
 
-test("asks one filling-meal clarification question", () => {
+test("does not clarify when a filling preference can be ranked directly", () => {
   const interpretation = interpretNoriRequest("I want something filling.", state());
-  assert.equal(interpretation.clarificationNeeded, true);
-  const reply = buildClarificationResponse(interpretation.clarificationQuestion ?? "", "en");
-  assert.equal(reply, "Would you prefer beef, chicken, or a plant-based option?");
-  assert.equal((reply.match(/\?/g) ?? []).length, 1);
+  assert.equal(interpretation.clarificationNeeded, false);
+  assert.equal(interpretation.constraints.wantsFillingMeal, true);
 });
 
 test("asks one drink-temperature clarification question", () => {

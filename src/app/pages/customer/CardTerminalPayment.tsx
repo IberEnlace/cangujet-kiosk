@@ -14,7 +14,10 @@ setWasmUrl("/animations/dotlottie-player.wasm");
 type Props = { onBack: () => void; onApproved: () => void };
 
 export default function CardTerminalPayment({ onBack, onApproved }: Props) {
-  const { total, setPaymentMethod, placeOrder } = useCart();
+  const {
+    total, setPaymentMethod, placeOrder, transitionOrderLifecycle,
+    currentOrderId, currentOrderNumber,
+  } = useCart();
   const { language, direction } = useLanguage();
   const copy = getCustomerTranslation(language).cardTerminal;
   const terminal = useMemo(() => new MockPaymentTerminalService(), []);
@@ -23,28 +26,82 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
   const finalizedRef = useRef(false);
   const navigationTimerRef = useRef<number>();
 
-  const statusLabels: Record<CardPaymentStatus, string> = {
+  const statusLabels = useMemo<Record<CardPaymentStatus, string>>(() => ({
     waiting: copy.waiting, reading: copy.reading, processing: copy.processing,
     approved: copy.approved, declined: copy.declined, timeout: copy.timeout,
     terminal_unavailable: copy.unavailable, cancelled: copy.cancelled,
-  };
+  }), [copy.approved, copy.cancelled, copy.declined, copy.processing, copy.reading, copy.timeout, copy.unavailable, copy.waiting]);
 
   const startTerminalPayment = useCallback(() => {
     setStatus("waiting");
     setPaymentMethod("credit");
+    transitionOrderLifecycle({
+      paymentStatus: "pending",
+      paymentMethod: "card",
+      orderId: currentOrderId || undefined,
+      orderNumber: currentOrderNumber || undefined,
+      source: "card_terminal",
+      updatedAt: new Date().toISOString(),
+    });
     void terminal.startPayment({
-      orderId: `pending-${Date.now()}`,
+      orderId: currentOrderId || `pending-${Date.now()}`,
       amount: total,
       currency: "EUR",
       timeoutMs: 75_000,
-      onStatusChange: setStatus,
+      onStatusChange: nextStatus => {
+        setStatus(nextStatus);
+        if (nextStatus === "processing") {
+          transitionOrderLifecycle({
+            paymentStatus: "processing",
+            paymentMethod: "card",
+            orderId: currentOrderId || undefined,
+            orderNumber: currentOrderNumber || undefined,
+            source: "card_terminal",
+            updatedAt: new Date().toISOString(),
+          });
+        } else if (nextStatus === "declined" || nextStatus === "timeout" || nextStatus === "terminal_unavailable") {
+          transitionOrderLifecycle({
+            paymentStatus: "failed",
+            paymentMethod: "card",
+            orderId: currentOrderId || undefined,
+            orderNumber: currentOrderNumber || undefined,
+            paymentErrorCode: nextStatus,
+            paymentErrorMessage: statusLabels[nextStatus],
+            source: "card_terminal",
+            updatedAt: new Date().toISOString(),
+          });
+        } else if (nextStatus === "cancelled") {
+          transitionOrderLifecycle({
+            paymentStatus: "cancelled",
+            paymentMethod: "card",
+            orderId: currentOrderId || undefined,
+            orderNumber: currentOrderNumber || undefined,
+            source: "card_terminal",
+            updatedAt: new Date().toISOString(),
+          });
+        }
+      },
     }).then(result => {
       if (result.status !== "approved" || finalizedRef.current) return;
       finalizedRef.current = true;
+      const completedAt = new Date().toISOString();
+      transitionOrderLifecycle({
+        paymentStatus: "completed",
+        paymentMethod: "card",
+        orderStatus: "paid",
+        orderId: currentOrderId || undefined,
+        orderNumber: currentOrderNumber || undefined,
+        completedAt,
+        source: "card_terminal",
+        updatedAt: completedAt,
+      });
       placeOrder();
       navigationTimerRef.current = window.setTimeout(onApproved, 1_800);
     });
-  }, [onApproved, placeOrder, setPaymentMethod, terminal, total]);
+  }, [
+    currentOrderId, currentOrderNumber, onApproved, placeOrder, setPaymentMethod,
+    statusLabels, terminal, total, transitionOrderLifecycle,
+  ]);
 
   useEffect(() => {
     startTerminalPayment();
@@ -52,11 +109,21 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
       window.clearTimeout(navigationTimerRef.current);
       void terminal.cancelPayment();
     };
-  }, [startTerminalPayment, terminal]);
+    // The terminal session must start exactly once per mounted payment screen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [terminal]);
 
   const cancel = async () => {
     await terminal.cancelPayment();
     setStatus("cancelled");
+    transitionOrderLifecycle({
+      paymentStatus: "cancelled",
+      paymentMethod: "card",
+      orderId: currentOrderId || undefined,
+      orderNumber: currentOrderNumber || undefined,
+      source: "card_terminal",
+      updatedAt: new Date().toISOString(),
+    });
     onBack();
   };
 

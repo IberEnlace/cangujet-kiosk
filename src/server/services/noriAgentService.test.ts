@@ -34,7 +34,8 @@ test("preserves allergy and budget context for a high-protein meal with a drink"
   );
   assert.equal(result.conversationState.maxBudget, 15);
   assert.equal(result.conversationState.requestedDrink, true);
-  assert.ok((result.conversationState.minProtein ?? 0) >= 20);
+  assert.ok(result.conversationState.rankingPriorities?.includes("protein"));
+  assert.equal(result.conversationState.minProtein, null);
   assert.ok(result.recommendedProducts.length <= 3);
   assert.match(result.reply, /best match|could not find/i);
   assert.ok(result.warnings.every(warning => warning.type !== "contains"));

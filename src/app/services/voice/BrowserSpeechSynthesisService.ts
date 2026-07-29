@@ -1,6 +1,7 @@
 import type { NoriSpeechSynthesisService } from "./NoriSpeechSynthesisService";
 import { toSpeakableText } from "./speakableText";
 import { selectSpeechVoice } from "./speechVoiceSelection";
+import { browserSpeechRate, type NoriSpeechRate } from "../../../shared/noriSpeech";
 
 export class BrowserSpeechSynthesisService implements NoriSpeechSynthesisService {
   private utterance: SpeechSynthesisUtterance | null = null;
@@ -12,7 +13,7 @@ export class BrowserSpeechSynthesisService implements NoriSpeechSynthesisService
       && typeof SpeechSynthesisUtterance !== "undefined";
   }
 
-  speak(text: string, language: string) {
+  speak(text: string, language: string, rate: NoriSpeechRate = "normal") {
     this.stop();
     if (!this.isSupported()) return Promise.reject(new Error("unsupported"));
     const speakableText = toSpeakableText(text, language);
@@ -37,7 +38,7 @@ export class BrowserSpeechSynthesisService implements NoriSpeechSynthesisService
       this.settle = () => finish();
       utterance.lang = language;
       utterance.voice = selectSpeechVoice(window.speechSynthesis.getVoices(), language) ?? null;
-      utterance.rate = 0.96;
+      utterance.rate = browserSpeechRate(rate);
       utterance.pitch = 1;
       utterance.volume = 1;
       utterance.onend = () => {

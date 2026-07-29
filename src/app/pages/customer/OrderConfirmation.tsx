@@ -12,7 +12,10 @@ import { useDevice } from "../../context/DeviceContext";
 import { useOrderTracking } from "../../hooks/useRealtimeOrders";
 
 export default function OrderConfirmation({ onReset }: { onReset: () => void }) {
-  const { queueNumber, currentOrderId, currentTrackingToken, items, total, orderType, paymentMethod } = useCart();
+  const {
+    queueNumber, currentOrderId, currentTrackingToken, items, confirmedOrderItems,
+    total, orderType, paymentMethod,
+  } = useCart();
   const tracking = useOrderTracking(currentOrderId, currentTrackingToken);
   const { config } = useDevice();
   const printingEnabled = config?.settings.receiptPrintingEnabled ?? false;
@@ -23,7 +26,8 @@ export default function OrderConfirmation({ onReset }: { onReset: () => void }) 
   const [countdown, setCountdown] = useState(18);
   const printStartedRef = useRef(false);
   const receiptDateRef = useRef(new Date());
-  const itemCount = items.reduce((sum, item) => sum + item.qty, 0);
+  const receiptItems = confirmedOrderItems.length ? confirmedOrderItems : items;
+  const itemCount = receiptItems.reduce((sum, item) => sum + item.qty, 0);
   const receipt: ReceiptData | null = queueNumber && orderType && paymentMethod
     ? { orderNumber: queueNumber, date: receiptDateRef.current, orderType, itemCount, total, paymentMethod }
     : null;

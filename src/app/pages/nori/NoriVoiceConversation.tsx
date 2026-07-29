@@ -11,12 +11,13 @@ export default function NoriVoiceConversation({ onBack, onText, onEnd }: {
   onEnd: () => void;
 }) {
   const { language, direction } = useLanguage();
-  const { messages, sendMessage } = useNoriConversation();
+  const { messages, sendMessage, reportTtsInterrupted } = useNoriConversation();
   const text = noriCopy[language];
   const voice = useNoriVoiceSession({
     language,
     copy: text,
     sendMessage,
+    onSpeechInterrupted: reportTtsInterrupted,
   });
   const latestNoriResponse = [...messages].reverse().find(message => message.sender === "nori")?.text ?? "";
 

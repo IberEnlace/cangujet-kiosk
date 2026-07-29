@@ -61,7 +61,7 @@ function Application() {
   const auth = useAuth();
   const device = useDevice();
   const { resetConversation } = useNoriConversation();
-  const { clearCart, items, orderType, resetOrderType, setOrderType, setOrderStatus } = useCart();
+  const { clearCart, items, currentOrderId, orderType, resetOrderType, setOrderType, setOrderStatus } = useCart();
   const { resetLanguage } = useLanguage();
   const [route, setRoute] = useState<AppRoute>(getCurrentRoute);
   const [kioskSession, setKioskSession] = useState(0);
@@ -119,9 +119,9 @@ function Application() {
     if (!device.config && PROTECTED_CUSTOMER_ROUTES.includes(route)) navigateTo(ROUTES.deviceSetup);
   }, [device.config, device.status, route]);
   useEffect(() => {
-    if (items.length > 0 || !ORDER_SESSION_ROUTES.includes(route)) return;
+    if (items.length > 0 || currentOrderId || !ORDER_SESSION_ROUTES.includes(route)) return;
     window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle);
-  }, [items.length, route]);
+  }, [currentOrderId, items.length, route]);
   useEffect(() => {
     if (!NORI_ROUTES.includes(route)) return;
     if (!device.config?.settings.aiAssistantEnabled) navigateTo(ROUTES.categories);

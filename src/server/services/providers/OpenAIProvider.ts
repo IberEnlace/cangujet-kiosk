@@ -4,6 +4,7 @@ import type { NoriChatRequest, NoriChatResponse } from "../../types/noriChat";
 import { isAllowedNoriTool, validateNoriToolCall } from "../noriToolLayer";
 import { buildProviderResponse } from "./providerResponseUtils";
 import { getNoriLanguageInstruction } from "../../../shared/languages";
+import { NORI_SEMANTIC_JSON_SCHEMA } from "../noriSemanticInterpretation";
 
 const TOOL_DEFINITIONS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
   tool("searchProducts", "Search the Morrow menu using product names, descriptions, categories, tags, keywords, and vector tags.", {
@@ -64,7 +65,41 @@ export class OpenAIProvider implements AIProvider {
       getNoriLanguageInstruction(request.language),
       `Active allergens: ${JSON.stringify(request.activeAllergens)}`,
       `Cart product IDs and quantities: ${JSON.stringify(request.cart)}`,
+      `Session constraints: ${JSON.stringify(request.conversationState ? {
+        maxBudget: request.conversationState.maxBudget,
+        minProtein: request.conversationState.minProtein,
+        maxCalories: request.conversationState.maxCalories,
+        activeAllergens: request.conversationState.activeAllergens,
+        dietaryPreferences: request.conversationState.dietaryPreferences,
+        excludedIngredients: request.conversationState.excludedIngredients,
+        rankingPriorities: request.conversationState.rankingPriorities,
+      } : {})}`,
     ].join("\n");
+  }
+
+  async interpret(context: AIProviderContext): Promise<unknown> {
+    const completion = await this.client.chat.completions.create({
+      model: this.model,
+      messages: [
+        { role: "system", content: context.systemPrompt },
+        { role: "user", content: context.request.message },
+      ],
+      response_format: {
+        type: "json_schema",
+        json_schema: {
+          name: "nori_semantic_interpretation",
+          strict: true,
+          schema: NORI_SEMANTIC_JSON_SCHEMA,
+        },
+      },
+    });
+    const content = completion.choices[0]?.message.content;
+    if (!content) throw new Error("OpenAI returned no semantic interpretation.");
+    try {
+      return JSON.parse(content) as unknown;
+    } catch {
+      throw new Error("OpenAI returned invalid semantic JSON.");
+    }
   }
 
   async callTools(context: AIProviderContext): Promise<AIToolCall[]> {
@@ -76,7 +111,7 @@ export class OpenAIProvider implements AIProvider {
       ],
       tools: TOOL_DEFINITIONS,
       tool_choice: "required",
-      parallel_tool_calls: false,
+      parallel_tool_calls: true,
     });
     const rawCalls = completion.choices[0]?.message.tool_calls ?? [];
     if (rawCalls.length === 0) throw new Error("OpenAI returned no Nori tool call.");

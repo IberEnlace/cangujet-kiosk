@@ -1,6 +1,13 @@
 import { createContext, useContext, useState, useCallback, useEffect, useRef, ReactNode } from "react";
 import type { NoriSelectedCustomization } from "../../server/types/noriChat";
 import { isOrderType } from "../config/serviceOptions";
+import {
+  applyNoriOrderLifecycleEvent,
+  initialNoriOrderLifecycle,
+  isTerminalPaymentStatus,
+  type NoriOrderLifecycleEvent,
+  type NoriOrderLifecycleState,
+} from "../../shared/noriOrderLifecycle";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -96,6 +103,7 @@ type CartContextType = {
   providerInstanceId: string;
   // Cart
   items: CartItem[];
+  confirmedOrderItems: CartItem[];
   savedItems: CartItem[];
   addItem: (item: Omit<CartItem, "qty">) => void;
   removeItem: (id: string) => void;
@@ -134,7 +142,10 @@ type CartContextType = {
   setOrderStatus: (s: OrderStatus) => void;
   queueNumber: number;
   currentOrderId: string;
+  currentOrderNumber: string;
   currentTrackingToken: string;
+  orderLifecycle: NoriOrderLifecycleState;
+  transitionOrderLifecycle: (event: NoriOrderLifecycleEvent) => void;
   recordCreatedOrder: (order: { id: string; number: string; total: number; trackingToken?: string }) => void;
   placeOrder: (created?: { id: string; number: string; total: number }) => void;
 
@@ -234,20 +245,30 @@ export function CartProvider({ children }: { children: ReactNode }) {
     { id: "d1", name: "Iced Matcha Latte", price: 4.50, basePrice: 4.50, qty: 1, image: "https://images.unsplash.com/photo-1543007630-9710e4a00a20?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", category: "drink", calories: 150 },
   ]));
   const [savedItems, setSavedItems] = useState<CartItem[]>([]);
+  const [confirmedOrderItems, setConfirmedOrderItems] = useState<CartItem[]>([]);
   const [orderType, setOrderTypeState] = useState<OrderType | null>(readSessionOrderType);
   const [orderNotes, setOrderNotes] = useState("");
   const [coupon, setCoupon] = useState<CouponResult | null>(null);
   const [giftCardBalance, setGiftCardBalance] = useState(0);
   const [rewardsApplied, setRewardsApplied] = useState(0);
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
-  const [paymentStatus, setPaymentStatus] = useState<PaymentStatus | null>(null);
   const [orderStatus, setOrderStatus] = useState<OrderStatus>("idle");
   const [createdOrderTotal, setCreatedOrderTotal] = useState<number | null>(null);
   const [currentTrackingToken, setCurrentTrackingToken] = useState("");
   const [queueNumber, setQueueNumber] = useState(0);
   const [currentOrderId, setCurrentOrderId] = useState("");
+  const [currentOrderNumber, setCurrentOrderNumber] = useState("");
+  const [orderLifecycle, setOrderLifecycle] = useState<NoriOrderLifecycleState>(() => initialNoriOrderLifecycle());
+  const paymentStatus: PaymentStatus | null = orderLifecycle.paymentStatus === "completed"
+    ? "paid"
+    : orderLifecycle.paymentStatus === "idle" ? null : "pending";
   const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>(readKitchenOrders);
   const [user, setUser] = useState<UserProfile>(() => readStored("morrow_user_profile", initialUser));
+  const cartCorrelationSignature = items
+    .map(item => `${item.id}:${item.qty}:${item.price}:${item.noriCustomizations?.map(value => value.optionId).sort().join(",") ?? ""}`)
+    .sort()
+    .join("|");
+  const previousCartCorrelationSignature = useRef(cartCorrelationSignature);
 
   const setOrderType = useCallback((type: OrderType) => {
     setOrderTypeState(type);
@@ -262,6 +283,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
   useEffect(() => { localStorage.setItem("morrow_cart", JSON.stringify(items)); }, [items]);
   useEffect(() => { localStorage.setItem("morrow_kitchen_orders", JSON.stringify(kitchenOrders)); }, [kitchenOrders]);
   useEffect(() => { localStorage.setItem("morrow_user_profile", JSON.stringify(user)); }, [user]);
+  useEffect(() => {
+    if (previousCartCorrelationSignature.current === cartCorrelationSignature) return;
+    previousCartCorrelationSignature.current = cartCorrelationSignature;
+    if (!currentOrderId || isTerminalPaymentStatus(orderLifecycle.paymentStatus)) return;
+    setCurrentOrderId("");
+    setCurrentOrderNumber("");
+    setCurrentTrackingToken("");
+    setCreatedOrderTotal(null);
+    setOrderLifecycle(initialNoriOrderLifecycle());
+  }, [cartCorrelationSignature, currentOrderId, orderLifecycle.paymentStatus]);
 
   // Computed totals
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
@@ -323,10 +354,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setGiftCardBalance(0);
     setRewardsApplied(0);
     setPaymentMethod(null);
-    setPaymentStatus(null);
     setOrderStatus("idle");
     setQueueNumber(0);
     setCurrentOrderId("");
+    setCurrentOrderNumber("");
+    setCurrentTrackingToken("");
+    setCreatedOrderTotal(null);
+    setConfirmedOrderItems([]);
+    setOrderLifecycle(initialNoriOrderLifecycle());
   }, []);
 
   const applyCoupon = useCallback((code: string): boolean => {
@@ -349,13 +384,28 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const recordCreatedOrder = useCallback((order: { id: string; number: string; total: number; trackingToken?: string }) => {
     setCurrentOrderId(order.id);
+    setCurrentOrderNumber(order.number);
     const numeric = Number(order.number.match(/(\d+)$/)?.[1]);
     if (Number.isFinite(numeric)) setQueueNumber(numeric);
     setCreatedOrderTotal(order.total);
     setCurrentTrackingToken(order.trackingToken ?? "");
   }, []);
 
-  useEffect(() => { setCreatedOrderTotal(null); }, [items]);
+  const transitionOrderLifecycle = useCallback((event: NoriOrderLifecycleEvent) => {
+    setOrderLifecycle(current => {
+      const transition = applyNoriOrderLifecycleEvent(current, event);
+      if (import.meta.env.DEV) {
+        console.debug("[Nori lifecycle]", {
+          previousPaymentStatus: current.paymentStatus,
+          nextPaymentStatus: event.paymentStatus,
+          transitionSource: event.source,
+          orderCorrelationId: event.orderId ?? current.orderId,
+          ignoredReason: transition.reason,
+        });
+      }
+      return transition.state;
+    });
+  }, []);
 
   const placeOrder = useCallback((created?: { id: string; number: string; total: number }) => {
     const num = Math.floor(Math.random() * 50) + 50;
@@ -365,7 +415,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
     if (created) setCreatedOrderTotal(created.total);
     setQueueNumber(effectiveNumber); setCurrentOrderId(effectiveId);
     setOrderStatus("received");
-    setPaymentStatus(paymentMethod === "cashier" ? "pending" : "paid");
 
     // Add to kitchen
     const newOrder: KitchenOrder = {
@@ -395,6 +444,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
         paymentMethod: paymentMethod || "cash",
       }, ...prev.orderHistory],
     }));
+    setConfirmedOrderItems(items.map(item => ({ ...item })));
+    setItems([]);
+    setSavedItems([]);
   }, [items, orderNotes, estimatedMinutes, orderType, total, paymentMethod, currentOrderId, queueNumber]);
 
   const updateKitchenOrderStatus = useCallback((id: string, status: OrderStatus) => {
@@ -417,14 +469,15 @@ export function CartProvider({ children }: { children: ReactNode }) {
   return (
     <CartContext.Provider value={{
       providerInstanceId,
-      items, savedItems, addItem, removeItem, updateQty, updateCustomizations, saveForLater, moveToCart, clearCart,
+      items, confirmedOrderItems, savedItems, addItem, removeItem, updateQty, updateCustomizations, saveForLater, moveToCart, clearCart,
       orderType, setOrderType, resetOrderType, orderNotes, setOrderNotes,
       coupon, applyCoupon, removeCoupon,
       giftCardBalance, applyGiftCard,
       rewardsApplied, applyRewards,
       subtotal, tax, discount, total, estimatedMinutes,
-      paymentMethod, paymentStatus, setPaymentMethod, orderStatus, setOrderStatus, currentTrackingToken, recordCreatedOrder,
-      queueNumber, currentOrderId, placeOrder,
+      paymentMethod, paymentStatus, setPaymentMethod, orderStatus, setOrderStatus, currentTrackingToken,
+      orderLifecycle, transitionOrderLifecycle, recordCreatedOrder,
+      queueNumber, currentOrderId, currentOrderNumber, placeOrder,
       kitchenOrders, updateKitchenOrderStatus,
       user, updateUser, toggleFavorite,
     }}>

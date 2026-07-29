@@ -46,7 +46,7 @@ test("Turkish lowercase normalization handles dotted and dotless I without alter
 
 const turkishIntentCases = [
   ["Sağlıklı bir şey öner", "healthy_recommendation"],
-  ["Protein oranı yüksek bir yemek istiyorum", "highest_protein"],
+  ["Protein oranı yüksek bir yemek istiyorum", "recommendation"],
   ["Acılı bir şey istiyorum", "recommendation"],
   ["Vejetaryen seçenekler neler?", "recommendation"],
   ["Bütçeme uygun bir şey öner", "recommendation"],

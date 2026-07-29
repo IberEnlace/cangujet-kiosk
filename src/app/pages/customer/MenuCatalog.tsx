@@ -7,6 +7,7 @@ import { useDevice } from "../../context/DeviceContext";
 import { useNoriConversation } from "../../context/NoriConversationContext";
 import { getLanguageOption, LANGUAGE_CONFIG, type SupportedLanguage } from "../../config/languages";
 import { BrowserSpeechRecognitionService } from "../../services/voice/BrowserSpeechRecognitionService";
+import type { NoriConversationReply } from "../../context/NoriConversationContext";
 import { loadMenu } from "../../services/supabase/menuService";
 import type { NormalizedMenu } from "../../services/supabase/menuModels";
 
@@ -98,7 +99,7 @@ const quickPrompts = [
   ["Surprise Me", "Surprise me with a meal recommendation."],
 ] as const;
 
-function NoriBanner({ onOpenChat, isProcessing, sendMessage, language, voiceEnabled }: { onOpen: () => void; onOpenChat: () => void; isProcessing: boolean; sendMessage: (text: string) => Promise<string | null>; language: SupportedLanguage; voiceEnabled: boolean }) {
+function NoriBanner({ onOpenChat, isProcessing, sendMessage, language, voiceEnabled }: { onOpen: () => void; onOpenChat: () => void; isProcessing: boolean; sendMessage: (text: string) => Promise<NoriConversationReply | null>; language: SupportedLanguage; voiceEnabled: boolean }) {
   const recognition = useMemo(() => new BrowserSpeechRecognitionService(), []);
   const recognitionRequestRef = useRef(0);
   const recognitionActiveRef = useRef(false);

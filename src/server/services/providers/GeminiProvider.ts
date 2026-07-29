@@ -8,6 +8,7 @@ import type { NoriChatRequest, NoriChatResponse } from "../../types/noriChat";
 import { allowedNoriTools, executeNoriTool, isAllowedNoriTool } from "../noriToolLayer";
 import { buildProviderResponse } from "./providerResponseUtils";
 import { getNoriLanguageInstruction } from "../../../shared/languages";
+import { NORI_SEMANTIC_JSON_SCHEMA } from "../noriSemanticInterpretation";
 
 const FUNCTION_DECLARATIONS: FunctionDeclaration[] = [
   declaration("searchProducts", "Search menu products using the query.", { query: stringSchema() }, ["query"]),
@@ -62,7 +63,33 @@ export class GeminiProvider implements AIProvider {
       getNoriLanguageInstruction(request.language),
       `Active allergens: ${JSON.stringify(request.activeAllergens)}`,
       `Cart product IDs and quantities: ${JSON.stringify(request.cart)}`,
+      `Session constraints: ${JSON.stringify(request.conversationState ? {
+        maxBudget: request.conversationState.maxBudget,
+        minProtein: request.conversationState.minProtein,
+        maxCalories: request.conversationState.maxCalories,
+        activeAllergens: request.conversationState.activeAllergens,
+        dietaryPreferences: request.conversationState.dietaryPreferences,
+        excludedIngredients: request.conversationState.excludedIngredients,
+        rankingPriorities: request.conversationState.rankingPriorities,
+      } : {})}`,
     ].join("\n");
+  }
+
+  async interpret(context: AIProviderContext): Promise<unknown> {
+    const response = await withTimeout(this.client.models.generateContent({
+      model: this.model,
+      contents: `${context.systemPrompt}\n\nCustomer message:\n${context.request.message}`,
+      config: {
+        responseMimeType: "application/json",
+        responseJsonSchema: NORI_SEMANTIC_JSON_SCHEMA,
+      },
+    }), this.timeoutMs);
+    if (!response.text) throw new Error("Gemini returned no semantic interpretation.");
+    try {
+      return JSON.parse(response.text) as unknown;
+    } catch {
+      throw new Error("Gemini returned invalid semantic JSON.");
+    }
   }
 
   async callTools(context: AIProviderContext): Promise<AIToolCall[]> {

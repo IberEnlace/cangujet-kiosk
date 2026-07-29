@@ -9,6 +9,7 @@ import { useSpeechSynthesis } from "./useSpeechSynthesis";
 import { shouldSpeakNoriReply } from "../services/voice/speakableText";
 import { getLanguageDefinition, type SupportedLanguage } from "../config/languages";
 import type { NoriCopy } from "../pages/nori/noriCopy";
+import type { NoriConversationReply } from "../context/NoriConversationContext";
 
 export type VoiceStatus =
   | "idle"
@@ -22,7 +23,8 @@ export type VoiceStatus =
 interface UseNoriVoiceSessionOptions {
   language: SupportedLanguage;
   copy: NoriCopy;
-  sendMessage: (text: string) => Promise<string | null>;
+  sendMessage: (text: string) => Promise<NoriConversationReply | null>;
+  onSpeechInterrupted?: () => void;
 }
 
 function recognitionMessage(code: SpeechRecognitionFailure, copy: NoriCopy) {
@@ -56,7 +58,7 @@ function sessionIsStopped(status: VoiceStatus) {
   return status === "idle" || status === "paused";
 }
 
-export function useNoriVoiceSession({ language, copy, sendMessage }: UseNoriVoiceSessionOptions) {
+export function useNoriVoiceSession({ language, copy, sendMessage, onSpeechInterrupted }: UseNoriVoiceSessionOptions) {
   const {
     abort: abortRecognition,
     interimTranscript,
@@ -169,10 +171,17 @@ export function useNoriVoiceSession({ language, copy, sendMessage }: UseNoriVoic
         return;
       }
 
-      setCurrentResponse(reply);
-      if (!shouldSpeakNoriReply(reply)) {
+      const responseText = reply.text;
+      setCurrentResponse(responseText);
+      if (reply.speechDirectives.shouldSpeak === false) {
         activeTurnIdRef.current = null;
-        fail(reply, true);
+        setStatus("listening");
+        continueListening(sessionEpoch);
+        return;
+      }
+      if (!shouldSpeakNoriReply(responseText)) {
+        activeTurnIdRef.current = null;
+        fail(responseText, true);
         return;
       }
       abortRecognition();
@@ -184,8 +193,9 @@ export function useNoriVoiceSession({ language, copy, sendMessage }: UseNoriVoic
 
       try {
         setStatus("speaking");
-        await speak(reply, {
+        await speak(responseText, {
           language: languageDefinition.speechSynthesisLocale,
+          rate: reply.speechDirectives.rate,
           onStart: () => {
             if (isCurrentTurn()) setStatus("speaking");
           },
@@ -309,12 +319,13 @@ export function useNoriVoiceSession({ language, copy, sendMessage }: UseNoriVoic
     activeTurnIdRef.current = null;
     clearRestartTimer();
     cancelSpeech();
+    onSpeechInterrupted?.();
     abortRecognition();
     setErrorMessage("");
     setCanResume(true);
     setStatus("listening");
     void listenForTurnRef.current();
-  }, [abortRecognition, cancelSpeech, clearRestartTimer, setCanResume, setStatus]);
+  }, [abortRecognition, cancelSpeech, clearRestartTimer, onSpeechInterrupted, setCanResume, setStatus]);
 
   const stopSpeaking = useCallback(() => {
     if (statusRef.current !== "speaking") return;

@@ -42,7 +42,10 @@ type Screen = "select" | "qr" | "processing";
 type Props = { onNavigate: (route: string) => void };
 
 export default function PaymentFlow({ onNavigate }: Props) {
-  const { total, items, orderType, orderNotes, setPaymentMethod, recordCreatedOrder, placeOrder } = useCart();
+  const {
+    total, items, orderType, orderNotes, setPaymentMethod, recordCreatedOrder, placeOrder,
+    transitionOrderLifecycle, currentOrderId, currentOrderNumber,
+  } = useCart();
   const { config } = useDevice();
   const { currentRole } = useAuth();
   const methodMap: Record<CustomerPaymentMethod, "card" | "pay_at_cashier" | "qr"> = { credit: "card", cashier: "pay_at_cashier", qr: "qr" };
@@ -62,33 +65,58 @@ export default function PaymentFlow({ onNavigate }: Props) {
 
     setSubmitting(true);
     setOrderError("");
-
-    const result = await createOrder({
-      items,
-      orderType,
-      customerNote: orderNotes,
-      idempotencyKey,
-      source: currentRole === "cashier" ? "cashier" : "kiosk",
+    const lifecycleMethod = id === "credit" ? "card" : id === "cashier" ? "pay_at_cashier" : "qr";
+    transitionOrderLifecycle({
+      paymentStatus: "pending",
+      paymentMethod: lifecycleMethod,
+      orderStatus: "awaiting_payment",
+      source: "checkout",
+      updatedAt: new Date().toISOString(),
     });
 
-    console.log("[MORROW] Cashier createOrder result:", result);
-
-    setSubmitting(false);
-
-    if (!result.ok) {
-      setOrderError(result.error.message);
-      return;
+    let created = currentOrderId && currentOrderNumber
+      ? { id: currentOrderId, number: currentOrderNumber, total, trackingToken: idempotencyKey }
+      : null;
+    if (!created) {
+      const result = await createOrder({
+        items,
+        orderType,
+        customerNote: orderNotes,
+        idempotencyKey,
+        source: currentRole === "cashier" ? "cashier" : "kiosk",
+      });
+      console.log("[MORROW] Customer createOrder result:", result);
+      if (!result.ok) {
+        setSubmitting(false);
+        setOrderError(result.error.message);
+        transitionOrderLifecycle({
+          paymentStatus: "failed",
+          paymentMethod: lifecycleMethod,
+          paymentErrorMessage: result.error.message,
+          source: "order_service",
+          updatedAt: new Date().toISOString(),
+        });
+        return;
+      }
+      created = {
+        id: result.data.order_id,
+        number: result.data.order_number,
+        total: Number(result.data.total),
+        trackingToken: idempotencyKey,
+      };
+      recordCreatedOrder(created);
     }
-
-    const created = {
-      id: result.data.order_id,
-      number: result.data.order_number,
-      total: Number(result.data.total),
-      trackingToken: idempotencyKey,
-    };
-
-    recordCreatedOrder(created);
+    setSubmitting(false);
     setPaymentMethod(id);
+    transitionOrderLifecycle({
+      paymentStatus: id === "cashier" ? "pay_at_cashier_pending" : "pending",
+      paymentMethod: lifecycleMethod,
+      orderStatus: id === "cashier" ? "accepted" : "awaiting_payment",
+      orderId: created.id,
+      orderNumber: created.number,
+      source: "order_service",
+      updatedAt: new Date().toISOString(),
+    });
 
     if (id === "credit") {
       onNavigate("paymentCard");
@@ -108,6 +136,14 @@ export default function PaymentFlow({ onNavigate }: Props) {
   useEffect(() => { setIdempotencyKey(crypto.randomUUID()); }, [cartSignature]);
 
   const startProcessing = () => {
+    transitionOrderLifecycle({
+      paymentStatus: "processing",
+      paymentMethod: "qr",
+      orderId: currentOrderId || undefined,
+      orderNumber: currentOrderNumber || undefined,
+      source: "qr_payment",
+      updatedAt: new Date().toISOString(),
+    });
     setScreen("processing");
     setProcessingStep(0);
     let step = 0;
@@ -117,6 +153,16 @@ export default function PaymentFlow({ onNavigate }: Props) {
       if (step >= processingSteps.length) {
         clearInterval(interval);
         setTimeout(() => {
+          transitionOrderLifecycle({
+            paymentStatus: "completed",
+            paymentMethod: "qr",
+            orderId: currentOrderId || undefined,
+            orderNumber: currentOrderNumber || undefined,
+            orderStatus: "paid",
+            completedAt: new Date().toISOString(),
+            source: "qr_payment",
+            updatedAt: new Date().toISOString(),
+          });
           placeOrder(); onNavigate("confirmation");
         }, 600);
       }
@@ -206,7 +252,17 @@ export default function PaymentFlow({ onNavigate }: Props) {
 
   if (screen === "qr") return (
     <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
-      <button onClick={() => setScreen("select")} className="absolute top-6 left-6 size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></button>
+      <button onClick={() => {
+        transitionOrderLifecycle({
+          paymentStatus: "cancelled",
+          paymentMethod: "qr",
+          orderId: currentOrderId || undefined,
+          orderNumber: currentOrderNumber || undefined,
+          source: "qr_payment",
+          updatedAt: new Date().toISOString(),
+        });
+        setScreen("select");
+      }} className="absolute top-6 left-6 size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></button>
       <div className="text-center">
         <h2 className="text-2xl font-bold">Scan to Pay</h2>
         <p className="text-white/40 mt-2">QR payment provider is not connected</p>

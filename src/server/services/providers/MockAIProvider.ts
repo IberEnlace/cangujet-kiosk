@@ -24,6 +24,12 @@ export class MockAIProvider implements AIProvider {
       "Use only approved menu tools. Never invent menu facts.",
       getNoriLanguageInstruction(request.language),
       `Active allergens: ${request.activeAllergens.join(", ") || "none"}.`,
+      `Active preferences: ${JSON.stringify(request.conversationState ? {
+        allergens: request.conversationState.activeAllergens,
+        dietary: request.conversationState.dietaryPreferences,
+        excluded: request.conversationState.excludedIngredients,
+        priorities: request.conversationState.rankingPriorities,
+      } : {})}.`,
       `Customer message: ${request.message}`,
     ].join("\n");
   }

@@ -5,14 +5,15 @@ import {
   noriSupportedAllergens,
   searchProducts,
 } from "../../app/services/noriMenuEngine";
-import type { AIProvider, AIToolCall } from "../types/aiProvider";
+import type { AIProvider, AIToolCall, NoriSemanticInterpretation } from "../types/aiProvider";
 import type {
   NoriAction, NoriChatRequest, NoriChatResponse, NoriConversationState,
   NoriIntent, NoriRecentRecommendationContext, NoriSelectedCustomization, NoriWarning,
 } from "../types/noriChat";
-import { executeNoriTool, validateNoriToolCall } from "./noriToolLayer";
+import { validateNoriToolCall } from "./noriToolLayer";
 import {
   interpretNoriRequest,
+  isStableIngredientPreference,
   isStableDietaryStatement,
   type NoriRequestInterpretation,
 } from "./noriRequestInterpreter";
@@ -30,6 +31,56 @@ import {
   buildRecommendationResponse,
 } from "./noriResponseService";
 import { normalizeNoriInput, routeNoriIntent } from "./noriIntentRouter";
+import { resolveNoriReference } from "./noriReferenceResolver";
+import {
+  fitnessNoriScore as fitnessScore,
+  healthyNoriScore as healthyScore,
+  matchesFlavor,
+  rankNoriCandidates,
+} from "./noriRecommendationRanker";
+import {
+  buildNoriSemanticPrompt,
+  mergeSemanticInterpretation,
+  validateNoriSemanticInterpretation,
+} from "./noriSemanticInterpretation";
+import { extractNoriUnderstanding } from "./noriUnderstandingService";
+import {
+  addProviderCallsToNoriPlan,
+  buildNoriReasoningPlan,
+  executeNoriReasoningPlan,
+  plannerDiagnostics,
+  selfValidateNoriFinalResponse,
+  selfValidateNoriRecommendations,
+  type NoriReasoningPlan,
+} from "./noriReasoningPlanner";
+import {
+  detectNoriConversationActs,
+  primaryConversationAct,
+  type NoriConversationActAnalysis,
+} from "./noriConversationActService";
+import {
+  advanceNoriConversationStage,
+  currentNoriConversationStage,
+} from "./noriConversationStageService";
+import {
+  buildNoriSocialResponse,
+  socialBusinessPrefix,
+} from "./noriSocialResponseService";
+import {
+  buildNoriRepairResponse,
+  summarizeNoriAssistantResponse,
+} from "./noriConversationRepairService";
+import {
+  buildNoriLifecycleResponse,
+  completedOrderGuardResponse,
+  completedOrderLockedResponse,
+  shouldHandleLifecycleTurn,
+  synchronizeNoriOrderLifecycle,
+} from "./noriOrderLifecycleService";
+import {
+  detectNoriSpeechPreferenceCommand,
+  speechPreferenceConfirmation,
+} from "./noriSpeechPreferenceService";
 
 const CATEGORY_NAMES = ["burger", "pizza", "pasta", "healthy_bowl", "salad", "side", "dessert", "hot_drink", "cold_drink", "kids_meal"];
 const CUSTOMIZATION_SYNONYMS: Record<string, string[]> = {
@@ -45,7 +96,40 @@ export class NoriAgentService {
   constructor(private readonly provider?: AIProvider) {}
 
   async process(request: NoriChatRequest): Promise<NoriChatResponse> {
+    const result = await this.processPlannedTurn(request);
+    const validated = selfValidateNoriFinalResponse(result).response;
+    const acts = validated.conversationState.lastConversationActs ?? [];
+    if (validated.intent !== "conversation") {
+      const analysis = detectNoriConversationActs(
+        request.message,
+        validated.conversationState.preferredLanguage,
+        validated.conversationState,
+      );
+      const prefix = socialBusinessPrefix(acts, validated.conversationState.preferredLanguage, analysis.asksPersonalChoice);
+      if (prefix && !validated.reply.startsWith(prefix)) validated.reply = `${prefix}${validated.reply}`;
+    }
+    validated.conversationState.conversationStage = advanceNoriConversationStage(validated, request);
+    validated.conversationState.lastAssistantResponseSummary = summarizeNoriAssistantResponse(validated);
+    const speechCommand = detectNoriSpeechPreferenceCommand(
+      request.message,
+      validated.conversationState.preferredLanguage,
+    );
+    validated.speechDirectives = {
+      rate: validated.conversationState.speechRate ?? "normal",
+      interruptCurrentSpeech: Boolean(speechCommand),
+      shouldSpeak: !(request.lifecycleEvent && !validated.reply),
+    };
+    return validated;
+  }
+
+  private async processPlannedTurn(request: NoriChatRequest): Promise<NoriChatResponse> {
     const state = createState(request);
+    synchronizeNoriOrderLifecycle(state, request.orderLifecycle, request.cart.length > 0);
+    const conversation = detectNoriConversationActs(request.message, state.preferredLanguage, state);
+    state.lastConversationActs = conversation.acts;
+    state.consecutiveNoiseCount = conversation.isNoise ? (state.consecutiveNoiseCount ?? 0) + 1 : 0;
+    const speechCommand = detectNoriSpeechPreferenceCommand(request.message, state.preferredLanguage);
+    if (speechCommand) state.speechRate = speechCommand.rate;
     for (const result of request.actionResults ?? []) {
       if (result.status === "success" && !state.executedActionIds.includes(result.actionId)) {
         state.executedActionIds.push(result.actionId);
@@ -53,25 +137,166 @@ export class NoriAgentService {
       const historical = state.pendingActionHistory?.find(item => item.id === result.actionId);
       if (historical) historical.status = result.status === "success" ? "completed" : "failed";
     }
-    const pendingResult = this.handlePendingAction(request, state);
+    if (shouldHandleLifecycleTurn(request, state)) {
+      return response(
+        "lifecycle_status",
+        buildNoriLifecycleResponse(state, state.preferredLanguage, request.message),
+        state,
+      );
+    }
+    if (request.lifecycleEvent) return response("conversation", "", state);
+    if (state.orderLifecycle?.paymentStatus === "completed"
+      || state.orderLifecycle?.paymentStatus === "pay_at_cashier_pending") {
+      const guarded = completedOrderGuardResponse(request.message, state.preferredLanguage);
+      if (guarded) return response("conversation", guarded, state);
+      if (conversation.hasBusinessCommand) {
+        return response("conversation", completedOrderLockedResponse(state.preferredLanguage), state);
+      }
+    }
+    if (speechCommand && !speechCommand.repeat) {
+      return response(
+        "conversation",
+        speechPreferenceConfirmation(speechCommand.rate, state.preferredLanguage),
+        state,
+      );
+    }
+    if (!speechCommand && (state.orderLifecycle?.paymentStatus === "pending"
+      || state.orderLifecycle?.paymentStatus === "processing")) {
+      return response(
+        "lifecycle_status",
+        buildNoriLifecycleResponse(state, state.preferredLanguage, request.message),
+        state,
+      );
+    }
+    const normalizedMessage = normalizeNoriInput(request.message, state.preferredLanguage);
+    const supersedesPending = conversation.acts.some(act =>
+      ["correction", "change_mind", "farewell"].includes(act))
+      || (conversation.acts.includes("rejection") && isRecommendationRejection(normalizedMessage));
+    if (state.pendingAction && supersedesPending) {
+      state.pendingAction.status = "cancelled";
+      archivePendingAction(state, state.pendingAction);
+      state.pendingAction = null;
+      state.selectedCustomizations = [];
+    }
+    const socialResult = this.handleConversationOnlyTurn(request, state, conversation);
+    if (socialResult) return socialResult;
+    const interruptsPending = conversation.acts.some(act =>
+      ["correction", "misunderstanding", "request_repetition", "request_simplification", "pause_request", "farewell"].includes(act))
+      || isSafetyInterruption(request.message)
+      || requestsCartBeforeCheckout(request.message);
+    const pendingResult = interruptsPending ? null : this.handlePendingAction(request, state);
     if (pendingResult) return pendingResult;
     if (isConfirmation(normalizeNoriInput(request.message, state.preferredLanguage)) && state.pendingActionHistory?.some(item =>
       item.type === "confirm_cart_change" && item.operation === "add" && item.status === "completed")) {
       return response("add_to_cart", "That item has already been added to your cart.", state);
     }
-    const decision = routeNoriIntent(request.message, state);
+    let deterministicDecision = routeNoriIntent(request.message, state);
+    const signals = extractNoriUnderstanding(request.message, state.preferredLanguage, state);
+    deterministicDecision = prioritizeConversationBusinessIntent(
+      deterministicDecision,
+      request.message,
+      conversation,
+      state,
+    );
+    let decision = deterministicDecision;
+    let semanticInterpretation: NoriSemanticInterpretation | null = null;
+    let semanticFailureReason: string | null = null;
+    if (this.provider?.interpret && shouldUseSemanticUnderstanding(deterministicDecision.intent, deterministicDecision.confidence)) {
+      try {
+        const semanticRequest = { ...request, conversationState: state };
+        const rawSemantic = await this.provider.interpret({
+          request: semanticRequest,
+          systemPrompt: buildNoriSemanticPrompt(state, request.cart),
+        });
+        semanticInterpretation = validateNoriSemanticInterpretation(rawSemantic);
+        if (semanticInterpretation.confidence >= 0.65
+          && semanticInterpretation.primaryIntent !== "unknown"
+          && semanticInterpretation.primaryIntent !== "unsupported") {
+          decision = {
+            intent: semanticInterpretation.primaryIntent,
+            confidence: semanticInterpretation.confidence,
+            reason: "validated semantic provider interpretation",
+            normalizedInput: deterministicDecision.normalizedInput,
+          };
+        }
+      } catch (error) {
+        semanticFailureReason = error instanceof Error ? error.message : "semantic interpretation failed";
+      }
+    }
+    if (process.env.NODE_ENV !== "production") {
+      state.understandingDiagnostics = {
+        detectedLanguage: state.preferredLanguage,
+        deterministicIntent: deterministicDecision.intent,
+        deterministicConfidence: deterministicDecision.confidence,
+        semanticIntent: semanticInterpretation?.primaryIntent ?? null,
+        semanticConfidence: semanticInterpretation?.confidence ?? null,
+        providerFallbackUsed: Boolean(semanticInterpretation),
+        extractedSignals: signals.labels,
+        selectedTools: [],
+        clarificationReason: semanticInterpretation?.clarificationReason ?? null,
+        finalRoute: decision.intent,
+        fallbackReason: semanticFailureReason,
+      };
+    } else {
+      delete state.understandingDiagnostics;
+    }
     const clarificationTransition = transitionClarification(state, request.message, decision.intent);
-    if (decision.intent === "clarification_answer") return this.resetState(request.message, state);
-    if (decision.intent === "constraint_update") return this.constraintUpdate(request, state, clarificationTransition === "superseded");
+    const routedIntent = clarificationTransition === "answered"
+      ? state.clarificationState?.relatedIntent ?? decision.intent
+      : decision.intent;
+    if (state.understandingDiagnostics) state.understandingDiagnostics.finalRoute = routedIntent;
+    if (routedIntent === "clarification_answer") return this.resetState(request.message, state);
+    if (routedIntent === "constraint_update") return this.constraintUpdate(request, state, clarificationTransition === "superseded");
     const continuesConstraintContext = state.awaitingConstraintClarification
-      || (clarificationTransition === "superseded" && ["recommendation", "menu_search", "nutrition_question"].includes(decision.intent));
-    const freshQuery = isIndependentMenuQuery(request.message);
-    if (freshQuery && !continuesConstraintContext) clearTransientSearchState(state);
+      || (clarificationTransition === "superseded" && ["recommendation", "menu_search", "nutrition_question"].includes(routedIntent));
+    const freshQuery = isIndependentMenuQuery(request.message, state);
+    if (freshQuery
+      && !continuesConstraintContext
+      && !conversation.acts.includes("rejection")
+      && !conversation.acts.includes("change_mind")) {
+      clearTransientSearchState(state);
+    }
     updateState(state, request.message);
-    const intent = decision.intent;
-    const interpretation = interpretNoriRequest(request.message, state);
-    if (intent === "recommendation" || intent === "menu_search") applyInterpretation(state, interpretation, request.message);
+    const intent = routedIntent;
+    state.previousCustomerIntent = intent;
+    const interpretation = mergeSemanticInterpretation(
+      interpretNoriRequest(request.message, state),
+      semanticInterpretation,
+      state,
+    );
+    if (intent === "recommendation" || intent === "menu_search" || intent === "healthy_recommendation" || intent === "bundle_recommendation") {
+      applyInterpretation(state, interpretation, request.message);
+    }
     state.awaitingConstraintClarification = false;
+    if (semanticInterpretation?.references.selectedOrdinal) {
+      const referencedId = state.recentRecommendationContext?.productIds[
+        semanticInterpretation.references.selectedOrdinal - 1
+      ];
+      if (referencedId) state.selectedProductId = referencedId;
+    }
+    const reference = resolveNoriReference(request.message, state);
+    const plannedCalls = ["recommendation", "menu_search", "healthy_recommendation"].includes(intent)
+      ? buildRecommendationToolCalls(request.message, state, interpretation)
+      : [];
+    const reasoningPlan = buildNoriReasoningPlan({
+      intent,
+      routeConfidence: semanticInterpretation?.confidence ?? deterministicDecision.confidence,
+      interpretation,
+      state,
+      deterministicCalls: plannedCalls,
+      reference,
+    });
+    if (state.understandingDiagnostics) {
+      state.understandingDiagnostics.planner = plannerDiagnostics(reasoningPlan);
+      state.understandingDiagnostics.selectedTools = reasoningPlan.steps.map(step => step.call.name);
+    }
+    if (reference.ambiguous && ["product_details", "allergen_check", "add_to_cart", "remove_from_cart", "customization_question"].includes(intent)) {
+      if (state.understandingDiagnostics?.planner) {
+        state.understandingDiagnostics.planner.validationStatus = "failed";
+        state.understandingDiagnostics.planner.recoveryActions = ["requested_reference_clarification"];
+      }
+      return response(intent, reference.clarificationQuestion ?? "Which product do you mean?", state);
+    }
     const selectedProduct = resolveSelectedProduct(request.message, state, request.cart);
     if (selectedProduct && selectedProduct.id !== state.selectedProductId) {
       state.selectedProductId = selectedProduct.id;
@@ -107,8 +332,8 @@ export class NoriAgentService {
       case "lowest_sugar":
       case "lowest_sodium":
       case "highest_fiber": return this.nutritionSuperlative(request.message, state, intent);
-      case "healthy_recommendation": return this.healthyRecommendation(request.message, state);
-      case "bundle_recommendation": return this.bundleRecommendation(request.message, state);
+      case "healthy_recommendation": return this.recommend(request, state, intent, interpretation, reasoningPlan);
+      case "bundle_recommendation": return this.bundleRecommendation(request.message, state, reasoningPlan);
       case "product_details": return /\b(?:first|second|third) pair\b/.test(normalize(request.message)) ? this.selectBundlePair(request.message, state) : this.productDetails(selectedProduct, state);
       case "nutrition_question": return this.nutritionAnswer(request.message, selectedProduct, state);
       case "allergen_check": return this.allergenAnswer(selectedProduct, state);
@@ -116,27 +341,130 @@ export class NoriAgentService {
       case "remove_from_cart": return this.cartAction(intent, request.message, selectedProduct, state, "remove");
       case "update_quantity": return this.cartAction(intent, request.message, selectedProduct, state, "update");
       case "menu_search":
-      case "recommendation": return this.recommend(request, state, intent, interpretation);
-      default: return response(intent, "I’m not sure what you want me to do. You can ask for a recommendation, product details, allergy information, a customization, your cart, or checkout.", state);
+      case "recommendation": return this.recommend(request, state, intent, interpretation, reasoningPlan);
+      default: {
+        if (state.understandingDiagnostics) {
+          state.understandingDiagnostics.finalRoute = intent;
+          state.understandingDiagnostics.fallbackReason ??= decision.reason;
+        }
+        return response(intent, contextualFallback(signals, state), state);
+      }
     }
   }
 
+  private handleConversationOnlyTurn(
+    request: NoriChatRequest,
+    state: NoriConversationState,
+    conversation: NoriConversationActAnalysis,
+  ): NoriChatResponse | null {
+    const acts = conversation.acts;
+    const stage = currentNoriConversationStage(state, request.cart);
+    if (conversation.isNoise) {
+      return response("conversation", buildNoriSocialResponse({
+        act: "empty_or_noise_input", stage, state, request,
+      }), state);
+    }
+    const repairMode = acts.includes("request_simplification")
+      ? "simplify"
+      : acts.includes("request_repetition") || acts.includes("misunderstanding")
+        ? "repeat"
+        : null;
+    if (repairMode) {
+      return response("conversation", buildNoriRepairResponse(state, repairMode), state);
+    }
+    const act = primaryConversationAct(acts);
+    if (!act) return null;
+    if (state.pendingAction
+      && (acts.includes("confirmation")
+        || acts.includes("cancellation")
+        || acts.includes("acknowledgement"))) {
+      return null;
+    }
+    const socialOnlyActs = new Set([
+      "greeting", "introduction", "ask_capabilities", "gratitude", "praise",
+      "acknowledgement", "farewell", "pause_request", "resume_conversation",
+      "abusive_or_inappropriate_language", "unrelated_request", "correction", "request_help",
+    ]);
+    if (socialOnlyActs.has(act) && !conversation.hasBusinessCommand) {
+      if (act === "gratitude" || act === "praise" || act === "acknowledgement") {
+        state.lastAcknowledgedIntent = state.previousCustomerIntent ?? null;
+      }
+      if (act === "correction") {
+        state.activeRepairContext = {
+          type: "correction",
+          originalIntent: state.previousCustomerIntent ?? null,
+          productIds: state.lastAssistantResponseSummary?.productIds ?? [],
+          createdAt: Date.now(),
+        };
+        state.misunderstandingCount = (state.misunderstandingCount ?? 0) + 1;
+      }
+      return response("conversation", buildNoriSocialResponse({ act, stage, state, request }), state);
+    }
+    return null;
+  }
+
   private resetState(message: string, state: NoriConversationState): NoriChatResponse {
-    const text = normalizeNoriInput(message);
-    state.maxBudget = null;
-    state.afterTaxBudget = false;
-    if (text.includes("forget my budget")) {
+    const text = normalizeNoriInput(message, state.preferredLanguage);
+    if (text.includes("forget my budget") || text.includes("bütçemi unut")) {
+      state.maxBudget = null;
+      state.afterTaxBudget = false;
       state.awaitingConstraintClarification = false;
       return response("clarification_answer", "Okay. I removed your budget limit.", state);
     }
+    if (/\b(clear|forget) my allergies\b/.test(text) || text.includes("alerjilerimi temizle")) {
+      state.activeAllergens = [];
+      return response("clarification_answer", state.preferredLanguage === "tr"
+        ? "Tamam. Bu görüşmedeki alerji listesini temizledim. Hâlâ geçerli bir alerji varsa lütfen yeniden söyleyin."
+        : "Okay. I cleared the session allergy list. Tell me again if any allergy still applies.", state);
+    }
+    const forgottenIngredient = ingredientToForget(text);
+    if (forgottenIngredient) {
+      state.excludedIngredients = (state.excludedIngredients ?? []).filter(item => normalize(item) !== forgottenIngredient);
+      if (state.preferenceMemory) {
+        state.preferenceMemory.dislikedIngredients = state.preferenceMemory.dislikedIngredients
+          .filter(item => normalize(item) !== forgottenIngredient);
+        if (forgottenIngredient === "spicy") state.preferenceMemory.avoidSpicy = false;
+        state.preferenceMemory.updatedAt = Date.now();
+      }
+      return response("clarification_answer", state.preferredLanguage === "tr"
+        ? `Tamam. Artık ${forgottenIngredient} tercihini dışlamayacağım.`
+        : `Okay. I will no longer exclude ${forgottenIngredient}.`, state);
+    }
     {
+      state.maxBudget = null; state.afterTaxBudget = false;
       state.minProtein = null; state.maxCalories = null; state.requestedCategory = null;
       state.requestedDrink = false; state.requestedSpicy = false; state.requestedKids = false;
       state.requestedDessert = false; state.selectedProductId = null; state.selectedCustomizations = [];
       state.currentRecommendation = null; state.pendingAction = null; state.lastComparedProductIds = [];
       state.recentRecommendationContext = null; state.lastMultiOptionContext = null; state.comparisonContext = null;
-      if (text.includes("clear my preferences") || text.includes("start over")) {
+      state.plannerSnapshot = null;
+      state.rankingPriorities = []; state.preferredFlavors = [];
+      state.temporaryRejectedProductIds = [];
+      state.lastConversationActs = [];
+      state.lastAssistantResponseSummary = null;
+      state.lastAssistantTemplateId = null;
+      state.socialResponseRotationIndex = 0;
+      state.misunderstandingCount = 0;
+      state.consecutiveNoiseCount = 0;
+      state.lastAcknowledgedIntent = null;
+      state.closingStatus = "open";
+      state.activeRepairContext = null;
+      state.conversationStage = "discovering_needs";
+      if (text.includes("clear my preferences") || text.includes("clear all preferences") || text.includes("tercihlerimi temizle") || text.includes("start over") || text.includes("new order") || text.includes("baştan başla") || text.includes("yeni sipariş")) {
         state.dietaryPreferences = []; state.persistentDietaryPreferences = [];
+        state.excludedIngredients = [];
+        state.preferenceMemory = { dislikedIngredients: [], avoidSpicy: false, preferredFlavors: [], updatedAt: Date.now() };
+      }
+      if (text.includes("start over") || text.includes("new order") || text.includes("baştan başla") || text.includes("yeni sipariş")) {
+        state.activeAllergens = [];
+        state.suggestedCompanionProductIds = [];
+        state.orderLifecycle = undefined;
+        state.lastAcknowledgedPaymentStatus = undefined;
+        state.lastAcknowledgedOrderId = null;
+        state.lastAcknowledgedOrderNumber = null;
+        state.lastLifecycleMessageTemplateId = null;
+        state.speechRate = "normal";
+        state.lastTtsInterrupted = false;
       }
     }
     return response("clarification_answer", "Okay. I cleared those temporary preferences.", state);
@@ -152,13 +480,22 @@ export class NoriAgentService {
     }
     state.awaitingConstraintClarification = true;
     const constraints = interpretation.constraints;
-    let reply = "What kind of menu item would you like?";
-    if (constraints.maxBudget !== null) reply = `I can help you stay within $${constraints.maxBudget}. Would you like food, a hot drink, or a cold drink?`;
-    else if (constraints.excludedIngredients.includes("beef")) reply = "Got it. Would you prefer chicken, vegetarian, or another non-beef option?";
-    else if (constraints.excludedIngredients.includes("spicy")) reply = "Got it. Would you prefer a burger, bowl, or another non-spicy option?";
-    else if (constraints.excludedIngredients.includes("fried")) reply = "Got it. Would you prefer a burger, salad, or bowl that is not documented as fried?";
-    else if (constraints.maxCalories !== null) reply = `I can keep documented options under ${constraints.maxCalories} calories. Would you prefer a meal, snack, or drink?`;
-    else if (constraints.minProtein !== null) reply = `I can look for at least ${constraints.minProtein}g of protein. Would you prefer a burger, bowl, or another meal?`;
+    const turkish = state.preferredLanguage === "tr";
+    let reply = turkish ? "Nasıl bir menü ürünü istersiniz?" : "What kind of menu item would you like?";
+    if (constraints.maxBudget !== null) reply = turkish
+      ? `$${constraints.maxBudget} bütçeniz içinde kalmanıza yardımcı olabilirim. Yemek, sıcak içecek veya soğuk içecek ister misiniz?`
+      : `I can help you stay within $${constraints.maxBudget}. Would you like food, a hot drink, or a cold drink?`;
+    else if (isStableIngredientPreference(request.message) && constraints.excludedIngredients.length) {
+      const ingredient = constraints.excludedIngredients[constraints.excludedIngredients.length - 1];
+      reply = turkish
+        ? `Anladım. Bu sipariş boyunca ${ingredient} içeren ürünlerden kaçınacağım. Nasıl bir yemek istersiniz?`
+        : `Got it. I will avoid ${ingredient} for this ordering session. What kind of meal would you like?`;
+    }
+    else if (constraints.excludedIngredients.includes("beef")) reply = turkish ? "Anladım. Tavuklu, vejetaryen veya başka bir dana etsiz seçenek mi istersiniz?" : "Got it. Would you prefer chicken, vegetarian, or another non-beef option?";
+    else if (constraints.excludedIngredients.includes("spicy")) reply = turkish ? "Anladım. Acısız bir burger, kase veya başka bir seçenek mi istersiniz?" : "Got it. Would you prefer a burger, bowl, or another non-spicy option?";
+    else if (constraints.excludedIngredients.includes("fried")) reply = turkish ? "Anladım. Kızartma olarak belirtilmeyen bir burger, salata veya kase mi istersiniz?" : "Got it. Would you prefer a burger, salad, or bowl that is not documented as fried?";
+    else if (constraints.maxCalories !== null) reply = turkish ? `Belgelenmiş seçenekleri ${constraints.maxCalories} kalorinin altında tutabilirim. Yemek, atıştırmalık veya içecek mi istersiniz?` : `I can keep documented options under ${constraints.maxCalories} calories. Would you prefer a meal, snack, or drink?`;
+    else if (constraints.minProtein !== null) reply = turkish ? `En az ${constraints.minProtein} g protein içeren seçeneklere bakabilirim. Burger, kase veya başka bir yemek mi istersiniz?` : `I can look for at least ${constraints.minProtein}g of protein. Would you prefer a burger, bowl, or another meal?`;
     state.clarificationState = {
       clarificationId: createActionId("clarification", "recommendation"),
       clarificationType: "recommendation_kind",
@@ -303,9 +640,25 @@ export class NoriAgentService {
       pending.status = "completed";
       archivePendingAction(state, pending);
       state.pendingAction = null;
-      const customizationText = action.customizations.length ? ` with ${action.customizations.map(item => item.optionName).join(", ")}` : "";
+      const customizationText = action.customizations.length
+        ? state.preferredLanguage === "tr"
+          ? ` (${action.customizations.map(item => item.optionName).join(", ")})`
+          : ` with ${action.customizations.map(item => item.optionName).join(", ")}`
+        : "";
+      const companion = findCompanionSuggestion(product, request.cart, state, action.unitPrice ?? product.price);
+      const companionText = companion
+        ? state.preferredLanguage === "tr"
+          ? ` Yanına $${companion.price.toFixed(2)} fiyatlı ${companion.name} iyi gider; isterseniz ekleyebilirim.`
+          : ` ${companion.name} is a natural match at $${companion.price.toFixed(2)} if you would like something alongside it.`
+        : "";
+      if (companion) {
+        state.suggestedCompanionProductIds = [...new Set([...(state.suggestedCompanionProductIds ?? []), companion.id])];
+      }
+      const addedText = state.preferredLanguage === "tr"
+        ? `${action.quantity} adet ${product.name}${customizationText} sepetinize eklendi.`
+        : `Added ${action.quantity} ${product.name}${customizationText} to your cart.`;
       return {
-        ...response("add_to_cart", `Added ${action.quantity} ${product.name}${customizationText} to your cart.`, state),
+        ...response("add_to_cart", `${addedText}${companionText}`, state),
         actions: [action],
       };
     }
@@ -323,31 +676,106 @@ export class NoriAgentService {
     state: NoriConversationState,
     intent: NoriIntent,
     interpretation = interpretNoriRequest(request.message, state),
+    initialPlan?: NoriReasoningPlan,
   ): Promise<NoriChatResponse> {
+    if (initialPlan?.confidence.band === "medium"
+      && initialPlan.hardConstraintLabels.length === 0
+      && initialPlan.softPriorities.length === 0
+      && !interpretation.clarificationNeeded) {
+      const category = interpretation.constraints.categories[0];
+      interpretation.clarificationNeeded = true;
+      interpretation.clarificationQuestion = state.preferredLanguage === "tr"
+        ? category
+          ? `${category} seçenekleri arasından en uygun olanı seçmemi ister misiniz?`
+          : "Yemek, içecek veya tatlı seçeneklerinden hangisini tercih edersiniz?"
+        : category
+          ? `Would you like me to choose the best available ${category.replace(/_/g, " ")} option?`
+          : "Would you prefer a meal, drink, or dessert?";
+    }
+    if (initialPlan?.confidence.band === "low" && !interpretation.clarificationNeeded) {
+      interpretation.clarificationNeeded = true;
+      interpretation.clarificationQuestion = state.preferredLanguage === "tr"
+        ? "Yemek, içecek veya tatlı önerisi mi istersiniz?"
+        : "Would you like a meal, drink, or dessert recommendation?";
+    }
     if (interpretation.clarificationNeeded) {
+      const question = interpretation.clarificationQuestion ?? "Could you clarify what kind of meal you prefer?";
+      const clarificationType = question.includes("hot drink")
+        ? "drink_temperature"
+        : "other";
+      state.awaitingConstraintClarification = true;
+      state.clarificationState = {
+        clarificationId: createActionId("clarification", interpretation.constraints.categories[0] ?? "recommendation"),
+        clarificationType,
+        expectedAnswerTypes: question.includes("pizza")
+          ? ["beef", "chicken", "vegetarian"]
+          : question.includes("chocolate")
+            ? ["chocolate", "fruit"]
+            : clarificationType === "drink_temperature"
+              ? ["hot", "cold"]
+              : ["meal", "drink", "dessert", "burger", "bowl", "beef", "chicken", "plant-based"],
+        relatedIntent: intent,
+        relatedConstraints: {
+          categories: interpretation.constraints.categories,
+          maxBudget: interpretation.constraints.maxBudget,
+          dietaryTags: interpretation.constraints.dietaryTags,
+          excludedIngredients: interpretation.constraints.excludedIngredients,
+        },
+        createdAt: Date.now(),
+        status: "awaiting_answer",
+      };
       return response(
         intent,
         buildClarificationResponse(
-          interpretation.clarificationQuestion ?? "Could you clarify what kind of meal you prefer?",
+          question,
           state.preferredLanguage,
         ),
         state,
       );
     }
     const calls = buildRecommendationToolCalls(request.message, state, interpretation);
-    if (this.provider) {
+    let reasoningPlan = initialPlan ?? buildNoriReasoningPlan({
+      intent,
+      routeConfidence: state.understandingDiagnostics?.semanticConfidence
+        ?? state.understandingDiagnostics?.deterministicConfidence
+        ?? 0.9,
+      interpretation,
+      state,
+      deterministicCalls: calls,
+    });
+    const providerCalls: AIToolCall[] = [];
+    if (this.provider
+      && reasoningPlan.reuseCandidateIds.length === 0
+      && interpretation.understandingSource !== "hybrid"
+      && shouldUseProviderPlanning(interpretation)) {
       try {
-        const context = { request: { ...request, conversationState: state }, systemPrompt: this.provider.buildPrompt(request) };
-        const providerCalls = await this.provider.callTools(context);
-        providerCalls.forEach(validateNoriToolCall);
+        const planningRequest = { ...request, conversationState: state };
+        const context = { request: planningRequest, systemPrompt: this.provider.buildPrompt(planningRequest) };
+        providerCalls.push(...(await this.provider.callTools(context)).map(validateNoriToolCall));
       } catch {
         if (process.env.NODE_ENV !== "production") console.warn("Nori provider planning failed; using the deterministic fallback.");
       }
     }
-    const resultSets = calls.map(call => productsFromToolResult(executeNoriTool(validateNoriToolCall(call))));
+    reasoningPlan = addProviderCallsToNoriPlan(reasoningPlan, providerCalls);
+    const execution = executeNoriReasoningPlan(reasoningPlan, {
+      cachedProducts: noriMenuProducts,
+    });
+    if (state.understandingDiagnostics) {
+      state.understandingDiagnostics.selectedTools = reasoningPlan.steps.map(step => step.call.name);
+      state.understandingDiagnostics.planner = plannerDiagnostics(reasoningPlan, execution);
+    }
+    const resultSets = execution.productSets;
     let candidates = intersectResults(resultSets);
     if (candidates.length === 0) candidates = unionResults(resultSets);
-    const independentQuery = isIndependentMenuQuery(request.message);
+    if (!candidates.length && execution.failedTools.length === reasoningPlan.steps.length && reasoningPlan.steps.length) {
+      candidates = [...noriMenuProducts];
+      execution.recoveryActions.push("recovered_from_total_tool_failure_with_menu_catalog");
+    }
+    if (interpretation.constraints.priorities.length || interpretation.constraints.preferredFlavors.length) {
+      candidates = unionResults([candidates, noriMenuProducts]);
+      if (!execution.products.length) execution.recoveryActions.push("recovered_with_validated_menu_catalog");
+    }
+    const independentQuery = isIndependentMenuQuery(request.message, state);
     const previousSelection = (!independentQuery || hasSelectionReference(request.message)) && state.selectedProductId
       ? noriMenuProducts.find(product => product.id === state.selectedProductId)
       : undefined;
@@ -359,12 +787,18 @@ export class NoriAgentService {
     if (nutrition.minFiber !== null) validation.valid.sort((a, b) => b.nutrition.fiberGrams - a.nutrition.fiberGrams);
     else if (nutrition.maxSugars !== null) validation.valid.sort((a, b) => a.nutrition.sugarsGrams - b.nutrition.sugarsGrams);
     else if (nutrition.maxFat !== null) validation.valid.sort((a, b) => a.nutrition.totalFatGrams - b.nutrition.totalFatGrams);
-    candidates = independentQuery
-      ? prioritizeFreshRecommendations(
-        validation.valid,
-        state.recentlyRecommendedProductIds,
-      )
-      : validation.valid;
+    candidates = interpretation.constraints.priorities.length || interpretation.constraints.preferredFlavors.length
+      ? rankNoriCandidates(validation.valid, interpretation, state, request.cart)
+      : independentQuery
+        ? prioritizeFreshRecommendations(
+          validation.valid,
+          state.recentlyRecommendedProductIds,
+        )
+        : validation.valid;
+    const temporarilyRejected = new Set(state.temporaryRejectedProductIds ?? []);
+    if (temporarilyRejected.size) {
+      candidates = candidates.filter(product => !temporarilyRejected.has(product.id));
+    }
     if (!independentQuery && previousSelection
       && candidates.some(product => product.id === previousSelection.id)) {
       candidates = [
@@ -388,7 +822,21 @@ export class NoriAgentService {
     const proposedDrink = wantsExplicitPairing(request.message) ? chooseDrink(main, selected, state) : undefined;
     const explicitNumericConstraint = /\d+(?:\.\d+)?\s*g(?:rams?)?\s*(?:of\s*)?(?:protein|fat|sugar|fiber|carb)|\d+(?:\.\d+)?\s*(?:calories|cal)\b/i.test(request.message);
     const drink = proposedDrink && (!explicitNumericConstraint || validateRecommendations([proposedDrink], interpretation).valid.length) ? proposedDrink : undefined;
-    const recommendations = drink && !selected.some(product => product.id === drink.id) ? [main, drink, ...selected.filter(product => product.id !== main.id)].slice(0, 3) : selected;
+    let recommendations = drink && !selected.some(product => product.id === drink.id) ? [main, drink, ...selected.filter(product => product.id !== main.id)].slice(0, 3) : selected;
+    const selfValidation = selfValidateNoriRecommendations({
+      selected: recommendations,
+      rankedCandidates: candidates,
+      interpretation,
+      plan: reasoningPlan,
+    });
+    recommendations = selfValidation.products;
+    const validatedMain = recommendations.find(product => !isDrink(product)) ?? recommendations[0];
+    const validatedDrink = drink && recommendations.some(product => product.id === drink.id)
+      ? drink
+      : undefined;
+    if (state.understandingDiagnostics) {
+      state.understandingDiagnostics.planner = plannerDiagnostics(reasoningPlan, execution, selfValidation);
+    }
     const warnings = warningsFor(recommendations, state.activeAllergens);
     state.recentlyRecommendedProductIds = [
       ...new Set([
@@ -398,36 +846,52 @@ export class NoriAgentService {
     ].slice(-12);
     if (recommendations.length) setRecentContext(
       state,
-      interpretation.constraints.kids ? "kids" : interpretation.constraints.minProtein !== null ? "high_protein" : interpretation.constraints.maxBudget !== null ? "budget" : "recommendation",
+      recommendationContextType(interpretation),
       recommendations,
       interpretation.constraints.categories[0],
     );
-    if (main) {
-      if (state.selectedProductId !== main.id) state.selectedCustomizations = [];
-      state.selectedProductId = main.id;
+    if (validatedMain) {
+      if (state.selectedProductId !== validatedMain.id) state.selectedCustomizations = [];
+      state.selectedProductId = validatedMain.id;
       state.currentRecommendation = {
-        primaryProductId: main.id,
-        companionProductIds: drink ? [drink.id] : [],
-        totalPrice: main.price + (drink?.price ?? 0),
+        primaryProductId: validatedMain.id,
+        companionProductIds: validatedDrink ? [validatedDrink.id] : [],
+        totalPrice: validatedMain.price + (validatedDrink?.price ?? 0),
         reason: "Matches the active menu constraints and recommendation ranking.",
       };
     } else {
       state.currentRecommendation = null;
     }
 
-    const replyProducts = drink
-      ? recommendations.filter(product => product.id !== drink.id)
+    state.plannerSnapshot = {
+      planId: reasoningPlan.planId,
+      createdAt: Date.now(),
+      constraintFingerprint: reasoningPlan.constraintFingerprint,
+      goal: reasoningPlan.goal,
+      candidateProductIds: candidates.slice(0, 24).map(product => product.id),
+      selectedProductIds: recommendations.map(product => product.id),
+    };
+    const replyProducts = validatedDrink
+      ? recommendations.filter(product => product.id !== validatedDrink.id)
       : recommendations;
     const reply = recommendations.length ? buildRecommendationResponse({
       products: replyProducts,
       interpretation,
       language: state.preferredLanguage,
-      companion: drink,
+      companion: validatedDrink,
       warnings,
       noMatchReason: validation.rejected[0]?.reasons[0],
     }) : interpretation.constraints.kids && state.activeAllergens.length
       ? `I could not find a kids meal without documented ${state.activeAllergens.join(" or ")} allergen or cross-contact risk. Would you like to review non-kids options or ask staff about cross-contact?`
-      : informativeNoMatch(interpretation, validation.rejected);
+      : state.preferredLanguage === "tr"
+        ? buildRecommendationResponse({
+          products: [],
+          interpretation,
+          language: state.preferredLanguage,
+          warnings,
+          noMatchReason: validation.rejected[0]?.reasons[0],
+        })
+        : informativeNoMatch(interpretation, validation.rejected);
     return {
       intent,
       reply,
@@ -481,10 +945,13 @@ export class NoriAgentService {
 
   private comparisonAnswer(message: string, state: NoriConversationState, intent: NoriIntent = "product_comparison"): NoriChatResponse {
     const text = normalizeNoriInput(message, state.preferredLanguage);
-    const comparisonIds = state.comparisonContext?.productIds;
-    if (intent === "comparison_follow_up" && !comparisonIds) return response(intent, "Please compare two products first, or tell me which two products you mean.", state);
+    const comparisonIds = state.comparisonContext?.productIds
+      ?? (state.recentRecommendationContext?.productIds.length
+        ? state.recentRecommendationContext.productIds.slice(0, 2) as [string, string]
+        : undefined);
+    if (intent === "comparison_follow_up" && (!comparisonIds || comparisonIds.length < 2)) return response(intent, "Please compare two products first, or tell me which two products you mean.", state);
     let products = (comparisonIds && intent === "comparison_follow_up")
-      ? comparisonIds.flatMap(id => noriMenuProducts.find(item => item.id === id) ?? [])
+      ? [...comparisonIds].flatMap(id => noriMenuProducts.find(item => item.id === id) ?? [])
       : searchProducts(message).slice(0, 2);
     if (products.length < 2 && (/\b(first two|first and second)\b/.test(text) || /ilk iki/.test(text))) products = productsFromComparisonSource(state).slice(0, 2);
     if (products.length < 2 && /\bfirst and third\b/.test(text)) {
@@ -499,12 +966,18 @@ export class NoriAgentService {
     state.comparisonContext = { productIds: [first.id, second.id], createdAt: Date.now() };
     setRecentContext(state, "comparison", [first, second]);
     if (/more protein|daha fazla protein/.test(text)) {
-      const winner = first.proteinGrams >= second.proteinGrams ? first.name : second.name;
+      const winningProduct = first.proteinGrams >= second.proteinGrams ? first : second;
+      const winner = winningProduct.name;
+      state.selectedProductId = winningProduct.id;
       return response(intent, state.preferredLanguage === "tr"
         ? `${winner} daha fazla protein içerir (${Math.max(first.proteinGrams, second.proteinGrams)} g ve ${Math.min(first.proteinGrams, second.proteinGrams)} g).`
         : `${winner} has more protein (${Math.max(first.proteinGrams, second.proteinGrams)}g versus ${Math.min(first.proteinGrams, second.proteinGrams)}g).`, state, products);
     }
-    if (/cheaper/.test(text)) return response(intent, `${first.price <= second.price ? first.name : second.name} is cheaper ($${Math.min(first.price, second.price).toFixed(2)} versus $${Math.max(first.price, second.price).toFixed(2)}).`, state, products);
+    if (/cheaper|ucuz/.test(text)) {
+      const winner = first.price <= second.price ? first : second;
+      state.selectedProductId = winner.id;
+      return response(intent, `${winner.name} is cheaper ($${Math.min(first.price, second.price).toFixed(2)} versus $${Math.max(first.price, second.price).toFixed(2)}).`, state, products);
+    }
     if (/fewer calories/.test(text)) return response(intent, `${first.cal <= second.cal ? first.name : second.name} has fewer calories (${Math.min(first.cal, second.cal)} versus ${Math.max(first.cal, second.cal)}).`, state, products);
     if (/less fat/.test(text)) return response(intent, `${first.nutrition.totalFatGrams <= second.nutrition.totalFatGrams ? first.name : second.name} has less total fat (${Math.min(first.nutrition.totalFatGrams, second.nutrition.totalFatGrams)}g versus ${Math.max(first.nutrition.totalFatGrams, second.nutrition.totalFatGrams)}g).`, state, products);
     if (/less sodium/.test(text)) return response(intent, `${first.nutrition.sodiumMilligrams <= second.nutrition.sodiumMilligrams ? first.name : second.name} has less sodium (${Math.min(first.nutrition.sodiumMilligrams, second.nutrition.sodiumMilligrams)}mg versus ${Math.max(first.nutrition.sodiumMilligrams, second.nutrition.sodiumMilligrams)}mg).`, state, products);
@@ -516,7 +989,9 @@ export class NoriAgentService {
         : `For a gym-focused choice, ${winner.name} is the better fit because it has ${winner.proteinGrams}g protein compared with ${other.proteinGrams}g. This is a nutrition comparison, not a performance guarantee.`, state, products);
     }
     if (/healthier|recommend|daha sağlıklı/.test(text)) {
-      const winner = healthyScore(first) >= healthyScore(second) ? first.name : second.name;
+      const winningProduct = healthyScore(first) >= healthyScore(second) ? first : second;
+      const winner = winningProduct.name;
+      state.selectedProductId = winningProduct.id;
       return response(intent, state.preferredLanguage === "tr"
         ? `${winner}; kalori, protein, lif, yağ, sodyum ve şeker değerlerine göre belgelenmiş daha sağlıklı seçenektir.`
         : `${winner} ranks as the healthier documented option based on calories, protein, fiber, fat, sodium, and sugar.`, state, products);
@@ -562,7 +1037,13 @@ export class NoriAgentService {
   }
 
   private allergenAnswer(product: AIFoodItem | undefined, state: NoriConversationState): NoriChatResponse {
-    if (!product) return response("allergen_check", `I saved your active allergens: ${state.activeAllergens.join(", ") || "none"}. Name a product and I’ll check contains, may-contain, and cross-contact risks.`, state);
+    if (!product) return response(
+      "allergen_check",
+      state.preferredLanguage === "tr"
+        ? `Etkin alerjenleri kaydettim: ${state.activeAllergens.join(", ") || "yok"}. Bir ürün adı söylerseniz doğrudan içerik, içerebilir ve çapraz temas risklerini kontrol ederim.`
+        : `I saved your active allergens: ${state.activeAllergens.join(", ") || "none"}. Name a product and I’ll check contains, may-contain, and cross-contact risks.`,
+      state,
+    );
     const warnings = warningsFor([product], state.activeAllergens);
     return {
       ...response(
@@ -624,18 +1105,19 @@ export class NoriAgentService {
   }
 
   private comparativeAdd(message: string, state: NoriConversationState): NoriChatResponse {
-    const ids = state.comparisonContext?.productIds;
+    const text = normalize(message);
+    const recentIds = state.recentRecommendationContext?.productIds ?? [];
+    const ids = state.comparisonContext?.productIds
+      ?? (/cheaper|ucuz/.test(text) && recentIds.length >= 2 ? recentIds.slice(0, 3) : undefined);
     if (!ids) return response("comparative_add", "I need two compared products before I can choose the healthier one. Please compare two products first.", state);
     const products = ids.flatMap(id => noriMenuProducts.find(product => product.id === id) ?? []);
-    if (products.length !== 2) return response("comparative_add", "I need two compared products before I can choose the healthier one. Please compare two products first.", state);
-    const [first, second] = products;
-    const text = normalize(message);
-    const winner = /higher[ -]protein/.test(text) ? (first.proteinGrams >= second.proteinGrams ? first : second)
-      : /lower[ -]calorie/.test(text) ? (first.cal <= second.cal ? first : second)
-        : /cheaper/.test(text) ? (first.price <= second.price ? first : second)
-          : /better (?:one )?for (?:the )?gym/.test(text)
-            ? (first.proteinGrams === second.proteinGrams ? (fitnessScore(first) >= fitnessScore(second) ? first : second) : (first.proteinGrams > second.proteinGrams ? first : second))
-            : (healthyScore(first) >= healthyScore(second) ? first : second);
+    if (products.length < 2) return response("comparative_add", "I need two compared products before I can choose the healthier one. Please compare two products first.", state);
+    const winner = [...products].sort((first, second) =>
+      /higher[ -]protein|daha proteinli/.test(text) ? second.proteinGrams - first.proteinGrams
+        : /lower[ -]calorie/.test(text) ? first.cal - second.cal
+          : /cheaper|ucuz/.test(text) ? first.price - second.price
+            : /better (?:one )?for (?:the )?gym/.test(text) ? fitnessScore(second) - fitnessScore(first)
+              : healthyScore(second) - healthyScore(first))[0];
     state.selectedProductId = winner.id;
     return this.cartAction("add_to_cart", message, winner, state, "add");
   }
@@ -669,20 +1151,6 @@ export class NoriAgentService {
     return { ...response("review_order", `${details} Subtotal: $${subtotal.toFixed(2)}. Estimated tax: $${tax.toFixed(2)}. Total: $${(subtotal + tax).toFixed(2)}.${warningText}`, state), warnings };
   }
 
-  private healthyRecommendation(_message: string, state: NoriConversationState): NoriChatResponse {
-    const eligible = recommendationPool(state).filter(product => product.category !== "kids_meal" && !["dessert", "hot_drink", "cold_drink"].includes(product.category));
-    const products = eligible.sort((a, b) => healthyScore(b) - healthyScore(a)).slice(0, 3);
-    if (!products.length) return response("healthy_recommendation", specificNoMatch("healthy option", state, noriMenuProducts), state);
-    setRecentContext(state, "healthy", products);
-    const [first, ...others] = products;
-    state.selectedProductId = first.id;
-    state.currentRecommendation = { primaryProductId: first.id, companionProductIds: [], reason: "Highest deterministic healthy score." };
-    const reply = state.preferredLanguage === "tr"
-      ? `Güçlü bir sağlıklı seçenek, $${first.price.toLocaleString("tr-TR", { minimumFractionDigits: 2 })} fiyatıyla ${first.name}; ${first.cal.toLocaleString("tr-TR")} kalori, ${first.proteinGrams.toLocaleString("tr-TR")} g protein ve ${first.nutrition.fiberGrams.toLocaleString("tr-TR")} g lif içerir.${others.length ? ` Diğer dengeli seçenekler: ${others.map(item => `${item.name} (${item.cal.toLocaleString("tr-TR")} kalori, ${item.proteinGrams.toLocaleString("tr-TR")} g protein)`).join(" ve ")}.` : ""}`
-      : `A strong healthy option is ${first.name} at $${first.price.toFixed(2)} with ${first.cal} calories, ${first.proteinGrams}g protein, and ${first.nutrition.fiberGrams}g fiber.${others.length ? ` Other balanced options are ${others.map(item => `${item.name} (${item.cal} calories, ${item.proteinGrams}g protein)`).join(" and ")}.` : ""}`;
-    return { ...response("healthy_recommendation", reply, state, products), warnings: warningsFor(products, state.activeAllergens) };
-  }
-
   private nutritionSuperlative(message: string, state: NoriConversationState, intent: NoriIntent): NoriChatResponse {
     const category = explicitCategory(message);
     let products = recommendationPool(state).filter(product => !category || product.category === category || (category === "meal" && !isSecondary(product)) || (category === "drink" && isDrink(product)));
@@ -700,25 +1168,80 @@ export class NoriAgentService {
     return { ...response(intent, `The ${label} available ${category ?? "item"} is ${winner.name} with ${value(winner)} ${unit} per standard serving.`, state, [winner]), warnings: warningsFor([winner], state.activeAllergens) };
   }
 
-  private bundleRecommendation(message: string, state: NoriConversationState): NoriChatResponse {
+  private bundleRecommendation(
+    message: string,
+    state: NoriConversationState,
+    reasoningPlan: NoriReasoningPlan,
+  ): NoriChatResponse {
     const text = normalize(message);
+    const interpretation = interpretNoriRequest(message, state);
+    interpretation.constraints.priorities = [...(state.rankingPriorities ?? interpretation.constraints.priorities)];
     const maxBudget = Number(text.match(/\$\s*(\d+(?:\.\d+)?)/)?.[1] ?? state.maxBudget ?? Number.POSITIVE_INFINITY);
     const subtotalLimit = state.afterTaxBudget ? maxBudget / (1 + restaurantAIConfig.defaultTaxRate) : maxBudget;
     const pool = recommendationPool(state);
-    const foods = pool.filter(product => !isSecondary(product));
+    const foods = state.rankingPriorities?.length
+      ? rankNoriCandidates(pool.filter(product => !isSecondary(product)), interpretation, state)
+      : pool.filter(product => !isSecondary(product));
+    const foodOrder = new Map(foods.map((product, index) => [product.id, foods.length - index]));
     const requestedTemperature = /\bcold drink\b/.test(text) ? "cold_drink" : /\b(hot drink|coffee)\b/.test(text) ? "hot_drink" : null;
     const drinks = pool.filter(product => isDrink(product) && (!requestedTemperature || product.category === requestedTemperature));
     const pairs = foods.flatMap(food => drinks.map(drink => ({ food, drink, totalPrice: food.price + drink.price })))
       .filter(pair => pair.totalPrice <= subtotalLimit)
-      .sort((a, b) => (healthyScore(b.food) + b.drink.recommendationScore) - (healthyScore(a.food) + a.drink.recommendationScore));
+      .sort((a, b) => {
+        const foodRankDifference = (foodOrder.get(b.food.id) ?? 0) - (foodOrder.get(a.food.id) ?? 0);
+        return foodRankDifference || b.drink.recommendationScore - a.drink.recommendationScore;
+      });
     const pair = pairs[0];
-    if (!pair) return response("bundle_recommendation", `No documented food-and-drink pair fits the active constraints${Number.isFinite(maxBudget) ? ` within $${maxBudget.toFixed(2)}` : ""}. Would you like to raise the budget or change the drink preference?`, state);
+    if (!pair) {
+      if (state.understandingDiagnostics?.planner) {
+        state.understandingDiagnostics.planner.validationStatus = "failed";
+        state.understandingDiagnostics.planner.recoveryActions = ["no_valid_bundle"];
+      }
+      return response("bundle_recommendation", `No documented food-and-drink pair fits the active constraints${Number.isFinite(maxBudget) ? ` within $${maxBudget.toFixed(2)}` : ""}. Would you like to raise the budget or change the drink preference?`, state);
+    }
     const products = [pair.food, pair.drink];
+    const bundleValidationInterpretation: NoriRequestInterpretation = {
+      ...interpretation,
+      constraints: {
+        ...interpretation.constraints,
+        // The requested drink category applies to the drink half of the pair,
+        // not to the accompanying meal.
+        categories: [],
+      },
+    };
+    const validation = selfValidateNoriRecommendations({
+      selected: products,
+      rankedCandidates: products,
+      interpretation: bundleValidationInterpretation,
+      plan: reasoningPlan,
+      limit: 2,
+    });
+    if (state.understandingDiagnostics) {
+      state.understandingDiagnostics.planner = plannerDiagnostics(reasoningPlan, undefined, validation);
+    }
+    if (validation.status === "failed" || validation.products.length !== products.length) {
+      if (state.understandingDiagnostics?.planner) {
+        state.understandingDiagnostics.planner.recoveryActions.push("rejected_invalid_bundle");
+      }
+      return response(
+        "bundle_recommendation",
+        "I could not validate a food-and-drink pair against every active condition. Would you like to change the budget or drink preference?",
+        state,
+      );
+    }
     state.currentRecommendation = { primaryProductId: pair.food.id, companionProductIds: [pair.drink.id], totalPrice: pair.totalPrice, reason: "Valid food-and-drink bundle." };
     state.selectedProductId = pair.food.id;
     const bundleContext: NoriRecentRecommendationContext = { contextId: createActionId("context", "bundle"), createdAt: Date.now(), queryType: "bundle", productIds: products.map(item => item.id), pairs: pairs.slice(0, 3).map(item => ({ foodProductId: item.food.id, drinkProductId: item.drink.id, totalPrice: item.totalPrice })) };
     state.recentRecommendationContext = bundleContext;
     state.lastMultiOptionContext = bundleContext;
+    state.plannerSnapshot = {
+      planId: reasoningPlan.planId,
+      createdAt: Date.now(),
+      constraintFingerprint: reasoningPlan.constraintFingerprint,
+      goal: reasoningPlan.goal,
+      candidateProductIds: products.map(item => item.id),
+      selectedProductIds: products.map(item => item.id),
+    };
     return { ...response("bundle_recommendation", `The best match within your ${Number.isFinite(maxBudget) ? `$${maxBudget.toFixed(2)} budget` : "request"} is ${pair.food.name} for $${pair.food.price.toFixed(2)} with ${pair.drink.name} for $${pair.drink.price.toFixed(2)}, totaling $${pair.totalPrice.toFixed(2)} before tax.`, state, products), warnings: warningsFor(products, state.activeAllergens) };
   }
 
@@ -798,6 +1321,9 @@ export class NoriAgentService {
 
 export function createState(request: NoriChatRequest): NoriConversationState {
   const previous = request.conversationState;
+  const lifecycle = request.orderLifecycle ?? previous?.orderLifecycle;
+  const authoritativeCompletion = lifecycle?.paymentStatus === "completed"
+    || lifecycle?.paymentStatus === "pay_at_cashier_pending";
   return {
     preferredLanguage: request.language || previous?.preferredLanguage || "en",
     activeAllergens: [...new Set([...(previous?.activeAllergens ?? []), ...request.activeAllergens])],
@@ -828,6 +1354,44 @@ export function createState(request: NoriChatRequest): NoriConversationState {
     awaitingConstraintClarification: previous?.awaitingConstraintClarification ?? false,
     clarificationState: previous?.clarificationState ?? null,
     afterTaxBudget: previous?.afterTaxBudget ?? false,
+    preferenceMemory: previous?.preferenceMemory ?? {
+      dislikedIngredients: previous?.excludedIngredients ?? [],
+      avoidSpicy: (previous?.excludedIngredients ?? []).includes("spicy"),
+      preferredFlavors: previous?.preferredFlavors ?? [],
+      updatedAt: Date.now(),
+    },
+    rankingPriorities: previous?.rankingPriorities ?? [],
+    preferredFlavors: previous?.preferredFlavors ?? previous?.preferenceMemory?.preferredFlavors ?? [],
+    suggestedCompanionProductIds: previous?.suggestedCompanionProductIds ?? [],
+    lastDiscussedProductId: previous?.lastDiscussedProductId ?? previous?.selectedProductId ?? null,
+    previousCustomerIntent: previous?.previousCustomerIntent ?? null,
+    previousAssistantQuestion: previous?.previousAssistantQuestion ?? null,
+    understandingDiagnostics: process.env.NODE_ENV !== "production"
+      ? previous?.understandingDiagnostics
+      : undefined,
+    plannerSnapshot: previous?.plannerSnapshot ?? null,
+    conversationStage: previous?.conversationStage === "completed" && !authoritativeCompletion
+      ? request.cart.length ? "cart_review" : "discovering_needs"
+      : previous?.conversationStage ?? "new_session",
+    lastConversationActs: previous?.lastConversationActs ?? [],
+    lastAssistantResponseSummary: previous?.lastAssistantResponseSummary ?? null,
+    lastAssistantTemplateId: previous?.lastAssistantTemplateId ?? null,
+    socialResponseRotationIndex: previous?.socialResponseRotationIndex ?? 0,
+    misunderstandingCount: previous?.misunderstandingCount ?? 0,
+    consecutiveNoiseCount: previous?.consecutiveNoiseCount ?? 0,
+    temporaryRejectedProductIds: previous?.temporaryRejectedProductIds ?? [],
+    lastAcknowledgedIntent: previous?.lastAcknowledgedIntent ?? null,
+    closingStatus: previous?.closingStatus === "completed" && !authoritativeCompletion
+      ? "open"
+      : previous?.closingStatus ?? "open",
+    activeRepairContext: previous?.activeRepairContext ?? null,
+    orderLifecycle: lifecycle,
+    lastAcknowledgedPaymentStatus: previous?.lastAcknowledgedPaymentStatus,
+    lastAcknowledgedOrderId: previous?.lastAcknowledgedOrderId ?? null,
+    lastAcknowledgedOrderNumber: previous?.lastAcknowledgedOrderNumber ?? null,
+    lastLifecycleMessageTemplateId: previous?.lastLifecycleMessageTemplateId ?? null,
+    speechRate: previous?.speechRate ?? "normal",
+    lastTtsInterrupted: previous?.lastTtsInterrupted ?? false,
   };
 }
 
@@ -859,23 +1423,45 @@ export function detectIntent(message: string, state: NoriConversationState): Nor
 }
 
 function updateState(state: NoriConversationState, message: string): NoriConversationState {
-  const text = normalize(message);
-  const budget = text.match(/(?:have|budget|with)\s*\$?\s*(\d+(?:\.\d+)?)/)
-    ?? text.match(/(?:under|up to|max)\s*\$\s*(\d+(?:\.\d+)?)/)
+  const text = normalizeNoriInput(message, state.preferredLanguage);
+  const signals = extractNoriUnderstanding(message, state.preferredLanguage, state);
+  const budget = text.match(/(?:(?:only\s+)?have|budget|with)\s*[$€£]?\s*(\d+(?:[.,]\d+)?)/)
+    ?? text.match(/(?:under|up to|max|below)\s*[$€£]\s*(\d+(?:[.,]\d+)?)/)
+    ?? text.match(/(?:under|up to|max|below)\s*(\d+(?:[.,]\d+)?)\s*(?:euros?|dollars?|pounds?)/)
     ?? text.match(/(\d+(?:\.\d+)?)\s*dollars?\b/)
-    ?? text.match(/\$(\d+(?:\.\d+)?)/);
-  if (budget) state.maxBudget = Number(budget[1]);
+    ?? text.match(/(?:sadece\s+)?(\d+(?:[.,]\d+)?)\s*(?:avro|euro|dolar|lira)(?:m|lık)?/)
+    ?? text.match(/[$€£](\d+(?:[.,]\d+)?)/);
+  if (budget) state.maxBudget = Number(budget[1].replace(",", "."));
   const protein = text.match(/(?:at least|over|above|more than)?\s*(\d+(?:\.\d+)?)\s*g(?:rams?)?\s*(?:of\s*)?protein/);
   if (protein) state.minProtein = Number(protein[1]);
-  else if (text.includes("high protein") || text.includes("high-protein")) state.minProtein = state.minProtein ?? 20;
   const calories = text.match(/(?:under|max|below)\s*(\d+(?:\.\d+)?)\s*cal/);
   if (calories) state.maxCalories = Number(calories[1]);
   for (const preference of ["vegan", "vegetarian", "halal"]) if (text.includes(preference) && !state.dietaryPreferences.includes(preference)) state.dietaryPreferences.push(preference);
   for (const allergen of noriSupportedAllergens) if (text.includes(normalize(allergen)) && !state.activeAllergens.some(item => normalize(item) === normalize(allergen))) state.activeAllergens.push(allergen);
   if (text.includes("dairy") && !state.activeAllergens.some(item => normalize(item) === "milk")) state.activeAllergens.push("Milk");
+  const allergenAliases: Readonly<Record<string, string>> = {
+    süt: "Milk", sütlü: "Milk", fıstık: "Peanuts", yerfıstığı: "Peanuts",
+    susam: "Sesame", soya: "Soy", buğday: "Wheat", gluten: "Gluten", yumurta: "Eggs",
+  };
+  for (const [alias, allergen] of Object.entries(allergenAliases)) {
+    if (text.includes(alias) && !state.activeAllergens.some(item => normalize(item) === normalize(allergen))) {
+      state.activeAllergens.push(allergen);
+    }
+  }
+  for (const allergen of signals.allergens) {
+    if (!state.activeAllergens.some(item => normalize(item) === normalize(allergen))) state.activeAllergens.push(allergen);
+  }
   const category = CATEGORY_NAMES.find(item => text.includes(normalize(item)));
   if (category) state.requestedCategory = category;
   if (/\b(drink|beverage|water|juice|coffee|latte)\b/.test(text)) state.requestedDrink = true;
+  if (/\b(kid|kids|child|children|çocuk|çocuklarım)\b/.test(text)) state.requestedKids = true;
+  if (/\b(dessert|sweet|tatlı)\b/.test(text)) state.requestedDessert = true;
+  if (/\b(spicy|chili|jalapeno|acılı)\b/.test(text) && !/\b(no|not|without)\s+spicy\b|\bacılı olmasın\b/.test(text)) state.requestedSpicy = true;
+  if (signals.kids) state.requestedKids = true;
+  if (signals.wantsDrink) state.requestedDrink = true;
+  if (signals.wantsDessert) state.requestedDessert = true;
+  if (signals.categories.length === 1) state.requestedCategory = signals.categories[0];
+  if (signals.excludedIngredients.includes("spicy")) state.requestedSpicy = false;
   return state;
 }
 
@@ -888,12 +1474,17 @@ export function buildRecommendationToolCalls(
   const calls: AIToolCall[] = [{
     name: "recommendProducts",
     arguments: {
-      query: structured.preferredIngredients.length ? structured.preferredIngredients.join(" ") : undefined,
+      query: structured.preferredIngredients.length
+        ? structured.preferredIngredients.join(" ")
+        : structured.preferredFlavors.length
+          ? structured.preferredFlavors.join(" ")
+          : undefined,
       maxPrice: state.maxBudget ?? undefined,
       minProtein: state.minProtein ?? undefined,
       maxCalories: state.maxCalories ?? undefined,
       dietaryTags: state.dietaryPreferences,
       category: structured.categories.length === 1 ? structured.categories[0] : undefined,
+      allergens: state.activeAllergens,
       spicy: structured.spicy || undefined,
       kids: structured.kids || undefined,
       limit: 8,
@@ -916,6 +1507,11 @@ function resolveSelectedProduct(message: string, state: NoriConversationState, c
   const matches = searchProducts(message);
   const direct = matches.find(product => text.includes(normalize(product.name)) || text.includes(normalize(product.id)));
   if (direct) return direct;
+  const reference = resolveNoriReference(message, state);
+  if (!reference.ambiguous && reference.resolvedIds.length === 1) {
+    const referenced = noriMenuProducts.find(product => product.id === reference.resolvedIds[0]);
+    if (referenced) return referenced;
+  }
   if (state.pendingAction && "productId" in state.pendingAction) {
     const pendingProductId = state.pendingAction.productId;
     const pendingProduct = noriMenuProducts.find(product => product.id === pendingProductId);
@@ -964,7 +1560,8 @@ function chooseDrink(main: AIFoodItem | undefined, selected: AIFoodItem[], state
 
 function wantsExplicitPairing(message: string) {
   const text = normalize(message);
-  return /\b(combo|pairing|pair it|both|meal (?:and|with) (?:a )?drink|with a drink|something to go with it|add a drink)\b/.test(text);
+  return /\b(combo|pairing|pair it|both|meal (?:and|with) (?:a )?drink|with a drink|something to go with it|what goes well with this|what pairs with this|add a drink)\b/.test(text)
+    || /bunun yanına ne gider|yanına ne öner/u.test(text);
 }
 
 function warningsFor(products: AIFoodItem[], allergens: string[]): NoriWarning[] {
@@ -985,6 +1582,8 @@ function recommendationActions(_products: AIFoodItem[], warnings: NoriWarning[],
 }
 
 function response(intent: NoriIntent, reply: string, state: NoriConversationState, products: AIFoodItem[] = []): NoriChatResponse {
+  state.previousAssistantQuestion = reply.includes("?") ? reply : null;
+  if (products[0]) state.lastDiscussedProductId = products[0].id;
   return {
     intent,
     reply: state.preferredLanguage === "tr" ? localizeTurkishReply(reply) : reply,
@@ -1026,7 +1625,8 @@ const TURKISH_REPLIES: Readonly<Record<string, string>> = {
 
 function localizeTurkishReply(reply: string): string {
   if (TURKISH_REPLIES[reply]) return TURKISH_REPLIES[reply];
-  if (/[çğıöşü]/i.test(reply) || /^(Evet|Lütfen|Tamam|Sepet|Ürün|En |Ara toplam|Sıcak|Bitki|Acı)/.test(reply)) return reply;
+  if (/[çğıöşüİ]/i.test(reply)
+    || /^(Evet|Lütfen|Tamam|Sepet|Ürün|En |Ara toplam|Sıcak|Bitki|Acı|Rica ederim|Elbette|Henüz)/.test(reply)) return reply;
   let match = reply.match(/^Please confirm: (.+)\.$/);
   if (match) return `Lütfen onaylayın: ${match[1]}.`;
   match = reply.match(/^Please confirm adding (.+)\.$/);
@@ -1046,10 +1646,6 @@ function localizeTurkishReply(reply: string): string {
     .replace("g. This is a nutrition comparison, not a performance guarantee.", " g protein içerir. Bu bir besin değeri karşılaştırmasıdır, performans garantisi değildir.");
   return "İsteğinizi bu menü verileriyle tamamlayamadım. Lütfen başka bir ürün veya seçenek deneyin.";
 }
-function productsFromToolResult(result: ReturnType<typeof executeNoriTool>): AIFoodItem[] {
-  if (Array.isArray(result)) return result.flatMap(item => "product" in item ? [item.product] : [item]);
-  return "product" in result ? [result.product] : [];
-}
 function intersectResults(sets: AIFoodItem[][]): AIFoodItem[] {
   if (!sets.length) return [];
   return sets[0].filter(product => sets.every(set => set.some(item => item.id === product.id))).sort(scoreSort);
@@ -1060,21 +1656,17 @@ function unionResults(sets: AIFoodItem[][]): AIFoodItem[] {
 function scoreSort(first: AIFoodItem, second: AIFoodItem) { return second.recommendationScore - first.recommendationScore; }
 function isDrink(product: AIFoodItem) { return product.category === "cold_drink" || product.category === "hot_drink"; }
 function isSecondary(product: AIFoodItem) { return isDrink(product) || product.category === "dessert" || product.category === "side"; }
-function healthyScore(product: AIFoodItem) {
-  const nutrition = product.nutrition;
-  const categoryBonus = ["salad", "healthy_bowl"].includes(product.category) ? 18 : product.dietaryTags.some(tag => /healthy|high.fiber|lower.saturated.fat/.test(normalize(tag))) ? 10 : 0;
-  return categoryBonus + product.proteinGrams * 1.2 + nutrition.fiberGrams * 3
-    - product.cal * 0.035 - nutrition.totalFatGrams * 0.7 - nutrition.saturatedFatGrams
-    - nutrition.sugarsGrams * 0.6 - nutrition.sodiumMilligrams * 0.006;
-}
-function fitnessScore(product: AIFoodItem) {
-  return product.proteinGrams * 3 + product.nutrition.fiberGrams * 1.5 - product.cal * 0.025
-    - product.nutrition.sugarsGrams * 0.8 - product.nutrition.saturatedFatGrams;
-}
 function recommendationPool(state: NoriConversationState) {
+  const excluded = [...new Set([
+    ...(state.excludedIngredients ?? []),
+    ...(state.preferenceMemory?.dislikedIngredients ?? []),
+  ])];
   return noriMenuProducts.filter(product => product.available && product.inStock)
     .filter(product => state.maxBudget === null || product.price <= state.maxBudget)
     .filter(product => state.persistentDietaryPreferences.every(preference => product.dietaryTags.includes(preference) || (preference === "vegetarian" && product.dietaryTags.includes("vegan"))))
+    .filter(product => !excluded.some(ingredient => productContainsIngredient(product, ingredient)))
+    .filter(product => !state.preferenceMemory?.avoidSpicy || product.spiceLevel === 0)
+    .filter(product => !(state.preferredFlavors?.length) || state.preferredFlavors.some(flavor => matchesFlavor(product, flavor)))
     .filter(product => checkProductAllergens(product, state.activeAllergens).contains.length === 0);
 }
 function explicitCategory(message: string): string | null {
@@ -1095,6 +1687,14 @@ function productsFromComparisonSource(state: NoriConversationState) {
     ? state.recentRecommendationContext
     : state.lastMultiOptionContext;
   return (context?.productIds ?? []).flatMap(id => noriMenuProducts.find(product => product.id === id) ?? []);
+}
+function recommendationContextType(interpretation: NoriRequestInterpretation): NoriRecentRecommendationContext["queryType"] {
+  const constraints = interpretation.constraints;
+  if (constraints.kids) return "kids";
+  if (constraints.priorities.includes("healthy") || constraints.priorities.includes("light")) return "healthy";
+  if (constraints.priorities.includes("protein") || constraints.minProtein !== null) return "high_protein";
+  if (constraints.priorities.includes("price") || constraints.maxBudget !== null) return "budget";
+  return "recommendation";
 }
 function setRecentContext(state: NoriConversationState, queryType: NonNullable<NoriConversationState["recentRecommendationContext"]>["queryType"], products: AIFoodItem[], category?: string) {
   const context = { contextId: createActionId("context", queryType), createdAt: Date.now(), queryType, productIds: products.map(product => product.id), category };
@@ -1151,12 +1751,22 @@ function productMatchesState(product: AIFoodItem, state: NoriConversationState, 
     && checkProductAllergens(product, state.activeAllergens).contains.length === 0;
 }
 function hasSelectionReference(message: string) {
-  return /\b(it|this|that option|the first one|first option|selected item|that one)\b/.test(normalize(message));
+  const english = extractNoriUnderstanding(message, "en");
+  const turkish = extractNoriUnderstanding(message, "tr");
+  return english.refersToLastProduct || turkish.refersToLastProduct;
 }
-function isIndependentMenuQuery(message: string) {
+function isIndependentMenuQuery(message: string, state?: NoriConversationState) {
   const text = normalize(message);
+  const englishSignals = extractNoriUnderstanding(message, "en", state);
+  const turkishSignals = extractNoriUnderstanding(message, "tr", state);
+  if (englishSignals.isRefinement || turkishSignals.isRefinement) return false;
   return !hasSelectionReference(message)
-    && /\b(show|find|recommend|suggest|list|what).*\b(meal|meals|food|foods|option|options|vegan|vegetarian|kids?|spicy|protein|calories?)\b/.test(text);
+    && (
+      /\b(show|find|recommend|suggest|list|what).*\b(meal|meals|food|foods|option|options|vegan|vegetarian|kids?|spicy|protein|calories?)\b/.test(text)
+      || /\b(very hungry|starving|on a diet|going to the gym|in a hurry|not (?:too )?heavy|(?:don't|do not) want something heavy|refreshing|not sure|popular|most ordered|today's best|craving|have children|çok açım|diyetteyim|spora gidiyorum|acelem var|ferahlatıcı|emin değilim|çocuklarım var)\b/.test(text)
+      || englishSignals.impliesRecommendation && !englishSignals.isRefinement
+      || turkishSignals.impliesRecommendation && !turkishSignals.isRefinement
+    );
 }
 function clearTransientSearchState(state: NoriConversationState) {
   state.minProtein = null;
@@ -1171,7 +1781,10 @@ function clearTransientSearchState(state: NoriConversationState) {
   state.selectedCustomizations = [];
   state.currentRecommendation = null;
   state.pendingAction = null;
-  state.excludedIngredients = [];
+  state.rankingPriorities = [];
+  state.preferredFlavors = [];
+  state.excludedIngredients = [...(state.preferenceMemory?.dislikedIngredients ?? [])];
+  state.temporaryRejectedProductIds = [];
 }
 function applyInterpretation(state: NoriConversationState, interpretation: NoriRequestInterpretation, message: string) {
   const constraints = interpretation.constraints;
@@ -1185,8 +1798,19 @@ function applyInterpretation(state: NoriConversationState, interpretation: NoriR
   state.requestedKids = constraints.kids;
   state.requestedDessert = constraints.wantsDessert;
   state.excludedIngredients = constraints.excludedIngredients;
+  state.activeAllergens = [...new Set([...state.activeAllergens, ...constraints.allergens])];
   state.afterTaxBudget = constraints.afterTax;
   if (isStableDietaryStatement(message)) state.persistentDietaryPreferences = [...constraints.dietaryTags];
+  state.rankingPriorities = constraints.priorities;
+  state.preferredFlavors = constraints.preferredFlavors;
+  if (isStableIngredientPreference(message)) {
+    state.preferenceMemory = {
+      dislikedIngredients: [...new Set(constraints.excludedIngredients)],
+      avoidSpicy: constraints.excludedIngredients.includes("spicy"),
+      preferredFlavors: state.preferenceMemory?.preferredFlavors ?? [],
+      updatedAt: Date.now(),
+    };
+  }
 }
 
 export function validateRecommendations(products: AIFoodItem[], interpretation: NoriRequestInterpretation) {
@@ -1200,11 +1824,11 @@ export function validateRecommendations(products: AIFoodItem[], interpretation: 
     if (constraints.afterTax && constraints.maxBudget !== null && product.price * (1 + restaurantAIConfig.defaultTaxRate) > constraints.maxBudget) reasons.push("over_budget_after_tax");
     if (constraints.minProtein !== null && product.proteinGrams < constraints.minProtein) reasons.push("below protein minimum");
     if (constraints.maxCalories !== null && product.cal > constraints.maxCalories) reasons.push("above calorie maximum");
-    if (constraints.maxFat !== null && product.nutrition.totalFatGrams >= constraints.maxFat) reasons.push("above_max_fat");
-    if (constraints.maxSugars !== null && Number.isFinite(constraints.maxSugars) && product.nutrition.sugarsGrams >= constraints.maxSugars) reasons.push("above_max_sugar");
+    if (constraints.maxFat !== null && product.nutrition.totalFatGrams > constraints.maxFat) reasons.push("above_max_fat");
+    if (constraints.maxSugars !== null && Number.isFinite(constraints.maxSugars) && product.nutrition.sugarsGrams > constraints.maxSugars) reasons.push("above_max_sugar");
     if (constraints.minFiber !== null && product.nutrition.fiberGrams < constraints.minFiber) reasons.push("below_min_fiber");
-    if (constraints.maxSodium !== null && product.nutrition.sodiumMilligrams >= constraints.maxSodium) reasons.push("above_max_sodium");
-    if (constraints.maxCarbohydrates !== null && product.nutrition.carbohydratesGrams >= constraints.maxCarbohydrates) reasons.push("above_max_carbohydrates");
+    if (constraints.maxSodium !== null && product.nutrition.sodiumMilligrams > constraints.maxSodium) reasons.push("above_max_sodium");
+    if (constraints.maxCarbohydrates !== null && product.nutrition.carbohydratesGrams > constraints.maxCarbohydrates) reasons.push("above_max_carbohydrates");
     if (constraints.dietaryTags.includes("vegan") && !product.dietaryTags.includes("vegan")) reasons.push("not vegan");
     if (constraints.dietaryTags.includes("vegetarian")
       && !product.dietaryTags.some(tag => tag === "vegetarian" || tag === "vegan")) reasons.push("not vegetarian");
@@ -1213,9 +1837,15 @@ export function validateRecommendations(products: AIFoodItem[], interpretation: 
     if (constraints.spicy && product.spiceLevel <= 0 && !product.dietaryTags.includes("spicy")) reasons.push("not spicy");
     if (constraints.categories.length && !constraints.categories.includes(product.category)) reasons.push("wrong category");
     const text = normalize([product.description, ...product.ingredients, ...product.keywords, ...product.vectorTags].join(" "));
-    for (const excluded of constraints.excludedIngredients) if (text.includes(normalize(excluded))) reasons.push(`contains excluded ${excluded}`);
+    for (const excluded of constraints.excludedIngredients) {
+      if (excluded === "spicy" ? product.spiceLevel > 0 || text.includes("spicy") : productContainsIngredient(product, excluded)) {
+        reasons.push(`contains excluded ${excluded}`);
+      }
+    }
     if (constraints.preferredIngredients.length
       && !constraints.preferredIngredients.every(ingredient => text.includes(normalize(ingredient)))) reasons.push("missing preferred ingredient");
+    if (constraints.preferredFlavors.length
+      && !constraints.preferredFlavors.some(flavor => matchesFlavor(product, flavor))) reasons.push("wrong flavor preference");
     if (checkProductAllergens(product, constraints.allergens).contains.length) reasons.push("contains active allergen");
     if (reasons.length) rejected.push({ product, reasons });
     return reasons.length === 0;
@@ -1243,7 +1873,7 @@ function prioritizeFreshRecommendations(
   ];
 }
 function isConfirmation(text: string) {
-  return /^(yes|confirm|yes confirm|add it|add it to (?:my |the )?cart|add it now|yes add it|add that|go ahead|proceed|okay|ok|sure|evet|onaylıyorum|tamam|ekle|devam et)[.! ]*$/.test(text);
+  return /^(yes|confirm|yes confirm|add it|add it to (?:my |the )?cart|add it now|yes add it|add that|go ahead|proceed|okay|ok|sure|evet|onaylıyorum|tamam(?:,\s*ekle)?|ekle|devam et)[.! ]*$/.test(text);
 }
 function isIngredientRemovalRequest(text: string) {
   return /\b(remove|take off|without|no|hold)\b/.test(text) && /\b(onions?|tomatoes?|pickles?|mayo(?:nnaise)?|cheese|cheddar|mozzarella|parmesan|sauce|dressing|lettuce|greens)\b/.test(text);
@@ -1277,8 +1907,15 @@ function transitionClarification(
     return "cancelled";
   }
 
-  const validAnswer = clarification.clarificationType === "recommendation_kind"
-    && /^(?:(?:a|some)?\s*)?(?:food|something to eat|meal|burger|bowl|hot drink|cold drink|vegetarian|vegan)[.! ]*$/.test(text);
+  const expected = clarification.expectedAnswerTypes.map(value => normalize(value));
+  const directExpectedAnswer = expected.some(value => text === value || text === `${value}.`);
+  const validAnswer = directExpectedAnswer
+    || (clarification.clarificationType === "recommendation_kind"
+      && /^(?:(?:a|some)?\s*)?(?:food|something to eat|meal|burger|bowl|hot drink|cold drink|vegetarian|vegan)[.! ]*$/.test(text))
+    || (clarification.clarificationType === "drink_temperature"
+      && /^(?:hot|warm|cold|iced|sıcak|soğuk)[.! ]*$/.test(text))
+    || (clarification.clarificationType === "other"
+      && /^(?:beef|chicken|vegetarian|vegan|plant based|chocolate|fruit|dana eti|tavuk|vejetaryen|çikolata|meyve)[.! ]*$/.test(text));
   if (validAnswer) {
     clarification.status = "answered";
     return "answered";
@@ -1295,6 +1932,11 @@ function isCustomizationConfirmation(text: string) {
 }
 function isCancellation(text: string) {
   return /^(no|cancel|never mind|do not add it|hayır|iptal et|vazgeçtim|bunu ekleme)[.! ]*$/.test(text);
+}
+function isRecommendationRejection(text: string) {
+  return /\b(?:something else|show me something different|i do not want (?:it|that|this)|i don't want (?:it|that|this)|not this one|başka bir şey|bunu istemiyorum|bu olmasın|daha farklı bir şey)\b/u.test(text)
+    || (/^(?:no|hayır)(?: thanks| thank you| teşekkürler| sağ ol)?[, ]+/u.test(text)
+      && /(?:checkout|ödemeye geç)/u.test(text));
 }
 function wantsFullRecommendation(text: string) {
   return /\b(add both|add the full recommendation|full recommendation|bowl and drink|meal and drink|add all)\b/.test(text);
@@ -1373,6 +2015,212 @@ function archivePendingAction(state: NoriConversationState, pending: Exclude<Nor
 }
 function clonePendingAction<T extends NoriConversationState["pendingAction"]>(pending: T): T {
   return pending === null ? pending : JSON.parse(JSON.stringify(pending)) as T;
+}
+
+function shouldUseProviderPlanning(interpretation: NoriRequestInterpretation) {
+  const constraints = interpretation.constraints;
+  return constraints.categories.length === 0
+    && constraints.priorities.length === 0
+    && constraints.preferredIngredients.length === 0
+    && constraints.preferredFlavors.length === 0
+    && constraints.maxBudget === null
+    && constraints.minProtein === null
+    && constraints.maxCalories === null
+    && constraints.dietaryTags.length === 0
+    && !constraints.kids
+    && !constraints.spicy;
+}
+
+function shouldUseSemanticUnderstanding(intent: NoriIntent, confidence: number) {
+  return intent === "unsupported" || intent === "unknown" || confidence < 0.72;
+}
+
+function prioritizeConversationBusinessIntent(
+  decision: ReturnType<typeof routeNoriIntent>,
+  message: string,
+  conversation: NoriConversationActAnalysis,
+  state: NoriConversationState,
+): ReturnType<typeof routeNoriIntent> {
+  const choose = (intent: NoriIntent, reason: string, confidence = .99) => ({
+    ...decision,
+    intent,
+    reason,
+    confidence,
+  });
+  const text = normalizeNoriInput(message, state.preferredLanguage);
+  if (isSafetyInterruption(message)) return choose("allergen_check", "safety question interrupted the active flow");
+  if (requestsCartBeforeCheckout(message)) return choose("show_cart", "cart review requested before checkout");
+  if (conversation.acts.includes("cancellation") && state.pendingAction && !conversation.acts.includes("checkout_transition")) {
+    return choose("cancellation", "pending action cancellation");
+  }
+  if (conversation.acts.includes("checkout_transition")) return choose("checkout", "conversation act requests checkout");
+
+  if (/\btoo expensive\b/u.test(text) || text.includes("çok pahalı")) {
+    state.rankingPriorities = mergePriority(state.rankingPriorities, "price");
+  }
+  if (/\btoo many calories\b/u.test(text) || text.includes("çok kalorili")) {
+    state.rankingPriorities = mergePriority(state.rankingPriorities, "light");
+  }
+  if (/\btoo spicy\b/u.test(text) || text.includes("fazla acı")) {
+    state.rankingPriorities = mergePriority(state.rankingPriorities, "light");
+    state.excludedIngredients = [...new Set([...(state.excludedIngredients ?? []), "spicy"])];
+    state.preferenceMemory = {
+      dislikedIngredients: [...new Set([...(state.preferenceMemory?.dislikedIngredients ?? []), "spicy"])],
+      avoidSpicy: true,
+      preferredFlavors: state.preferenceMemory?.preferredFlavors ?? [],
+      updatedAt: Date.now(),
+    };
+  }
+
+  if ((conversation.acts.includes("rejection") || conversation.acts.includes("change_mind"))
+    && state.recentRecommendationContext?.productIds.length
+    && !/^(?:start over|new order|baştan başla|yeni sipariş)/u.test(text)
+    && ["recommendation", "product_details", "unsupported", "unknown"].includes(decision.intent)) {
+    state.temporaryRejectedProductIds = [...new Set([
+      ...(state.temporaryRejectedProductIds ?? []),
+      ...(state.selectedProductId
+        ? [state.selectedProductId]
+        : state.recentRecommendationContext.productIds.slice(0, 1)),
+    ])];
+    return choose("recommendation", "rejected recommendation requests a different option");
+  }
+  if ((conversation.acts.includes("general_recommendation") || conversation.acts.includes("indecision"))
+    && ["unsupported", "unknown", "greeting", "help", "constraint_update", "recommendation"].includes(decision.intent)) {
+    return choose("recommendation", "conversation act requests menu guidance", .98);
+  }
+  if (conversation.acts.includes("complaint") && state.recentRecommendationContext) {
+    return choose("recommendation", "feedback refines previous recommendations", .98);
+  }
+  return decision;
+}
+
+function isSafetyInterruption(message: string) {
+  const text = `${normalizeNoriInput(message, "en")} ${normalizeNoriInput(message, "tr")}`;
+  return /\b(?:allerg|contains?|contain|milk|dairy|gluten|peanut|sesame|soy|wheat|nuts?|alerjen|içeriyor|içerir|süt|fıstık|susam|soya|buğday)\b/u.test(text)
+    && /\b(?:does|is|has|have|what|contains?|allerg|safe|mi|mı|mu|mü|içeriyor|alerjen|güvenli)\b/u.test(text);
+}
+
+function requestsCartBeforeCheckout(message: string) {
+  const text = `${normalizeNoriInput(message, "en")} ${normalizeNoriInput(message, "tr")}`;
+  const checkout = /\b(?:checkout|check out|pay)\b/u.test(text) || text.includes("ödemeye geç");
+  const before = /\b(?:but first|before)\b/u.test(text) || text.includes("önce");
+  const cart = /\bcart\b/u.test(text) || text.includes("sepet");
+  return checkout && before && cart;
+}
+
+function mergePriority(
+  values: NoriConversationState["rankingPriorities"],
+  priority: NonNullable<NoriConversationState["rankingPriorities"]>[number],
+) {
+  return [...new Set([...(values ?? []), priority])];
+}
+
+function contextualFallback(
+  signals: ReturnType<typeof extractNoriUnderstanding>,
+  state: NoriConversationState,
+) {
+  if (signals.restaurantMeaning) {
+    const label: string | null = signals.priorities[0]
+      ?? (signals.dietaryTags.length ? "dietary" : null)
+      ?? (signals.allergens.length ? "allergen" : null)
+      ?? (signals.categories.length ? "category" : null);
+    if (state.preferredLanguage === "tr") {
+      const understood = label === "protein" ? "protein tercihinizi"
+        : label === "price" ? "fiyat tercihinizi"
+          : label === "light" ? "hafif yemek tercihinizi"
+            : label === "filling" ? "doyurucu yemek isteğinizi"
+              : label === "allergen" ? "alerjen bilginizi"
+                : label === "dietary" ? "beslenme tercihinizi"
+                  : "menü tercihinizi";
+      return `${understood.charAt(0).toLocaleUpperCase("tr-TR")}${understood.slice(1)} anladım, ancak öneri mi yoksa belirli bir ürün bilgisi mi istediğinizi netleştiremedim. Size uygun seçenekler önermemi ister misiniz?`;
+    }
+    const understood = label === "protein" ? "protein preference"
+      : label === "price" ? "price preference"
+        : label === "light" ? "lighter-meal preference"
+          : label === "filling" ? "filling-meal preference"
+            : label === "allergen" ? "allergen information"
+              : label === "dietary" ? "dietary preference"
+                : "menu preference";
+    return `I understood your ${understood}, but I could not tell whether you want a recommendation or details about a specific product. Would you like suitable options?`;
+  }
+  return state.preferredLanguage === "tr"
+    ? "Bu isteği restoran menüsü, ürünler, sepet veya ödeme bilgileriyle ilişkilendiremedim. Menü hakkında ne öğrenmek istersiniz?"
+    : "I could not connect that request to the restaurant menu, products, cart, or checkout. What would you like to know about the menu?";
+}
+
+function findCompanionSuggestion(
+  product: AIFoodItem,
+  cart: NoriChatRequest["cart"],
+  state: NoriConversationState,
+  addedUnitPrice: number,
+) {
+  if (isSecondary(product)) return undefined;
+  const alreadySuggested = new Set(state.suggestedCompanionProductIds ?? []);
+  const cartProductIds = new Set(cart.map(item => item.productId));
+  const cartCategories = new Set(cart.flatMap(item => noriMenuProducts.find(candidate => candidate.id === item.productId)?.category ?? []));
+  const priorities = state.rankingPriorities ?? [];
+  const healthSensitive = priorities.some(priority => ["healthy", "light", "protein"].includes(priority));
+  const excludedIngredients = new Set([
+    ...(state.excludedIngredients ?? []),
+    ...(state.preferenceMemory?.dislikedIngredients ?? []),
+  ]);
+  const existingSubtotal = cart.reduce((total, item) => {
+    const menuPrice = noriMenuProducts.find(candidate => candidate.id === item.productId)?.price ?? 0;
+    return total + item.quantity * (item.unitPrice ?? menuPrice);
+  }, 0);
+  return product.recommendedWith
+    .flatMap(productId => noriMenuProducts.find(candidate => candidate.id === productId) ?? [])
+    .filter(candidate => candidate.available && candidate.inStock && candidate.price >= 0)
+    .filter(candidate => !alreadySuggested.has(candidate.id) && !cartProductIds.has(candidate.id))
+    .filter(candidate => !cartCategories.has(candidate.category))
+    .filter(candidate => checkProductAllergens(candidate, state.activeAllergens).hasRisk === false)
+    .filter(candidate => state.dietaryPreferences.every(preference =>
+      candidate.dietaryTags.includes(preference)
+      || (preference === "vegetarian" && candidate.dietaryTags.includes("vegan"))))
+    .filter(candidate => ![...excludedIngredients].some(ingredient => productContainsIngredient(candidate, ingredient)))
+    .filter(candidate => !(state.preferenceMemory?.avoidSpicy) || candidate.spiceLevel === 0)
+    .filter(candidate => !healthSensitive || candidate.category !== "dessert")
+    .filter(candidate => !priorities.includes("light")
+      || candidate.category !== "side"
+      || !productContainsIngredient(candidate, "fried"))
+    .filter(candidate => state.maxBudget === null || existingSubtotal + addedUnitPrice + candidate.price <= state.maxBudget)
+    .sort((first, second) => upsellScore(second, priorities) - upsellScore(first, priorities))[0];
+}
+
+function upsellScore(product: AIFoodItem, priorities: NonNullable<NoriConversationState["rankingPriorities"]> = []) {
+  let score = product.recommendationScore;
+  if (priorities.includes("price")) score -= product.price * 2;
+  if (priorities.includes("protein")) score += product.proteinGrams * 0.6;
+  if (priorities.includes("healthy") || priorities.includes("light")) score += healthyScore(product) * 0.2;
+  return score;
+}
+
+function productContainsIngredient(product: AIFoodItem, ingredient: string) {
+  const target = normalize(ingredient);
+  const text = normalize([
+    product.name,
+    product.description,
+    ...product.ingredients,
+    ...product.keywords,
+    ...product.vectorTags,
+  ].join(" "));
+  if (target === "meat") return /\b(beef|chicken|turkey|salmon|tuna|meat)\b/.test(text);
+  if (target === "spicy") return product.spiceLevel > 0 || /\b(spicy|chili|jalapeno)\b/.test(text);
+  if (target === "mushroom") return text.includes("mushrooms");
+  return text.includes(target);
+}
+
+function ingredientToForget(text: string) {
+  if (/\bmy (?:budget|allergies)\b/.test(text)) return null;
+  const match = text.match(/\bforget\s+(?:about\s+)?(.+?)[.! ]*$|^(.+?)\s+(?:is|are)\s+okay now[.! ]*$|^(.+?)\s+unut[.! ]*$|^(acı)\s+olabilir[.! ]*$/);
+  const raw = normalize(match?.[1] ?? match?.[2] ?? match?.[3] ?? match?.[4] ?? "");
+  if (!raw) return null;
+  const aliases: Readonly<Record<string, string>> = {
+    mushrooms: "mushrooms", mushroom: "mushrooms", mantar: "mushrooms", mantarı: "mushrooms",
+    spice: "spicy", spicy: "spicy", acı: "spicy", cheese: "cheese", peynir: "cheese",
+    meat: "meat", et: "meat", onions: "onion", onion: "onion", soğan: "onion",
+  };
+  return aliases[raw] ?? raw;
 }
 
 function hardConstraintNoMatch(interpretation: NoriRequestInterpretation) {

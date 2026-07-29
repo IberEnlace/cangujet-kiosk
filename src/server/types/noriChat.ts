@@ -1,5 +1,7 @@
 import type { AIFoodItem, AINutrition } from "../../app/data/aiMenu";
 import type { SupportedLanguage } from "../../shared/languages";
+import type { NoriOrderLifecycleContext } from "../../shared/noriOrderLifecycle";
+import type { NoriSpeechDirectives, NoriSpeechRate } from "../../shared/noriSpeech";
 
 export type NoriLanguage = SupportedLanguage;
 
@@ -22,7 +24,9 @@ export type NoriIntent =
   | "compare_products" | "comparison_follow_up" | "comparative_add"
   | "highest_protein" | "lowest_calories" | "lowest_fat" | "lowest_sugar" | "lowest_sodium" | "highest_fiber"
   | "restaurant_information" | "opening_hours" | "order_timing" | "staff_assistance"
-  | "confirmation" | "cancellation" | "clarification_answer" | "constraint_update" | "unsupported" | "unknown";
+  | "lifecycle_status"
+  | "confirmation" | "cancellation" | "clarification_answer" | "constraint_update"
+  | "conversation" | "unsupported" | "unknown";
   // Constraint-only turns update request context before a product is requested.
 
 export type NoriSelectedCustomization = {
@@ -53,6 +57,155 @@ export type NoriRecentRecommendationContext = {
 };
 
 export type NoriComparisonContext = { productIds: [string, string]; createdAt: number };
+
+export type NoriRankingPriority =
+  | "healthy"
+  | "protein"
+  | "price"
+  | "light"
+  | "filling"
+  | "refreshing"
+  | "popular"
+  | "quick";
+
+export type NoriPreferenceMemory = {
+  dislikedIngredients: string[];
+  avoidSpicy: boolean;
+  preferredFlavors: string[];
+  updatedAt: number;
+};
+
+export type NoriPlannerConfidenceBand = "high" | "medium" | "low";
+
+export type NoriPlannerDiagnostics = {
+  planId: string;
+  detectedIntent: NoriIntent;
+  constraints: {
+    hard: string[];
+    soft: NoriRankingPriority[];
+  };
+  reasoningPlan: {
+    goal: NoriIntent;
+    rankingSignals: NoriRankingPriority[];
+    deprioritizedCategories: string[];
+    referenceProductIds: string[];
+    reusedPreviousResults: boolean;
+  };
+  executionSteps: Array<{
+    tool: string;
+    order: number;
+    parallelGroup: number;
+    source: "deterministic" | "provider";
+  }>;
+  validationStatus: "pending" | "passed" | "repaired" | "failed";
+  confidence: {
+    score: number;
+    band: NoriPlannerConfidenceBand;
+  };
+  recommendationConfidence: Array<{
+    productId: string;
+    score: number;
+    band: NoriPlannerConfidenceBand;
+    matchedSignals: NoriRankingPriority[];
+  }>;
+  recoveryActions: string[];
+};
+
+export type NoriPlannerSnapshot = {
+  planId: string;
+  createdAt: number;
+  constraintFingerprint: string;
+  goal: NoriIntent;
+  candidateProductIds: string[];
+  selectedProductIds: string[];
+};
+
+export type NoriConversationAct =
+  | "greeting"
+  | "introduction"
+  | "ask_capabilities"
+  | "general_recommendation"
+  | "request_help"
+  | "indecision"
+  | "hesitation"
+  | "acknowledgement"
+  | "gratitude"
+  | "praise"
+  | "complaint"
+  | "rejection"
+  | "correction"
+  | "misunderstanding"
+  | "request_repetition"
+  | "request_simplification"
+  | "confirmation"
+  | "cancellation"
+  | "change_mind"
+  | "pause_request"
+  | "resume_conversation"
+  | "checkout_transition"
+  | "farewell"
+  | "unrelated_request"
+  | "abusive_or_inappropriate_language"
+  | "empty_or_noise_input";
+
+export type NoriConversationStage =
+  | "new_session"
+  | "welcomed"
+  | "discovering_needs"
+  | "recommending"
+  | "comparing"
+  | "customizing"
+  | "awaiting_confirmation"
+  | "cart_review"
+  | "checkout_ready"
+  | "payment_processing"
+  | "completed"
+  | "closing";
+
+export type NoriClosingStatus =
+  | "open"
+  | "paused"
+  | "awaiting_checkout_decision"
+  | "checkout_ready"
+  | "order_completed"
+  | "pay_at_cashier_pending"
+  | "completed"
+  | "closed";
+
+export type NoriAssistantResponseSummary = {
+  purpose: NoriIntent;
+  productIds: string[];
+  requestedClarification: string | null;
+  proposedActions: NoriAction["type"][];
+  documentedValues: Array<{
+    productId: string;
+    price: number;
+    proteinGrams: number;
+    calories: number;
+  }>;
+};
+
+export type NoriRepairContext = {
+  type: "repeat" | "simplify" | "correction";
+  originalIntent: NoriIntent | null;
+  productIds: string[];
+  createdAt: number;
+};
+
+export type NoriUnderstandingDiagnostics = {
+  detectedLanguage: NoriLanguage;
+  deterministicIntent: NoriIntent;
+  deterministicConfidence: number;
+  semanticIntent: NoriIntent | null;
+  semanticConfidence: number | null;
+  providerFallbackUsed: boolean;
+  extractedSignals: string[];
+  selectedTools: string[];
+  clarificationReason: string | null;
+  finalRoute: NoriIntent;
+  fallbackReason: string | null;
+  planner?: NoriPlannerDiagnostics;
+};
 
 export type NoriClarificationStatus = "awaiting_answer" | "answered" | "superseded" | "cancelled" | "expired";
 export type NoriClarificationState = {
@@ -125,6 +278,33 @@ export type NoriConversationState = {
   recentRecommendationContext?: NoriRecentRecommendationContext | null;
   lastMultiOptionContext?: NoriRecentRecommendationContext | null;
   comparisonContext?: NoriComparisonContext | null;
+  preferenceMemory?: NoriPreferenceMemory;
+  rankingPriorities?: NoriRankingPriority[];
+  preferredFlavors?: string[];
+  suggestedCompanionProductIds?: string[];
+  lastDiscussedProductId?: string | null;
+  previousCustomerIntent?: NoriIntent | null;
+  previousAssistantQuestion?: string | null;
+  understandingDiagnostics?: NoriUnderstandingDiagnostics;
+  plannerSnapshot?: NoriPlannerSnapshot | null;
+  conversationStage?: NoriConversationStage;
+  lastConversationActs?: NoriConversationAct[];
+  lastAssistantResponseSummary?: NoriAssistantResponseSummary | null;
+  lastAssistantTemplateId?: string | null;
+  socialResponseRotationIndex?: number;
+  misunderstandingCount?: number;
+  consecutiveNoiseCount?: number;
+  temporaryRejectedProductIds?: string[];
+  lastAcknowledgedIntent?: NoriIntent | null;
+  closingStatus?: NoriClosingStatus;
+  activeRepairContext?: NoriRepairContext | null;
+  orderLifecycle?: NoriOrderLifecycleContext;
+  lastAcknowledgedPaymentStatus?: NoriOrderLifecycleContext["paymentStatus"];
+  lastAcknowledgedOrderId?: string | null;
+  lastAcknowledgedOrderNumber?: string | null;
+  lastLifecycleMessageTemplateId?: string | null;
+  speechRate?: NoriSpeechRate;
+  lastTtsInterrupted?: boolean;
 };
 
 export type NoriChatRequest = {
@@ -134,6 +314,8 @@ export type NoriChatRequest = {
   language: NoriLanguage;
   conversationState?: NoriConversationState;
   actionResults?: Array<{ actionId: string; status: "success" | "failed" }>;
+  orderLifecycle?: NoriOrderLifecycleContext;
+  lifecycleEvent?: boolean;
 };
 
 export type NoriAction =
@@ -179,6 +361,7 @@ export type NoriChatResponse = {
   actions: NoriAction[];
   warnings: NoriWarning[];
   conversationState: NoriConversationState;
+  speechDirectives?: NoriSpeechDirectives;
 };
 
 export type NoriChatError = {

@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef } from "react";
 import { toSpeakableText } from "../services/voice/speakableText";
 import { selectSpeechVoice } from "../services/voice/speechVoiceSelection";
+import { browserSpeechRate, type NoriSpeechRate } from "../../shared/noriSpeech";
 
 interface SpeakOptions {
   language: string;
+  rate?: NoriSpeechRate;
   onStart?: () => void;
 }
 
@@ -55,7 +57,7 @@ export function useSpeechSynthesis() {
     activeRef.current?.cancel();
   }, []);
 
-  const speak = useCallback((displayText: string, { language, onStart }: SpeakOptions) => {
+  const speak = useCallback((displayText: string, { language, rate = "normal", onStart }: SpeakOptions) => {
     const engine = synthesisEngine();
     if (!engine || typeof SpeechSynthesisUtterance === "undefined") {
       return Promise.reject(new Error("speech-synthesis-unsupported"));
@@ -107,7 +109,7 @@ export function useSpeechSynthesis() {
         operation.utterance = utterance;
         utterance.lang = language;
         utterance.voice = voice;
-        utterance.rate = 0.96;
+        utterance.rate = browserSpeechRate(rate);
         utterance.pitch = 1;
         utterance.volume = 1;
         utterance.onstart = () => {

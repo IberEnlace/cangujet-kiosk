@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { shouldSpeakNoriReply, toSpeakableText } from "./voice/speakableText";
 import { selectSpeechVoice } from "./voice/speechVoiceSelection";
+import { browserSpeechRate } from "../../shared/noriSpeech";
 
 test("removes markdown and technical action metadata from spoken replies", () => {
   assert.equal(
@@ -51,4 +52,11 @@ test("selects only an exact or same-language speech voice", () => {
   assert.equal(selectSpeechVoice(voices.slice(0, 2), "tr-TR")?.name, "Turkish fallback");
   assert.equal(selectSpeechVoice([voices[0]], "tr-TR"), undefined);
   assert.equal(selectSpeechVoice(voices, "de-DE"), undefined);
+});
+
+test("maps semantic speech rates to safe browser values", () => {
+  assert.deepEqual(
+    ["slow", "normal", "fast"].map(rate => browserSpeechRate(rate as "slow" | "normal" | "fast")),
+    [0.8, 1, 1.15],
+  );
 });

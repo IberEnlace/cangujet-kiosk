@@ -94,7 +94,36 @@ export function isAllowedNoriTool(value: string): value is AIToolName {
 
 export function validateNoriToolCall(call: AIToolCall): AIToolCall {
   if (!isAllowedNoriTool(call.name)) throw new Error(`Tool "${call.name}" is not allowed.`);
-  executeNoriTool(call);
+  switch (call.name) {
+    case "searchProducts":
+      stringArg(call.arguments, "query");
+      break;
+    case "recommendProducts":
+      filtersArg(call.arguments);
+      break;
+    case "findByBudget":
+      numberArg(call.arguments, "maxPrice");
+      break;
+    case "findHighProtein":
+      numberArg(call.arguments, "minProtein", 20);
+      break;
+    case "findHealthyMeals":
+      numberArg(call.arguments, "maxCalories", 600);
+      break;
+    case "findVeganMeals":
+    case "findVegetarianMeals":
+    case "findKidsMeals":
+    case "findSpicyMeals":
+      if (Object.keys(call.arguments).length) throw new Error(`Tool "${call.name}" does not accept arguments.`);
+      break;
+    case "checkAllergens":
+      stringArrayArg(call.arguments, "allergens");
+      break;
+    case "checkProductAllergens":
+      stringArg(call.arguments, "productId");
+      stringArrayArg(call.arguments, "allergens");
+      break;
+  }
   return call;
 }
 
