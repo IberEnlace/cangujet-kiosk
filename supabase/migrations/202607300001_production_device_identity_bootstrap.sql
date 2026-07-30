@@ -52,11 +52,13 @@ create table public.staff_memberships (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references auth.users(id) on delete cascade,
   restaurant_id uuid not null references public.restaurants(id) on delete cascade,
-  branch_id uuid references public.branches(id) on delete cascade,
+  branch_id uuid,
   role public.staff_role not null,
   is_active boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  foreign key (branch_id, restaurant_id)
+    references public.branches(id, restaurant_id) on delete cascade,
   constraint staff_membership_branch_role_check
     check (role = 'admin' or branch_id is not null)
 );
@@ -272,7 +274,7 @@ create index devices_restaurant_status_idx
 create table public.device_credentials (
   id uuid primary key default gen_random_uuid(),
   device_id uuid not null references public.devices(id) on delete cascade,
-  public_key_id text not null unique check (public_key_id ~ '^[A-Za-z0-9_-]{12,64}$'),
+  public_key_id text not null unique check (public_key_id ~ '^[a-f0-9]{24}$'),
   secret_hash text not null,
   expires_at timestamptz,
   last_used_at timestamptz,
@@ -344,11 +346,23 @@ language plpgsql security definer set search_path = ''
 as $$
 declare
   v_branch_id uuid;
+  v_previous_branch_id uuid;
 begin
-  v_branch_id := case when tg_op = 'DELETE' then old.branch_id else new.branch_id end;
+  if tg_table_name = 'branches' then
+    if tg_op = 'DELETE' then v_branch_id := old.id;
+    elsif tg_op = 'INSERT' then v_branch_id := new.id;
+    else v_branch_id := new.id; v_previous_branch_id := old.id;
+    end if;
+  else
+    if tg_op = 'DELETE' then v_branch_id := old.branch_id;
+    elsif tg_op = 'INSERT' then v_branch_id := new.branch_id;
+    else v_branch_id := new.branch_id; v_previous_branch_id := old.branch_id;
+    end if;
+  end if;
   update public.devices
   set config_version = config_version + 1
-  where branch_id = v_branch_id;
+  where branch_id = v_branch_id
+     or (v_previous_branch_id is distinct from v_branch_id and branch_id = v_previous_branch_id);
   if tg_op = 'DELETE' then return old; end if;
   return new;
 end;
@@ -360,11 +374,23 @@ language plpgsql security definer set search_path = ''
 as $$
 declare
   v_restaurant_id uuid;
+  v_previous_restaurant_id uuid;
 begin
-  v_restaurant_id := case when tg_op = 'DELETE' then old.restaurant_id else new.restaurant_id end;
+  if tg_table_name = 'restaurants' then
+    if tg_op = 'DELETE' then v_restaurant_id := old.id;
+    elsif tg_op = 'INSERT' then v_restaurant_id := new.id;
+    else v_restaurant_id := new.id; v_previous_restaurant_id := old.id;
+    end if;
+  else
+    if tg_op = 'DELETE' then v_restaurant_id := old.restaurant_id;
+    elsif tg_op = 'INSERT' then v_restaurant_id := new.restaurant_id;
+    else v_restaurant_id := new.restaurant_id; v_previous_restaurant_id := old.restaurant_id;
+    end if;
+  end if;
   update public.devices
   set config_version = config_version + 1
-  where restaurant_id = v_restaurant_id;
+  where restaurant_id = v_restaurant_id
+     or (v_previous_restaurant_id is distinct from v_restaurant_id and restaurant_id = v_previous_restaurant_id);
   if tg_op = 'DELETE' then return old; end if;
   return new;
 end;
@@ -382,6 +408,24 @@ begin
   set config_version = d.config_version + 1
   from public.menu_branches mb
   where mb.menu_id = v_menu_id and mb.branch_id = d.branch_id and mb.is_active;
+  if tg_op = 'DELETE' then return old; end if;
+  return new;
+end;
+$$;
+
+create function public.bump_language_device_config_version()
+returns trigger
+language plpgsql security definer set search_path = ''
+as $$
+declare
+  v_language_code text;
+begin
+  v_language_code := case when tg_op = 'DELETE' then old.code else new.code end;
+  update public.devices d
+  set config_version = d.config_version + 1
+  from public.restaurant_languages rl
+  where rl.language_code = v_language_code
+    and rl.restaurant_id = d.restaurant_id;
   if tg_op = 'DELETE' then return old; end if;
   return new;
 end;
@@ -456,6 +500,9 @@ for each row execute function public.bump_restaurant_device_config_version();
 create trigger language_device_config_version
 after insert or update or delete on public.restaurant_languages
 for each row execute function public.bump_restaurant_device_config_version();
+create trigger language_definition_device_config_version
+after update on public.languages
+for each row execute function public.bump_language_device_config_version();
 create trigger menu_device_config_version
 after update on public.menus for each row execute function public.bump_menu_device_config_version();
 create trigger menu_branch_device_config_version

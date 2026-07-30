@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import type { AddressInfo } from "node:net";
-import { test } from "node:test";
+import { describe, test } from "node:test";
 import express from "express";
 import type {
   DeviceCredentialRow,
@@ -24,7 +24,6 @@ import { createDeviceRouter } from "../routes/deviceRoutes";
 import {
   createDeviceSecretKey,
   hashDeviceSecret,
-  hashOpaqueToken,
   parseDeviceSecretKey,
   verifyDeviceSecret,
 } from "./deviceCredentialService";
@@ -38,6 +37,7 @@ import { DeviceTokenService } from "./deviceTokenService";
 
 const NOW = new Date("2026-07-30T12:00:00.000Z");
 
+describe("production device identity", { concurrency: false }, () => {
 test("device secrets use a parsed public identifier and one-way scrypt hash", async () => {
   const generated = createDeviceSecretKey();
   const parsed = parseDeviceSecretKey(generated.secretKey);
@@ -62,18 +62,21 @@ test("device access tokens are signed, scoped, tamper-resistant, and expiring", 
     deviceType: "kiosk",
   });
   assert.equal(tokens.verify(issued.token)?.sub, "10000000-0000-4000-8000-000000000001");
-  assert.equal(tokens.verify(`${issued.token.slice(0, -1)}x`), null);
+  const [header, payload, signature] = issued.token.split(".");
+  const tamperedPayload = `${payload[0] === "e" ? "f" : "e"}${payload.slice(1)}`;
+  assert.equal(tokens.verify(`${header}.${tamperedPayload}.${signature}`), null);
   clock += 121_000;
   assert.equal(tokens.verify(issued.token), null);
 });
 
 test("registration validates the credential, creates a revocable session, and returns one bootstrap", async () => {
   const generated = createDeviceSecretKey();
-  const repository = new MemoryDeviceRepository(await hashDeviceSecret(generated.secret));
+  const repository = new MemoryDeviceRepository("test-secret-hash");
   const service = new DeviceIdentityService(
     repository,
     new DeviceTokenService("test-secret-with-at-least-thirty-two-bytes", 900, () => NOW.getTime()),
     () => NOW,
+    matchesSecret(generated.secret),
   );
   repository.publicKeyId = generated.publicKeyId;
   const result = await service.register(generated.secretKey);
@@ -91,14 +94,15 @@ test("registration validates the credential, creates a revocable session, and re
 
 test("registration rejects invalid, disabled, and expired credentials", async () => {
   const generated = createDeviceSecretKey();
-  const repository = new MemoryDeviceRepository(await hashDeviceSecret(generated.secret));
+  const repository = new MemoryDeviceRepository("test-secret-hash");
   repository.publicKeyId = generated.publicKeyId;
   const service = new DeviceIdentityService(
     repository,
     new DeviceTokenService("test-secret-with-at-least-thirty-two-bytes", 900, () => NOW.getTime()),
     () => NOW,
+    matchesSecret(generated.secret),
   );
-  await assert.rejects(() => service.register(`${generated.secretKey}x`), isFailure("invalid_device_key", 401));
+  await assert.rejects(() => service.register("MORROW-DEMO-001"), isFailure("invalid_device_key", 401));
   repository.device.status = "disabled";
   await assert.rejects(() => service.register(generated.secretKey), isFailure("device_disabled", 403));
   repository.device.status = "active";
@@ -108,18 +112,38 @@ test("registration rejects invalid, disabled, and expired credentials", async ()
 
 test("bootstrap returns the current database configuration version", async () => {
   const generated = createDeviceSecretKey();
-  const repository = new MemoryDeviceRepository(await hashDeviceSecret(generated.secret));
+  const repository = new MemoryDeviceRepository("test-secret-hash");
   repository.publicKeyId = generated.publicKeyId;
   const service = new DeviceIdentityService(
     repository,
     new DeviceTokenService("test-secret-with-at-least-thirty-two-bytes", 900, () => NOW.getTime()),
     () => NOW,
+    matchesSecret(generated.secret),
   );
   const registration = await service.register(generated.secretKey);
   repository.device.config_version = 8;
   repository.bootstrap.device.config_version = 8;
   const bootstrap = await service.bootstrap(registration.accessToken);
   assert.equal(bootstrap.configVersion, 8);
+});
+
+test("refresh rotates the access token and revocation invalidates the device session", async () => {
+  const generated = createDeviceSecretKey();
+  const repository = new MemoryDeviceRepository("test-secret-hash");
+  repository.publicKeyId = generated.publicKeyId;
+  const service = new DeviceIdentityService(
+    repository,
+    new DeviceTokenService("test-secret-with-at-least-thirty-two-bytes", 900, () => NOW.getTime()),
+    () => NOW,
+    matchesSecret(generated.secret),
+  );
+  const registration = await service.register(generated.secretKey);
+  const refreshed = await service.refresh(registration.refreshToken);
+  assert.notEqual(refreshed.accessToken, registration.accessToken);
+  await assert.rejects(() => service.bootstrap(registration.accessToken), isFailure("invalid_device_session", 401));
+  assert.equal((await service.bootstrap(refreshed.accessToken)).device.id, repository.device.id);
+  await service.revoke(refreshed.accessToken);
+  await assert.rejects(() => service.bootstrap(refreshed.accessToken), isFailure("invalid_device_session", 401));
 });
 
 test("device API exposes registration, refresh, bootstrap, and revocation without returning refresh secrets", async () => {
@@ -179,10 +203,12 @@ test("device migration is additive, tenant-scoped, and never stores raw secrets"
   assert.match(migration, /config_version = config_version \+ 1/);
   assert.match(migration, /create policy "restaurant admins manage branches"/);
 });
+});
 
 class MemoryDeviceRepository implements DeviceRepository {
   public publicKeyId = "abcdefghijklmnop";
   public sessions: NewDeviceSession[] = [];
+  public revokedSessions = new Set<string>();
   public registrationRecorded = false;
   public device: DeviceRow = {
     id: "10000000-0000-4000-8000-000000000001",
@@ -235,8 +261,7 @@ class MemoryDeviceRepository implements DeviceRepository {
     }
   }
   async revokeSession(sessionId: string) {
-    const stored = this.sessions.find(session => session.id === sessionId);
-    if (stored) (stored as NewDeviceSession & { revoked_at?: string }).revoked_at = NOW.toISOString();
+    if (this.sessions.some(session => session.id === sessionId)) this.revokedSessions.add(sessionId);
   }
   async touchDeviceSession() { return; }
   async recordRegistration() { this.registrationRecorded = true; }
@@ -250,7 +275,7 @@ class MemoryDeviceRepository implements DeviceRepository {
     const session: DeviceSessionRow = {
       ...stored,
       last_seen_at: NOW.toISOString(),
-      revoked_at: null,
+      revoked_at: this.revokedSessions.has(stored.id) ? NOW.toISOString() : null,
       created_at: NOW.toISOString(),
     };
     return { session, credential: this.credential, device: this.device };
@@ -340,4 +365,6 @@ function isFailure(code: string, status: number) {
   return (error: unknown) => error instanceof DeviceApiFailure && error.code === code && error.status === status;
 }
 
-void hashOpaqueToken;
+function matchesSecret(expected: string): typeof verifyDeviceSecret {
+  return async secret => secret === expected;
+}

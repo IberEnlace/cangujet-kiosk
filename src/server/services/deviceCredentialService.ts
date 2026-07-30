@@ -13,7 +13,7 @@ export type ParsedDeviceSecretKey = {
 };
 
 export function createDeviceSecretKey() {
-  const publicKeyId = randomBytes(12).toString("base64url");
+  const publicKeyId = randomBytes(12).toString("hex");
   const secret = randomBytes(32).toString("base64url");
   return {
     publicKeyId,
@@ -23,7 +23,7 @@ export function createDeviceSecretKey() {
 }
 
 export function parseDeviceSecretKey(value: string): ParsedDeviceSecretKey | null {
-  const match = value.trim().match(/^mdk_([A-Za-z0-9_-]{12,64})_([A-Za-z0-9_-]{32,128})$/);
+  const match = value.trim().match(/^mdk_([a-f0-9]{24})_([A-Za-z0-9_-]{43})$/);
   return match ? { publicKeyId: match[1], secret: match[2] } : null;
 }
 

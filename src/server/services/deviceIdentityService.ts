@@ -52,6 +52,7 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
     private readonly repository: DeviceRepository,
     private readonly tokens: DeviceTokenService,
     private readonly now: () => Date = () => new Date(),
+    private readonly secretVerifier: typeof verifyDeviceSecret = verifyDeviceSecret,
   ) {}
 
   async register(secretKey: string): Promise<DeviceRegistrationResult> {
@@ -68,7 +69,7 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
       await this.safeAudit(device.id, credential.id, "registration_expired_credential");
       throw new DeviceApiFailure("credential_expired", 401, "This device credential has expired.");
     }
-    if (!await verifyDeviceSecret(parsed.secret, credential.secret_hash)) {
+    if (!await this.secretVerifier(parsed.secret, credential.secret_hash)) {
       await this.safeAudit(device.id, credential.id, "registration_invalid_secret");
       throw invalidKey();
     }
