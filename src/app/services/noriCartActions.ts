@@ -1,6 +1,7 @@
 import type { CartItem } from "../context/CartContext";
 import { noriMenuProducts } from "./noriMenuEngine";
 import type { NoriAction, NoriCartItem } from "../../server/types/noriChat";
+import { cartLineId } from "./orders/cartModifierPipeline";
 
 export type NoriCartActionAdapter = {
   addItem: (item: Omit<CartItem, "qty">) => void;
@@ -151,7 +152,8 @@ export function mapNoriAddActionToCartItem(
     cholesterolMilligrams: Math.max(0, nutrition.cholesterolMilligrams + customization.nutritionAdjustment.cholesterolMilligrams),
   }), product.nutrition);
   return {
-    id: product.id, name: product.name, price: action.unitPrice ?? product.price,
+    id: cartLineId(product.id, action.customizations.map(value => ({ modifierId: value.optionId }))),
+    productId: product.id, name: product.name, price: action.unitPrice ?? product.price,
     basePrice: product.price, image: product.image, category: product.category,
     calories: adjustedNutrition.calories,
     customizations: Object.keys(customizations).length ? customizations : undefined,
@@ -175,7 +177,7 @@ export function applyNoriAddActionToCartSnapshot(
 
 export function serializeNoriCart(items: CartItem[]): NoriCartItem[] {
   return items.map(item => ({
-    productId: item.id, name: item.name, quantity: item.qty, unitPrice: item.price,
+    productId: item.productId ?? item.id.split("::")[0], name: item.name, quantity: item.qty, unitPrice: item.price,
     customizations: item.customizations,
     customizationObjects: item.noriCustomizations,
     actionId: item.noriActionId,

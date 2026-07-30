@@ -13,7 +13,7 @@ import { useOrderTracking } from "../../hooks/useRealtimeOrders";
 
 export default function OrderConfirmation({ onReset }: { onReset: () => void }) {
   const {
-    queueNumber, currentOrderId, currentTrackingToken, items, confirmedOrderItems,
+    queueNumber, currentOrderId, currentOrderNumber, currentTrackingToken, items, confirmedOrderItems,
     total, orderType, paymentMethod,
   } = useCart();
   const tracking = useOrderTracking(currentOrderId, currentTrackingToken);
@@ -72,7 +72,7 @@ export default function OrderConfirmation({ onReset }: { onReset: () => void }) 
         <section className="grid min-h-0 content-center gap-3 py-2 sm:gap-4">
           <div>
             <p className="font-['Space_Mono'] text-[10px] font-bold uppercase tracking-[.2em] text-white/40">{copy.orderNumber}</p>
-            <p className="text-[clamp(4.6rem,14dvh,8.5rem)] font-black leading-[.85] tabular-nums text-[#D7FB69] drop-shadow-[0_0_30px_rgba(215,251,105,.16)]">{queueNumber}</p>
+            <p className="text-[clamp(4.6rem,14dvh,8.5rem)] font-black leading-[.85] tabular-nums text-[#D7FB69] drop-shadow-[0_0_30px_rgba(215,251,105,.16)]">{currentOrderNumber}</p>
           </div>
 
           <div className="confirmation-receipt-grid mx-auto grid min-h-0 w-full max-w-3xl items-center gap-3 min-[680px]:grid-cols-2">

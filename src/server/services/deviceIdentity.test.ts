@@ -20,6 +20,7 @@ import type {
   DeviceSessionIdentity,
   NewDeviceSession,
 } from "../repositories/deviceRepository";
+import { serverApp } from "../app";
 import { createDeviceRouter } from "../routes/deviceRoutes";
 import {
   createDeviceSecretKey,
@@ -71,12 +72,12 @@ test("device access tokens are signed, scoped, tamper-resistant, and expiring", 
 
 test("registration validates the credential, creates a revocable session, and returns one bootstrap", async () => {
   const generated = createDeviceSecretKey();
-  const repository = new MemoryDeviceRepository("test-secret-hash");
+  const credentialHash = await hashDeviceSecret(generated.secret, Buffer.alloc(16, 9));
+  const repository = new MemoryDeviceRepository(credentialHash);
   const service = new DeviceIdentityService(
     repository,
     new DeviceTokenService("test-secret-with-at-least-thirty-two-bytes", 900, () => NOW.getTime()),
     () => NOW,
-    matchesSecret(generated.secret),
   );
   repository.publicKeyId = generated.publicKeyId;
   const result = await service.register(generated.secretKey);
@@ -107,7 +108,7 @@ test("registration rejects invalid, disabled, and expired credentials", async ()
   await assert.rejects(() => service.register(generated.secretKey), isFailure("device_disabled", 403));
   repository.device.status = "active";
   repository.credential.expires_at = "2026-07-29T00:00:00.000Z";
-  await assert.rejects(() => service.register(generated.secretKey), isFailure("credential_expired", 401));
+  await assert.rejects(() => service.register(generated.secretKey), isFailure("credential_expired", 403));
 });
 
 test("bootstrap returns the current database configuration version", async () => {
@@ -125,6 +126,28 @@ test("bootstrap returns the current database configuration version", async () =>
   repository.bootstrap.device.config_version = 8;
   const bootstrap = await service.bootstrap(registration.accessToken);
   assert.equal(bootstrap.configVersion, 8);
+});
+
+test("menu loading is authenticated and restricted to the bootstrap-assigned published menu", async () => {
+  const generated = createDeviceSecretKey();
+  const repository = new MemoryDeviceRepository("test-secret-hash");
+  repository.publicKeyId = generated.publicKeyId;
+  const service = new DeviceIdentityService(
+    repository,
+    new DeviceTokenService("test-secret-with-at-least-thirty-two-bytes", 900, () => NOW.getTime()),
+    () => NOW,
+    matchesSecret(generated.secret),
+  );
+  await assert.rejects(() => service.menu("invalid-token"), isFailure("invalid_device_session", 401));
+  const registration = await service.register(generated.secretKey);
+  const menu = await service.menu(registration.accessToken);
+  assert.deepEqual(repository.lastRequestedMenuScope, {
+    restaurantId: repository.device.restaurant_id,
+    branchId: repository.device.branch_id,
+    menuId: repository.bootstrap.menu.id,
+  });
+  assert.equal(menu.menuId, repository.bootstrap.menu.id);
+  assert.equal(menu.currency, repository.bootstrap.branch.currency);
 });
 
 test("refresh rotates the access token and revocation invalidates the device session", async () => {
@@ -162,6 +185,25 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
       return { accessToken: "new.header.signature", tokenType: "Bearer", expiresAt: registration.expiresAt };
     },
     async bootstrap() { return bootstrap; },
+    async menu() {
+      return {
+        menuId: bootstrap.publishedMenuId,
+        menuVersion: bootstrap.publishedMenuVersion,
+        currency: bootstrap.currency,
+        categories: [],
+        products: [],
+        customizationGroups: [],
+        customizationOptions: [],
+      };
+    },
+    async authorize() {
+      return {
+        deviceId: bootstrap.device.id,
+        restaurantId: bootstrap.restaurant.id,
+        branchId: bootstrap.branch.id,
+        deviceType: bootstrap.device.type,
+      };
+    },
     async revoke() { return; },
   };
   const app = express();
@@ -174,7 +216,7 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
     const registered = await fetch(`http://127.0.0.1:${port}/api/v1/devices/register`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ secretKey: `mdk_${"a".repeat(16)}_${"b".repeat(43)}` }),
+      body: JSON.stringify({ secretKey: `mdk_${"a".repeat(24)}_${"b".repeat(43)}` }),
     });
     assert.equal(registered.status, 201);
     const body = await registered.json() as DeviceRegistrationResponse & { refreshToken?: string };
@@ -182,11 +224,56 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
     assert.equal(body.refreshToken, undefined);
     assert.match(registered.headers.get("set-cookie") ?? "", /HttpOnly/);
 
+    const invalidRequest = await fetch(`http://127.0.0.1:${port}/api/v1/devices/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secretKey: "" }),
+    });
+    assert.equal(invalidRequest.status, 400);
+    assert.deepEqual(await invalidRequest.json(), {
+      code: "invalid_setup_request",
+      message: "A valid device secret key is required.",
+    });
+
     const bootstrapped = await fetch(`http://127.0.0.1:${port}/api/v1/device/bootstrap`, {
       headers: { authorization: "Bearer header.payload.signature" },
     });
     assert.equal(bootstrapped.status, 200);
     assert.equal((await bootstrapped.json() as DeviceBootstrap).device.name, "Morrow Kiosk");
+
+    const menu = await fetch(`http://127.0.0.1:${port}/api/v1/device/menu`, {
+      headers: { authorization: "Bearer header.payload.signature" },
+    });
+    assert.equal(menu.status, 200);
+    assert.deepEqual(await menu.json(), {
+      menuId: bootstrap.publishedMenuId,
+      menuVersion: bootstrap.publishedMenuVersion,
+      currency: bootstrap.currency,
+      categories: [],
+      products: [],
+      customizationGroups: [],
+      customizationOptions: [],
+    });
+  } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test("malformed device JSON receives a structured invalid-request response", async () => {
+  const server = serverApp.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const response = await fetch(`http://127.0.0.1:${port}/api/v1/devices/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"secretKey":',
+    });
+    assert.equal(response.status, 400);
+    assert.deepEqual(await response.json(), {
+      code: "invalid_setup_request",
+      message: "A valid JSON request body is required.",
+    });
   } finally {
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
@@ -203,6 +290,17 @@ test("device migration is additive, tenant-scoped, and never stores raw secrets"
   assert.match(migration, /config_version = config_version \+ 1/);
   assert.match(migration, /create policy "restaurant admins manage branches"/);
 });
+
+test("dynamic configuration migration owns categories by menu and propagates menu versions", () => {
+  const migration = readFileSync("supabase/migrations/202607300002_dynamic_restaurant_configuration.sql", "utf8");
+  assert.match(migration, /add column if not exists menu_id uuid references public\.menus\(id\)/);
+  assert.match(migration, /alter column menu_id set not null/);
+  assert.match(migration, /categories_menu_slug_uidx/);
+  assert.match(migration, /drop policy if exists "public read active categories"/);
+  assert.match(migration, /create policy "restaurant admins manage categories"/);
+  assert.match(migration, /set version = version \+ 1/);
+  assert.match(migration, /customization_options_owned_menu_version/);
+});
 });
 
 class MemoryDeviceRepository implements DeviceRepository {
@@ -210,6 +308,7 @@ class MemoryDeviceRepository implements DeviceRepository {
   public sessions: NewDeviceSession[] = [];
   public revokedSessions = new Set<string>();
   public registrationRecorded = false;
+  public lastRequestedMenuScope: { restaurantId: string; branchId: string; menuId: string } | null = null;
   public device: DeviceRow = {
     id: "10000000-0000-4000-8000-000000000001",
     restaurant_id: "30000000-0000-4000-8000-000000000001",
@@ -270,6 +369,10 @@ class MemoryDeviceRepository implements DeviceRepository {
     this.bootstrap.device = this.device;
     return this.bootstrap;
   }
+  async loadMenuConfiguration(scope: { restaurantId: string; branchId: string; menuId: string }) {
+    this.lastRequestedMenuScope = scope;
+    return { categories: [], products: [], customizationGroups: [], customizationOptions: [] };
+  }
 
   private identity(stored: NewDeviceSession): DeviceSessionIdentity {
     const session: DeviceSessionRow = {
@@ -290,7 +393,7 @@ function bootstrapData(device: DeviceRow): DeviceBootstrapData {
     },
     branch: {
       id: device.branch_id, restaurant_id: device.restaurant_id, name: "Main Branch", code: "MAIN",
-      address: null, currency: "EUR", timezone: "Europe/Istanbul", tax_rate: 0.08,
+      address: null, phone: null, currency: "EUR", timezone: "Europe/Istanbul", tax_rate: 0.08,
       service_modes: ["dine_in", "take_away"], allow_unpaid_kitchen_orders: true, is_active: true,
       created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
     },
@@ -335,12 +438,13 @@ function bootstrapData(device: DeviceRow): DeviceBootstrapData {
 
 function mapTestBootstrap(): DeviceBootstrap {
   return {
-    restaurant: { id: "restaurant", name: "MORROW", slug: "morrow", logoUrl: null },
+    restaurant: { id: "restaurant", name: "MORROW", slug: "morrow", logoUrl: null, brandColors: {} },
     branch: {
-      id: "branch", name: "Main Branch", code: "MAIN", currency: "EUR", taxRate: 0.08,
+      id: "branch", name: "Main Branch", code: "MAIN", address: null, phone: null, currency: "EUR", taxRate: 0.08,
       timezone: "Europe/Istanbul", serviceModes: ["dine_in", "take_away"], openingHours: [],
     },
-    device: { id: "device", type: "kiosk", name: "Morrow Kiosk", status: "active", configVersion: 7, lastSeenAt: null },
+    device: { id: "device", type: "kiosk", name: "Morrow Kiosk", status: "active", configVersion: 7, lastSeenAt: null, mode: "kiosk", defaultLanguage: "en", featureFlags: {}, printerConfiguration: {} },
+    configuration: { configVersion: 7, lastUpdated: NOW.toISOString(), checksum: "test-checksum" },
     configVersion: 7,
     theme: { id: "theme", name: "Default", tokens: {} },
     logoUrl: null,

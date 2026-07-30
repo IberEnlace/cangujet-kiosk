@@ -14,6 +14,10 @@ import type {
   RestaurantLanguageRow,
   RestaurantRow,
   ThemeRow,
+  CategoryRow,
+  ProductRow,
+  CustomizationGroupRow,
+  CustomizationOptionRow,
 } from "../../lib/supabase/database.types";
 
 export type DeviceCredentialIdentity = {
@@ -46,6 +50,19 @@ export type NewDeviceSession = Pick<
   "id" | "device_id" | "credential_id" | "access_token_hash" | "refresh_token_hash" | "expires_at" | "refresh_expires_at"
 >;
 
+export type DeviceMenuData = {
+  categories: CategoryRow[];
+  products: ProductRow[];
+  customizationGroups: CustomizationGroupRow[];
+  customizationOptions: CustomizationOptionRow[];
+};
+
+export type DeviceMenuScope = {
+  restaurantId: string;
+  branchId: string;
+  menuId: string;
+};
+
 export interface DeviceRepository {
   findCredential(publicKeyId: string): Promise<DeviceCredentialIdentity | null>;
   createSession(session: NewDeviceSession): Promise<void>;
@@ -57,6 +74,7 @@ export interface DeviceRepository {
   recordRegistration(deviceId: string, credentialId: string): Promise<void>;
   recordAudit(deviceId: string | null, credentialId: string | null, eventType: string): Promise<void>;
   loadBootstrap(deviceId: string): Promise<DeviceBootstrapData | null>;
+  loadMenuConfiguration(scope: DeviceMenuScope): Promise<DeviceMenuData | null>;
 }
 
 export class SupabaseDeviceRepository implements DeviceRepository {
@@ -145,14 +163,16 @@ export class SupabaseDeviceRepository implements DeviceRepository {
 
     const [restaurant, branch, theme, languageAssignments, openingHours, payment, nori, idle, menuAssignment] = await Promise.all([
       this.client.from("restaurants").select("*").eq("id", device.restaurant_id).maybeSingle(),
-      this.client.from("branches").select("*").eq("id", device.branch_id).maybeSingle(),
+      this.client.from("branches").select("*")
+        .eq("id", device.branch_id).eq("restaurant_id", device.restaurant_id).maybeSingle(),
       this.client.from("themes").select("*").eq("restaurant_id", device.restaurant_id).eq("is_active", true).maybeSingle(),
       this.client.from("restaurant_languages").select("*").eq("restaurant_id", device.restaurant_id).order("display_order"),
       this.client.from("branch_opening_hours").select("*").eq("branch_id", device.branch_id).order("day_of_week").order("sequence"),
       this.client.from("payment_configurations").select("*").eq("branch_id", device.branch_id).maybeSingle(),
       this.client.from("nori_configurations").select("*").eq("branch_id", device.branch_id).maybeSingle(),
       this.client.from("idle_screen_configurations").select("*").eq("branch_id", device.branch_id).maybeSingle(),
-      this.client.from("menu_branches").select("*").eq("branch_id", device.branch_id).eq("is_active", true).maybeSingle(),
+      this.client.from("menu_branches").select("*")
+        .eq("branch_id", device.branch_id).eq("is_active", true).maybeSingle(),
     ]);
     assertQuery(
       restaurant.error ?? branch.error ?? theme.error ?? languageAssignments.error ?? openingHours.error
@@ -167,7 +187,11 @@ export class SupabaseDeviceRepository implements DeviceRepository {
       languageCodes.length
         ? this.client.from("languages").select("*").in("code", languageCodes)
         : Promise.resolve({ data: [] as LanguageRow[], error: null }),
-      this.client.from("menus").select("*").eq("id", menuAssignment.data.menu_id).eq("status", "published").maybeSingle(),
+      this.client.from("menus").select("*")
+        .eq("id", menuAssignment.data.menu_id)
+        .eq("restaurant_id", device.restaurant_id)
+        .eq("status", "published")
+        .maybeSingle(),
     ]);
     assertQuery(languages.error ?? menu.error, "Device bootstrap menu or languages could not be loaded.");
     const savedLanguages = languages.data ?? [];
@@ -184,6 +208,66 @@ export class SupabaseDeviceRepository implements DeviceRepository {
       nori: nori.data,
       idle: idle.data,
       menu: menu.data,
+    };
+  }
+
+  async loadMenuConfiguration(scope: DeviceMenuScope): Promise<DeviceMenuData | null> {
+    const [assignment, menu] = await Promise.all([
+      this.client.from("menu_branches").select("*")
+        .eq("menu_id", scope.menuId)
+        .eq("branch_id", scope.branchId)
+        .eq("is_active", true)
+        .maybeSingle(),
+      this.client.from("menus").select("*")
+        .eq("id", scope.menuId)
+        .eq("restaurant_id", scope.restaurantId)
+        .eq("status", "published")
+        .maybeSingle(),
+    ]);
+    assertQuery(assignment.error ?? menu.error, "Device menu assignment could not be validated.");
+    if (!assignment.data || !menu.data) return null;
+
+    const categories = await this.client.from("categories")
+      .select("*")
+      .eq("menu_id", scope.menuId)
+      .eq("is_active", true)
+      .eq("is_visible", true)
+      .order("display_order")
+      .order("name");
+    assertQuery(categories.error, "Device menu categories could not be loaded.");
+    const categoryIds = (categories.data ?? []).map(category => category.id);
+    const products = categoryIds.length
+      ? await this.client.from("products")
+        .select("*")
+        .in("category_id", categoryIds)
+        .eq("is_active", true)
+        .eq("is_available", true)
+        .order("display_order")
+        .order("name")
+      : { data: [] as ProductRow[], error: null };
+    assertQuery(products.error, "Device menu products could not be loaded.");
+    const productIds = (products.data ?? []).map(product => product.id);
+    const customizationGroups = productIds.length
+      ? await this.client.from("product_customization_groups")
+        .select("*")
+        .in("product_id", productIds)
+        .order("display_order")
+      : { data: [] as CustomizationGroupRow[], error: null };
+    assertQuery(customizationGroups.error, "Device menu modifier groups could not be loaded.");
+    const groupIds = (customizationGroups.data ?? []).map(group => group.id);
+    const customizationOptions = groupIds.length
+      ? await this.client.from("product_customization_options")
+        .select("*")
+        .in("group_id", groupIds)
+        .eq("is_available", true)
+        .order("display_order")
+      : { data: [] as CustomizationOptionRow[], error: null };
+    assertQuery(customizationOptions.error, "Device menu modifier options could not be loaded.");
+    return {
+      categories: categories.data ?? [],
+      products: products.data ?? [],
+      customizationGroups: customizationGroups.data ?? [],
+      customizationOptions: customizationOptions.data ?? [],
     };
   }
 

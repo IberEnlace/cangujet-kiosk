@@ -13,6 +13,7 @@ export type NoriOrderStatus =
   | "draft"
   | "awaiting_payment"
   | "paid"
+  | "submitted"
   | "accepted"
   | "completed"
   | "cancelled";

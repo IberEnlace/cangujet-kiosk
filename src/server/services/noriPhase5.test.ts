@@ -94,7 +94,13 @@ test("phase5 next request summarizes the frontend-synchronized cart", async () =
   const { agent, modified } = await modifiedPendingAdd();
   const result = await agent.process(request("Yes.", modified.conversationState));
   const cart: NoriCartItem[] = [];
-  executeNoriCartActions(result.actions, { addItem: item => cart.push({ productId: item.id, quantity: 1, customizations: item.customizations }) });
+  executeNoriCartActions(result.actions, {
+    addItem: item => cart.push({
+      productId: item.productId ?? item.id.split("::")[0],
+      quantity: 1,
+      customizations: item.customizations,
+    }),
+  });
   const summary = await agent.process(request("Show my cart.", result.conversationState, cart));
   assert.doesNotMatch(summary.reply, /cart is empty/i); assert.match(summary.reply, /Morrow Classic Beef Burger|No sauce/i);
 });

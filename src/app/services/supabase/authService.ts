@@ -29,6 +29,12 @@ export async function signInStaff(role: StaffRole, email: string, password: stri
 
 export async function signOutStaff() { if (supabase) await supabase.auth.signOut(); }
 
+export async function getStaffAccessToken() {
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.getSession();
+  return error ? null : data.session?.access_token ?? null;
+}
+
 export function onStaffAuthChange(callback: (identity: StaffIdentity | null) => void) {
   if (!supabase) return () => undefined;
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {

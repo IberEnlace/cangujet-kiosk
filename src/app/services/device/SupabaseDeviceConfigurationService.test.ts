@@ -8,6 +8,8 @@ import {
 } from "./DeviceConfigurationService";
 import { SupabaseDeviceConfigurationService } from "./SupabaseDeviceConfigurationService";
 
+const VALID_DEVICE_KEY = `mdk_${"a".repeat(24)}_${"B".repeat(43)}`;
+
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
   get length() { return this.values.size; }
@@ -23,6 +25,71 @@ beforeEach(() => {
   Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: new MemoryStorage() });
 });
 
+test("browser-default construction preserves the native fetch global receiver for HTTP errors", async () => {
+  const originalFetch = globalThis.fetch;
+  let receiver: unknown;
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    writable: true,
+    value: function receiverSensitiveFetch(this: unknown) {
+      receiver = this;
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      return Promise.resolve(jsonResponse({
+        code: "invalid_setup_request",
+        message: "A valid device secret key is required.",
+      }, 400));
+    } as typeof fetch,
+  });
+
+  try {
+    const service = new SupabaseDeviceConfigurationService();
+    await assert.rejects(
+      service.configureDevice(VALID_DEVICE_KEY),
+      (error: unknown) => error instanceof DeviceConfigurationError && error.code === "invalid_request",
+    );
+    assert.equal(receiver, globalThis);
+  } finally {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      writable: true,
+      value: originalFetch,
+    });
+  }
+});
+
+test("browser-default construction completes a valid registration response", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  Object.defineProperty(globalThis, "fetch", {
+    configurable: true,
+    writable: true,
+    value: function receiverSensitiveFetch(this: unknown) {
+      if (this !== globalThis) throw new TypeError("Illegal invocation");
+      calls += 1;
+      return Promise.resolve(jsonResponse({
+        accessToken: "signed-access-token",
+        tokenType: "Bearer",
+        expiresAt: "2026-07-30T12:15:00.000Z",
+        bootstrap: bootstrap(),
+      }, 201));
+    } as typeof fetch,
+  });
+
+  try {
+    const service = new SupabaseDeviceConfigurationService();
+    const config = await service.configureDevice(VALID_DEVICE_KEY);
+    assert.equal(config.deviceId, "device-1");
+    assert.equal(sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY), "signed-access-token");
+    assert.equal(calls, 1);
+  } finally {
+    Object.defineProperty(globalThis, "fetch", {
+      configurable: true,
+      writable: true,
+      value: originalFetch,
+    });
+  }
+});
+
 test("device registration maps one bootstrap and never persists the raw key or access token publicly", async () => {
   const registration: DeviceRegistrationResponse = {
     accessToken: "signed-access-token",
@@ -33,7 +100,7 @@ test("device registration maps one bootstrap and never persists the raw key or a
   const { fetcher, calls } = queuedFetch(jsonResponse(registration, 201));
   const service = new SupabaseDeviceConfigurationService(fetcher);
 
-  const config = await service.configureDevice("mdk_public_secret");
+  const config = await service.configureDevice(VALID_DEVICE_KEY);
 
   assert.equal(config.restaurantName, "MORROW");
   assert.equal(config.branchName, "Istanbul Branch");
@@ -42,9 +109,11 @@ test("device registration maps one bootstrap and never persists the raw key or a
   assert.deepEqual(config.settings.allowedOrderTypes, ["dine_in", "take_away"]);
   assert.equal(sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY), "signed-access-token");
   const publicCache = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY) ?? "";
-  assert.doesNotMatch(publicCache, /mdk_public_secret|signed-access-token/);
+  assert.doesNotMatch(publicCache, new RegExp(`${VALID_DEVICE_KEY}|signed-access-token`));
   assert.equal(calls[0].url, "/api/v1/devices/register");
+  assert.equal(calls[0].init.method, "POST");
   assert.equal(calls[0].init.credentials, "include");
+  assert.deepEqual(JSON.parse(String(calls[0].init.body)), { secretKey: VALID_DEVICE_KEY });
 });
 
 test("startup restores a session through the HttpOnly refresh cookie and reloads bootstrap", async () => {
@@ -168,14 +237,17 @@ test("retry after a network failure can complete without a refresh or bootstrap 
 test("registration surfaces safe device setup states", async () => {
   const cases = [
     [jsonResponse({ code: "invalid_device_key", message: "invalid" }, 401), "invalid_key"],
-    [jsonResponse({ code: "credential_expired", message: "expired" }, 401), "invalid_key"],
+    [jsonResponse({ code: "invalid_setup_request", message: "invalid request" }, 400), "invalid_request"],
+    [jsonResponse({ code: "credential_expired", message: "expired" }, 403), "expired"],
     [jsonResponse({ code: "device_disabled", message: "disabled" }, 403), "disabled"],
+    [jsonResponse({ code: "device_session_conflict", message: "conflict" }, 409), "conflict"],
     [jsonResponse({ code: "configuration_error", message: "incomplete" }, 503), "configuration_error"],
+    [jsonResponse({ code: "device_service_unavailable", message: "unavailable" }, 503), "server_error"],
   ] as const;
   for (const [response, code] of cases) {
     const service = new SupabaseDeviceConfigurationService(queuedFetch(response).fetcher);
     await assert.rejects(
-      service.configureDevice("secret"),
+      service.configureDevice(VALID_DEVICE_KEY),
       (error: unknown) => error instanceof DeviceConfigurationError && error.code === code,
     );
   }
@@ -183,8 +255,50 @@ test("registration surfaces safe device setup states", async () => {
     throw new TypeError("offline");
   }) as typeof fetch);
   await assert.rejects(
-    service.configureDevice("secret"),
+    service.configureDevice(VALID_DEVICE_KEY),
     (error: unknown) => error instanceof DeviceConfigurationError && error.code === "network_error",
+  );
+});
+
+test("registration rejects a non-JSON success as a protocol error", async () => {
+  const response = new Response("<html>proxy error</html>", {
+    status: 201,
+    headers: { "content-type": "text/html" },
+  });
+  const service = new SupabaseDeviceConfigurationService(queuedFetch(response).fetcher);
+  await assert.rejects(
+    service.configureDevice(VALID_DEVICE_KEY),
+    (error: unknown) => error instanceof DeviceConfigurationError && error.code === "protocol_error",
+  );
+});
+
+test("registration can be retried after a transport failure", async () => {
+  let calls = 0;
+  const service = new SupabaseDeviceConfigurationService((async () => {
+    calls += 1;
+    if (calls === 1) throw new TypeError("offline");
+    return jsonResponse({
+      accessToken: "signed-access-token",
+      tokenType: "Bearer",
+      expiresAt: "2026-07-30T12:15:00.000Z",
+      bootstrap: bootstrap(),
+    }, 201);
+  }) as typeof fetch);
+
+  await assert.rejects(service.configureDevice(VALID_DEVICE_KEY), DeviceConfigurationError);
+  assert.equal((await service.configureDevice(VALID_DEVICE_KEY)).deviceId, "device-1");
+  assert.equal(calls, 2);
+});
+
+test("a stalled registration reports timeout and releases the request", async () => {
+  const fetcher = ((_: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+  })) as typeof fetch;
+  const service = new SupabaseDeviceConfigurationService(fetcher, 5);
+
+  await assert.rejects(
+    service.configureDevice(VALID_DEVICE_KEY),
+    (error: unknown) => error instanceof DeviceConfigurationError && error.code === "timeout",
   );
 });
 
@@ -222,11 +336,13 @@ function jsonResponse(value: unknown, status = 200) {
 
 function bootstrap(): DeviceBootstrap {
   return {
-    restaurant: { id: "restaurant-1", name: "MORROW", slug: "morrow", logoUrl: null },
+    restaurant: { id: "restaurant-1", name: "MORROW", slug: "morrow", logoUrl: null, brandColors: { primary: "#D7FB69" } },
     branch: {
       id: "branch-1",
       name: "Istanbul Branch",
       code: "IST",
+      address: null,
+      phone: null,
       currency: "EUR",
       taxRate: 0.2,
       timezone: "Europe/Istanbul",
@@ -239,8 +355,10 @@ function bootstrap(): DeviceBootstrap {
       name: "Kiosk 1",
       status: "active",
       configVersion: 7,
-      lastSeenAt: null,
+      lastSeenAt: null, mode: "kiosk", defaultLanguage: "en",
+      featureFlags: { aiAssistant: true, voiceAssistant: true }, printerConfiguration: {},
     },
+    configuration: { configVersion: 7, lastUpdated: "2026-07-30T12:00:00.000Z", checksum: "test-checksum" },
     configVersion: 7,
     theme: { id: "theme-1", name: "MORROW Default", tokens: { primary: "#D7FB69" } },
     logoUrl: null,

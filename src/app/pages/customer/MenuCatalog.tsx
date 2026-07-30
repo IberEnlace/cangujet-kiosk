@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronLeft, LoaderCircle, Mic, MicOff, Plus, RefreshCw, ShoppingBag } from "lucide-react";
-import { useCart } from "../../context/CartContext";
+import { Check, ChevronLeft, LoaderCircle, Mic, MicOff, Plus, RefreshCw, ShoppingBag, X } from "lucide-react";
+import { useCart, type CartModifierSelection } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
 import MorrowLogo from "../../components/branding/MorrowLogo";
-import { useDevice } from "../../context/DeviceContext";
+import { useBootstrap } from "../../context/BootstrapContext";
 import { useNoriConversation } from "../../context/NoriConversationContext";
 import { getLanguageOption, LANGUAGE_CONFIG, type SupportedLanguage } from "../../config/languages";
 import { BrowserSpeechRecognitionService } from "../../services/voice/BrowserSpeechRecognitionService";
 import type { NoriConversationReply } from "../../context/NoriConversationContext";
-import { loadMenu } from "../../services/supabase/menuService";
-import type { NormalizedMenu } from "../../services/supabase/menuModels";
-
-type Product = { id: string; name: string; description: string; price: number; calories: number; badge?: string; symbol: string; image?: string };
+import type { NormalizedMenu, NormalizedMenuProduct } from "../../services/supabase/menuModels";
+import {
+  cartLineId,
+  defaultModifierSelections,
+  selectedModifiersForProduct,
+  toModifierRequirements,
+} from "../../services/orders/cartModifierPipeline";
 
 function createProductImage(symbol: string) {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400"><rect width="400" height="400" fill="#eee8dc"/><circle cx="200" cy="200" r="112" fill="#2e6d55"/><text x="200" y="228" text-anchor="middle" font-family="Arial,sans-serif" font-size="112" font-weight="700" fill="white">${symbol}</text></svg>`;
@@ -21,45 +24,108 @@ function createProductImage(symbol: string) {
 interface MenuCatalogProps { onBack: () => void; onCheckout: () => void; onLanguage: () => void; onNori: () => void; onNoriChat: () => void; }
 
 export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori, onNoriChat }: MenuCatalogProps) {
-  const { config } = useDevice();
+  const bootstrap = useBootstrap();
+  const { kiosk, menu: sharedMenu } = bootstrap;
   const { language, direction } = useLanguage();
-  const { items, addItem } = useCart();
+  const { items, addItem, removeItem } = useCart();
   const { isProcessing, sendMessage } = useNoriConversation();
   const [category, setCategory] = useState(() => sessionStorage.getItem("morrow:nori-entry-category") ?? "");
   const [view, setView] = useState<"categories" | "products">("categories");
   const [toast, setToast] = useState("");
-  const [sharedMenu, setSharedMenu] = useState<NormalizedMenu | null>(null);
-  const [menuError, setMenuError] = useState("");
+  const [customizing, setCustomizing] = useState<NormalizedMenuProduct | null>(null);
+  const [selections, setSelections] = useState<Record<string, string[]>>({});
+  const [selectionError, setSelectionError] = useState("");
+  const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const toastTimerRef = useRef<number>();
   useEffect(() => {
-    let active = true;
-    void loadMenu().then(result => {
-      if (!active) return;
-      if (result.ok) {
-        setSharedMenu(result.data);
-        setCategory(current => result.data.categories.some(category => category.id === current)
-          ? current
-          : result.data.categories[0]?.id || "");
-      } else setMenuError(result.error.message);
-    });
-    return () => { active = false; };
-  }, []);
-  const menuCategories = sharedMenu?.categories ?? [];
-  const products: Product[] = (sharedMenu?.products ?? []).filter(product => product.category.replace(/_/g, "-") === menuCategories.find(item => item.id === category)?.slug).map(product => ({
-    id: product.id, name: product.name, description: product.description, price: product.price, calories: product.calories,
-    badge: product.dietaryTags.includes("vegetarian") ? "VEGETARIAN" : undefined, symbol: product.name.charAt(0), image: product.image,
-  }));
+    if (!sharedMenu) return;
+    setCategory(current => sharedMenu.categories.some(item => item.id === current)
+      ? current
+      : sharedMenu.categories[0]?.id || "");
+  }, [sharedMenu]);
+  const menuCategories = useMemo(() => (sharedMenu?.categories ?? []).map(item => ({
+    ...item,
+    name: item.localizedNames?.[language] || item.name,
+  })), [language, sharedMenu]);
+  const products = (sharedMenu?.products ?? []).filter(product => product.category.replace(/_/g, "-") === menuCategories.find(item => item.id === category)?.slug);
+  useEffect(() => {
+    if (!sharedMenu) return;
+    let lineId = "";
+    try { lineId = sessionStorage.getItem("morrow:edit-cart-line") ?? ""; } catch { return; }
+    if (!lineId) return;
+    const item = items.find(value => value.id === lineId);
+    const product = sharedMenu.products.find(value => value.id === (item?.productId ?? item?.id.split("::")[0]));
+    if (!item || !product) return;
+    setCategory(sharedMenu.categories.find(value => value.slug.replace(/-/g, "_") === product.category)?.id ?? category);
+    setView("products");
+    const defaults = defaultModifierSelections(product);
+    setSelections(Object.fromEntries(product.customizationGroups.map(group => {
+      const groupId = group.databaseId ?? group.id;
+      const restored = (item.selectedModifiers ?? [])
+        .filter(value => value.modifierGroupId === groupId)
+        .map(value => value.modifierId);
+      return [groupId, restored.length ? restored : defaults[groupId] ?? []];
+    })));
+    setEditingLineId(item.id);
+    setCustomizing(product);
+    try { sessionStorage.removeItem("morrow:edit-cart-line"); } catch { /* One-time restoration is best effort. */ }
+  }, [category, items, sharedMenu]);
   const count = items.reduce((sum, item) => sum + item.qty, 0);
   const total = items.reduce((sum, item) => sum + item.price * item.qty, 0);
-  const currency = useMemo(() => new Intl.NumberFormat(LANGUAGE_CONFIG[language].locale, { style: "currency", currency: sharedMenu?.currency ?? "EUR" }), [language, sharedMenu?.currency]);
+  const currency = useMemo(() => new Intl.NumberFormat(LANGUAGE_CONFIG[language].locale, { style: "currency", currency: sharedMenu?.currency ?? bootstrap.branch?.currency ?? "USD" }), [bootstrap.branch?.currency, language, sharedMenu?.currency]);
 
   const chooseCategory = (id: string) => { setCategory(id); sessionStorage.setItem("morrow:nori-entry-category", id); setView("products"); };
   const selectedCategory = menuCategories.find(item => item.id === category);
-  const addProduct = (product: Product) => {
-    addItem({ id: product.id, name: product.name, price: product.price, basePrice: product.price, calories: product.calories, category: selectedCategory?.name ?? "", image: product.image ?? createProductImage(product.symbol) });
+  const addConfiguredProduct = (product: NormalizedMenuProduct, selectedModifiers: CartModifierSelection[]) => {
+    const cartItem = {
+      id: cartLineId(product.id, selectedModifiers),
+      productId: product.id,
+      name: product.name,
+      price: product.price + selectedModifiers.reduce((sum, value) => sum + value.priceAdjustment, 0),
+      basePrice: product.price,
+      calories: product.calories,
+      category: selectedCategory?.name ?? "",
+      image: product.image || createProductImage(product.name.charAt(0)),
+      customizations: Object.fromEntries(selectedModifiers.map(value => [value.groupName, value.optionName])),
+      selectedModifiers,
+      requiredModifierGroups: toModifierRequirements(product),
+    };
+    const edited = editingLineId ? items.find(value => value.id === editingLineId) : null;
+    if (edited) removeItem(edited.id);
+    for (let count = 0; count < (edited?.qty ?? 1); count += 1) addItem(cartItem);
     setToast(`${product.name} added`);
     window.clearTimeout(toastTimerRef.current);
     toastTimerRef.current = window.setTimeout(() => setToast(""), 1800);
+    setCustomizing(null);
+    setSelections({});
+    setSelectionError("");
+    setEditingLineId(null);
+  };
+  const addProduct = (product: NormalizedMenuProduct) => {
+    if (!product.customizationGroups.length) {
+      addConfiguredProduct(product, []);
+      return;
+    }
+    setSelections(defaultModifierSelections(product));
+    setSelectionError("");
+    setCustomizing(product);
+  };
+  const confirmCustomizations = () => {
+    if (!customizing) return;
+    for (const group of customizing.customizationGroups) {
+      const groupId = group.databaseId ?? group.id;
+      const count = selections[groupId]?.length ?? 0;
+      if (count < group.minSelections || (group.required && count === 0)) {
+        setSelectionError(`${group.name} requires a selection.`);
+        return;
+      }
+      if (count > group.maxSelections) {
+        setSelectionError(`${group.name} has too many selections.`);
+        return;
+      }
+    }
+    const selectedModifiers = selectedModifiersForProduct(customizing, selections);
+    addConfiguredProduct(customizing, selectedModifiers);
   };
 
   const BackIcon = ChevronLeft;
@@ -70,19 +136,28 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori, on
         <header className="sticky top-0 z-30 flex h-[clamp(4.6rem,7vh,6rem)] items-center justify-between border-b border-white/10 bg-[#0b1009]/92 px-3 backdrop-blur-xl sm:px-5">
           <button type="button" onClick={onBack} aria-label="Back to service selection" className="grid size-12 place-items-center rounded-2xl border border-white/10 bg-white/5 text-white/70 transition hover:bg-white/10 active:scale-95 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]"><BackIcon size={23} aria-hidden="true" /></button>
           <div className="text-center" dir="ltr"><MorrowLogo variant="full" className="hidden h-auto w-28 sm:block" /><MorrowLogo variant="symbol" className="mx-auto size-9 object-contain sm:hidden" alt="" /><p className="mt-0.5 text-[10px] text-white/40">{language === "tr" ? "Yeni siparişiniz" : "Your new order"}</p></div>
-          <div className="flex items-center gap-2">{config?.settings.aiAssistantEnabled && <button type="button" onClick={onNori} className="hidden min-h-11 rounded-xl border border-[#D7FB69]/25 bg-[#D7FB69]/8 px-3 text-xs font-bold text-[#D7FB69] min-[560px]:block">Ask Nori</button>}<button type="button" onClick={onLanguage} className="min-h-11 min-w-11 rounded-xl border border-white/10 bg-white/5 px-2 text-xs font-bold uppercase text-white/70 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]">{language}</button><button type="button" onClick={onCheckout} aria-label={`Open cart with ${count} items`} className="relative grid size-12 place-items-center rounded-2xl bg-[#d7ff7a] text-[#17200f] focus-visible:outline focus-visible:outline-4 focus-visible:outline-white"><ShoppingBag size={20} aria-hidden="true" />{count > 0 && <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ffb86c] text-[10px] font-bold text-[#34240e]">{count}</span>}</button></div>
+          <div className="flex items-center gap-2">{kiosk?.ai.enabled && <button type="button" onClick={onNori} className="hidden min-h-11 rounded-xl border border-[#D7FB69]/25 bg-[#D7FB69]/8 px-3 text-xs font-bold text-[#D7FB69] min-[560px]:block">Ask Nori</button>}<button type="button" onClick={onLanguage} className="min-h-11 min-w-11 rounded-xl border border-white/10 bg-white/5 px-2 text-xs font-bold uppercase text-white/70 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a]">{language}</button><button type="button" onClick={onCheckout} aria-label={`Open cart with ${count} items`} className="relative grid size-12 place-items-center rounded-2xl bg-[#d7ff7a] text-[#17200f] focus-visible:outline focus-visible:outline-4 focus-visible:outline-white"><ShoppingBag size={20} aria-hidden="true" />{count > 0 && <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full bg-[#ffb86c] text-[10px] font-bold text-[#34240e]">{count}</span>}</button></div>
         </header>
 
         <div className="grid min-h-[calc(100dvh-5rem)] grid-cols-[88px_minmax(0,1fr)] sm:grid-cols-[120px_minmax(0,1fr)]">
-          <aside className="relative border-e border-white/10 bg-[#0e130c] p-2 pb-28"><p className="px-2 pb-2 pt-2 font-['Space_Mono'] text-[8px] tracking-[.14em] text-white/35">MENU</p><nav className="space-y-2" aria-label="Menu categories">{menuCategories.map(item => <button type="button" key={item.id} onClick={() => chooseCategory(item.id)} aria-pressed={category === item.id} className={`flex min-h-[78px] w-full flex-col items-center justify-center rounded-2xl border px-1 py-2 transition active:scale-95 focus-visible:outline focus-visible:outline-3 focus-visible:outline-[#d7ff7a] ${category === item.id ? "border-[#d7ff7a]/50 bg-[#d7ff7a]/10 shadow-[0_5px_20px_rgba(215,255,122,.08)]" : "border-transparent hover:bg-white/5"}`}><span className={`grid size-11 place-items-center rounded-full text-xl ${category === item.id ? "bg-[#d7ff7a] text-[#17200f]" : "bg-white/5 text-white/45"}`}>{item.image ? <img src={item.image} alt="" className="size-10 rounded-full object-cover" /> : item.name.charAt(0)}</span><span className={`mt-1.5 text-[9px] leading-3 sm:text-[10px] ${category === item.id ? "font-bold text-[#d7ff7a]" : "text-white/45"}`}>{item.name}</span></button>)}</nav></aside>
+          <aside className="relative border-e border-white/10 bg-[#0e130c] p-2 pb-28"><p className="px-2 pb-2 pt-2 font-['Space_Mono'] text-[8px] tracking-[.14em] text-white/35">MENU</p><nav className="space-y-2" aria-label="Menu categories">{menuCategories.map(item => <button type="button" key={item.id} onClick={() => chooseCategory(item.id)} aria-pressed={category === item.id} className={`flex min-h-[78px] w-full flex-col items-center justify-center rounded-2xl border px-1 py-2 transition active:scale-95 focus-visible:outline focus-visible:outline-3 focus-visible:outline-[#d7ff7a] ${category === item.id ? "border-[#d7ff7a]/50 bg-[#d7ff7a]/10 shadow-[0_5px_20px_rgba(215,255,122,.08)]" : "border-transparent hover:bg-white/5"}`}><span className={`grid size-11 place-items-center rounded-full text-xl ${category === item.id ? "bg-[#d7ff7a] text-[#17200f]" : "bg-white/5 text-white/45"}`}>{item.image ? <img src={item.image} alt="" className="size-10 rounded-full object-cover" /> : item.icon || item.name.charAt(0)}</span><span className={`mt-1.5 text-[9px] leading-3 sm:text-[10px] ${category === item.id ? "font-bold text-[#d7ff7a]" : "text-white/45"}`}>{item.name}</span></button>)}</nav></aside>
 
           <section className="relative min-w-0 pb-28"><div className="p-3 sm:p-5"><div className="flex items-start justify-between gap-3"><div><p className="font-['Space_Mono'] text-[8px] tracking-[.14em] text-[#d7ff7a] sm:text-[9px]">{view === "products" ? "CATEGORY SELECTED" : "CHOOSE A CATEGORY"}</p><h1 className="mt-1 text-[clamp(1.45rem,4vw,2.2rem)] font-semibold tracking-[-.04em] text-white">{view === "products" ? selectedCategory?.name : "What are you craving?"}</h1></div><button type="button" onClick={() => setView("categories")} className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-white/55">Categories</button></div>
-            {config?.settings.aiAssistantEnabled && <NoriBanner onOpen={onNori} onOpenChat={onNoriChat} isProcessing={isProcessing} sendMessage={sendMessage} language={language} voiceEnabled={config.settings.voiceAssistantEnabled !== false} />}
-            {menuError ? <div role="alert" className="mt-8 rounded-2xl border border-red-400/20 bg-red-400/10 p-5 text-sm text-red-200">{menuError}</div> : !sharedMenu ? <div className="mt-8 text-sm text-white/40">Loading menu...</div> : view === "categories" ? <CategoryLanding menu={sharedMenu} onChoose={chooseCategory} selected={category} /> : <ProductGrid products={products} currency={currency} onAdd={addProduct} />}
+            {kiosk?.ai.enabled && <NoriBanner onOpen={onNori} onOpenChat={onNoriChat} isProcessing={isProcessing} sendMessage={sendMessage} language={language} voiceEnabled={kiosk.ai.voiceEnabled} />}
+            {!sharedMenu ? <div className="mt-8 text-sm text-white/40">Loading menu...</div> : view === "categories" ? <CategoryLanding menu={{ ...sharedMenu, categories: menuCategories }} onChoose={chooseCategory} selected={category} /> : <ProductGrid products={products} currency={currency} onAdd={addProduct} />}
           </div></section>
         </div>
 
-        <footer className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[900px] border-t border-white/10 bg-[#0b1009]/95 p-3 backdrop-blur-xl"><div className="flex items-center gap-3"><div className="min-w-0 flex-1">{count ? <><p className="truncate text-xs text-white/40">{`${count} item${count > 1 ? "s" : ""} in your order`}</p><p className="text-xl font-semibold text-white">{currency.format(total)}</p></> : <><p className="text-xs text-white/38">Not sure what to order?</p>{config?.settings.aiAssistantEnabled && <button type="button" onClick={onNori} className="mt-0.5 min-h-8 text-start text-xs font-semibold text-[#D7FB69]/75 underline decoration-[#D7FB69]/25 underline-offset-4 hover:text-[#D7FB69] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D7FB69]">Ask Nori for a recommendation.</button>}</>}</div><button type="button" onClick={onCheckout} disabled={!count} className="min-h-14 rounded-2xl bg-[#d7ff7a] px-4 text-sm font-bold text-[#17200f] disabled:bg-white/10 disabled:text-white/25 sm:px-6">{count ? `Checkout · ${currency.format(total)}` : "Checkout"}</button></div></footer>
+        <footer className="fixed inset-x-0 bottom-0 z-30 mx-auto w-full max-w-[900px] border-t border-white/10 bg-[#0b1009]/95 p-3 backdrop-blur-xl"><div className="flex items-center gap-3"><div className="min-w-0 flex-1">{count ? <><p className="truncate text-xs text-white/40">{`${count} item${count > 1 ? "s" : ""} in your order`}</p><p className="text-xl font-semibold text-white">{currency.format(total)}</p></> : <><p className="text-xs text-white/38">Not sure what to order?</p>{kiosk?.ai.enabled && <button type="button" onClick={onNori} className="mt-0.5 min-h-8 text-start text-xs font-semibold text-[#D7FB69]/75 underline decoration-[#D7FB69]/25 underline-offset-4 hover:text-[#D7FB69] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#D7FB69]">Ask Nori for a recommendation.</button>}</>}</div><button type="button" onClick={onCheckout} disabled={!count} className="min-h-14 rounded-2xl bg-[#d7ff7a] px-4 text-sm font-bold text-[#17200f] disabled:bg-white/10 disabled:text-white/25 sm:px-6">{count ? `Checkout · ${currency.format(total)}` : "Checkout"}</button></div></footer>
+        {customizing && <CustomizationModal product={customizing} selections={selections} error={selectionError} currency={currency} onChange={(groupId, optionId, multiple) => setSelections(current => {
+          const selected = current[groupId] ?? [];
+          return {
+            ...current,
+            [groupId]: multiple
+              ? selected.includes(optionId) ? selected.filter(value => value !== optionId) : [...selected, optionId]
+              : [optionId],
+          };
+        })} onCancel={() => { setCustomizing(null); setSelections({}); setSelectionError(""); setEditingLineId(null); }} onConfirm={confirmCustomizations} />}
         {toast && <div role="status" className="fixed bottom-24 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-2xl bg-[#25372c] px-4 py-3 text-sm text-white shadow-xl"><span className="grid size-6 place-items-center rounded-lg bg-[#b8df83] text-[#21341f]"><Check size={14} aria-hidden="true" /></span>{toast}</div>}
       </div>
     </main>
@@ -194,6 +269,10 @@ function CategoryLanding({ menu, onChoose, selected }: { menu: NormalizedMenu; o
   })}</div>;
 }
 
-function ProductGrid({ products, currency, onAdd }: { products: Product[]; currency: Intl.NumberFormat; onAdd: (product: Product) => void }) {
-  return <div className="mt-5 grid grid-cols-1 gap-3 min-[560px]:grid-cols-2">{products.map(product => <article key={product.id} className="relative overflow-hidden rounded-[24px] border border-white/10 bg-white/[.045] p-3 shadow-[0_12px_30px_rgba(0,0,0,.18)]"><div className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_40%_35%,rgba(215,255,122,.13),rgba(255,255,255,.025))]">{product.image ? <img src={product.image} alt={product.name} className="absolute inset-0 size-full object-contain p-2" /> : <span className="grid size-20 place-items-center rounded-full bg-[#d7ff7a] text-4xl font-black text-[#17200f] shadow-xl shadow-[#d7ff7a]/10">{product.symbol}</span>}{product.badge && <span className="absolute start-2 top-2 z-10 rounded-full bg-[#d7ff7a] px-2 py-1 font-['Space_Mono'] text-[8px] font-bold tracking-wider text-[#17200f]">{product.badge}</span>}</div><h2 className="mt-3 text-[15px] font-semibold leading-5 text-white">{product.name}</h2><p className="mt-1 min-h-8 text-[11px] leading-4 text-white/40">{product.description}</p><div className="mt-3 flex items-end justify-between"><div><b className="text-[#d7ff7a]">{currency.format(product.price)}</b><small className="block text-[10px] text-white/30">{product.calories} kcal</small></div><button type="button" onClick={() => onAdd(product)} aria-label={`Add ${product.name}`} className="grid size-12 place-items-center rounded-xl bg-[#d7ff7a] text-[#17200f] transition active:scale-95 focus-visible:outline focus-visible:outline-4 focus-visible:outline-white"><Plus size={20} aria-hidden="true" /></button></div></article>)}</div>;
+function ProductGrid({ products, currency, onAdd }: { products: NormalizedMenuProduct[]; currency: Intl.NumberFormat; onAdd: (product: NormalizedMenuProduct) => void }) {
+  return <div className="mt-5 grid grid-cols-1 gap-3 min-[560px]:grid-cols-2">{products.map(product => {const badge=product.dietaryTags.includes("vegetarian")?"VEGETARIAN":undefined;return <article key={product.id} className="relative overflow-hidden rounded-[24px] border border-white/10 bg-white/[.045] p-3 shadow-[0_12px_30px_rgba(0,0,0,.18)]"><div className="relative grid aspect-square w-full place-items-center overflow-hidden rounded-[18px] bg-[radial-gradient(circle_at_40%_35%,rgba(215,255,122,.13),rgba(255,255,255,.025))]">{product.image ? <img src={product.image} alt={product.name} className="absolute inset-0 size-full object-contain p-2" /> : <span className="grid size-20 place-items-center rounded-full bg-[#d7ff7a] text-4xl font-black text-[#17200f] shadow-xl shadow-[#d7ff7a]/10">{product.name.charAt(0)}</span>}{badge && <span className="absolute start-2 top-2 z-10 rounded-full bg-[#d7ff7a] px-2 py-1 font-['Space_Mono'] text-[8px] font-bold tracking-wider text-[#17200f]">{badge}</span>}</div><h2 className="mt-3 text-[15px] font-semibold leading-5 text-white">{product.name}</h2><p className="mt-1 min-h-8 text-[11px] leading-4 text-white/40">{product.description}</p><div className="mt-3 flex items-end justify-between"><div><b className="text-[#d7ff7a]">{currency.format(product.price)}</b><small className="block text-[10px] text-white/30">{product.calories} kcal</small></div><button type="button" onClick={() => onAdd(product)} aria-label={`Add ${product.name}`} className="grid size-12 place-items-center rounded-xl bg-[#d7ff7a] text-[#17200f] transition active:scale-95 focus-visible:outline focus-visible:outline-4 focus-visible:outline-white"><Plus size={20} aria-hidden="true" /></button></div></article>})}</div>;
+}
+
+function CustomizationModal({product,selections,error,currency,onChange,onCancel,onConfirm}:{product:NormalizedMenuProduct;selections:Record<string,string[]>;error:string;currency:Intl.NumberFormat;onChange:(groupId:string,optionId:string,multiple:boolean)=>void;onCancel:()=>void;onConfirm:()=>void}){
+  return <div className="fixed inset-0 z-50 grid place-items-center bg-black/75 p-4" role="dialog" aria-modal="true" aria-label={`Customize ${product.name}`}><div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-3xl border border-white/10 bg-[#11170f] p-5"><div className="mb-5 flex items-center"><div><h2 className="text-xl font-bold">Customize {product.name}</h2><p className="text-xs text-white/40">Required choices must be selected before adding.</p></div><button type="button" onClick={onCancel} className="ml-auto grid size-10 place-items-center rounded-xl bg-white/5" aria-label="Close customization"><X size={18}/></button></div>{product.customizationGroups.map(group=>{const groupId=group.databaseId??group.id;const multiple=group.maxSelections>1;return <fieldset key={groupId} className="mb-5"><legend className="mb-2 text-sm font-bold">{group.name}{(group.required||group.minSelections>0)&&<span className="ml-2 text-xs text-[#d7ff7a]">Required</span>}</legend><div className="space-y-2">{group.options.filter(option=>option.available).map(option=>{const optionId=option.databaseId??option.id;const checked=(selections[groupId]??[]).includes(optionId);return <label key={optionId} className={`flex min-h-12 cursor-pointer items-center justify-between rounded-xl border p-3 text-sm ${checked?"border-[#d7ff7a]/50 bg-[#d7ff7a]/10":"border-white/10 bg-white/[.03]"}`}><span><input type={multiple?"checkbox":"radio"} name={groupId} checked={checked} onChange={()=>onChange(groupId,optionId,multiple)} className="mr-3 accent-[#d7ff7a]"/>{option.name}{option.default&&<small className="ml-2 text-white/35">Default</small>}</span>{option.priceAdjustment!==0&&<span className="text-white/45">+{currency.format(option.priceAdjustment)}</span>}</label>})}</div></fieldset>})}{error&&<p role="alert" className="mb-4 rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-200">{error}</p>}<div className="flex gap-3"><button type="button" onClick={onCancel} className="min-h-12 flex-1 rounded-xl border border-white/10 bg-white/5 font-bold">Cancel</button><button type="button" onClick={onConfirm} className="min-h-12 flex-1 rounded-xl bg-[#d7ff7a] font-bold text-[#17200f]">Add to Order</button></div></div></div>;
 }

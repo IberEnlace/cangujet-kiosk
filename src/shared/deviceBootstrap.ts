@@ -22,11 +22,14 @@ export type DeviceBootstrap = {
     name: string;
     slug: string;
     logoUrl: string | null;
+    brandColors: Record<string, string | number | boolean | null>;
   };
   branch: {
     id: string;
     name: string;
     code: string;
+    address: string | null;
+    phone: string | null;
     currency: string;
     taxRate: number;
     timezone: string;
@@ -40,6 +43,15 @@ export type DeviceBootstrap = {
     status: "active";
     configVersion: number;
     lastSeenAt: string | null;
+    mode: BootstrapDeviceType;
+    defaultLanguage: string;
+    featureFlags: Record<string, boolean>;
+    printerConfiguration: Record<string, unknown>;
+  };
+  configuration: {
+    configVersion: number;
+    lastUpdated: string;
+    checksum: string;
   };
   configVersion: number;
   theme: {
@@ -109,4 +121,14 @@ export type DeviceAccessTokenResponse = {
 export type DeviceApiError = {
   code: string;
   message: string;
+};
+
+export type DeviceMenuResponse = {
+  menuId: string;
+  menuVersion: number;
+  currency: string;
+  categories: Array<Record<string, unknown>>;
+  products: Array<Record<string, unknown>>;
+  customizationGroups: Array<Record<string, unknown>>;
+  customizationOptions: Array<Record<string, unknown>>;
 };

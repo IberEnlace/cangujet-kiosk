@@ -1,13 +1,12 @@
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import {
   CreditCard, QrCode, Users, Check, ArrowLeft, ChevronRight, Loader2,
   Shield, Lock, Receipt
 } from "lucide-react";
 import { useCart, type PaymentMethod } from "../context/CartContext";
 import MorrowLogo from "../components/branding/MorrowLogo";
-import { useDevice } from "../context/DeviceContext";
-import { createOrder } from "../services/supabase/orderService";
-import { useAuth } from "../auth/AuthContext";
+import { useBranch, useKiosk } from "../context/BootstrapContext";
+import { useCurrentOrder, useOrderSubmission } from "../context/OrderContext";
 
 type CustomerPaymentMethod = Extract<PaymentMethod, "credit" | "cashier" | "qr">;
 type PaymentColor = "blue" | "yellow" | "violet";
@@ -43,17 +42,22 @@ type Props = { onNavigate: (route: string) => void };
 
 export default function PaymentFlow({ onNavigate }: Props) {
   const {
-    total, items, orderType, orderNotes, setPaymentMethod, recordCreatedOrder, placeOrder,
+    total, items, orderType, setPaymentMethod, placeOrder,
     transitionOrderLifecycle, currentOrderId, currentOrderNumber,
   } = useCart();
-  const { config } = useDevice();
-  const { currentRole } = useAuth();
+  const branch = useBranch();
+  const kiosk = useKiosk();
+  const production = useCurrentOrder();
+  const submission = useOrderSubmission();
   const methodMap: Record<CustomerPaymentMethod, "card" | "pay_at_cashier" | "qr"> = { credit: "card", cashier: "pay_at_cashier", qr: "qr" };
-  const availableMethods = METHODS.filter(method => config?.settings.allowedPaymentMethods.includes(methodMap[method.id]));
+  const availableMethods = METHODS.filter(method => method.id !== "qr" && kiosk?.payments.enabledMethods.includes(methodMap[method.id]));
+  const currency = useMemo(() => new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: branch?.currency ?? "USD",
+  }), [branch?.currency]);
   const [screen, setScreen] = useState<Screen>("select");
   const [submitting, setSubmitting] = useState(false);
   const [orderError, setOrderError] = useState("");
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
 
   // Processing
   const [processingStep, setProcessingStep] = useState(0);
@@ -74,66 +78,46 @@ export default function PaymentFlow({ onNavigate }: Props) {
       updatedAt: new Date().toISOString(),
     });
 
-    let created = currentOrderId && currentOrderNumber
-      ? { id: currentOrderId, number: currentOrderNumber, total, trackingToken: idempotencyKey }
-      : null;
-    if (!created) {
-      const result = await createOrder({
-        items,
-        orderType,
-        customerNote: orderNotes,
-        idempotencyKey,
-        source: currentRole === "cashier" ? "cashier" : "kiosk",
+    try {
+      let created = await submission.createOrder();
+      if (id === "cashier") created = await submission.capturePayment("pay_at_cashier");
+      setSubmitting(false);
+      setPaymentMethod(id);
+      transitionOrderLifecycle({
+        paymentStatus: id === "cashier" ? "pay_at_cashier_pending" : "pending",
+        paymentMethod: lifecycleMethod,
+        orderStatus: "awaiting_payment",
+        orderId: created.id,
+        orderNumber: created.orderNumber,
+        source: "order_service",
+        updatedAt: new Date().toISOString(),
       });
-      console.log("[MORROW] Customer createOrder result:", result);
-      if (!result.ok) {
-        setSubmitting(false);
-        setOrderError(result.error.message);
-        transitionOrderLifecycle({
-          paymentStatus: "failed",
-          paymentMethod: lifecycleMethod,
-          paymentErrorMessage: result.error.message,
-          source: "order_service",
-          updatedAt: new Date().toISOString(),
-        });
+
+      if (id === "credit") {
+        onNavigate("paymentCard");
         return;
       }
-      created = {
-        id: result.data.order_id,
-        number: result.data.order_number,
-        total: Number(result.data.total),
-        trackingToken: idempotencyKey,
-      };
-      recordCreatedOrder(created);
-    }
-    setSubmitting(false);
-    setPaymentMethod(id);
-    transitionOrderLifecycle({
-      paymentStatus: id === "cashier" ? "pay_at_cashier_pending" : "pending",
-      paymentMethod: lifecycleMethod,
-      orderStatus: id === "cashier" ? "accepted" : "awaiting_payment",
-      orderId: created.id,
-      orderNumber: created.number,
-      source: "order_service",
-      updatedAt: new Date().toISOString(),
-    });
 
-    if (id === "credit") {
-      onNavigate("paymentCard");
-      return;
-    }
+      if (id === "qr") {
+        setScreen("qr");
+        return;
+      }
 
-    if (id === "qr") {
-      setScreen("qr");
-      return;
+      placeOrder({ id: created.id, number: created.orderNumber, total: Number(created.total) });
+      onNavigate("confirmation");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Your order could not be created.";
+      setSubmitting(false);
+      setOrderError(message);
+      transitionOrderLifecycle({
+        paymentStatus: "failed",
+        paymentMethod: lifecycleMethod,
+        paymentErrorMessage: message,
+        source: "order_service",
+        updatedAt: new Date().toISOString(),
+      });
     }
-
-    placeOrder(created);
-    onNavigate("confirmation");
   };
-
-  const cartSignature = items.map(item => `${item.id}:${item.qty}:${item.noriCustomizations?.map(value => value.optionId).sort().join(",") ?? ""}`).sort().join("|");
-  useEffect(() => { setIdempotencyKey(crypto.randomUUID()); }, [cartSignature]);
 
   const startProcessing = () => {
     transitionOrderLifecycle({
@@ -231,13 +215,13 @@ export default function PaymentFlow({ onNavigate }: Props) {
                     <p className="text-xs font-medium truncate">{item.name}</p>
                     <p className="text-[10px] text-white/40">x{item.qty}</p>
                   </div>
-                  <p className="text-xs font-bold">${(item.price * item.qty).toFixed(2)}</p>
+                  <p className="text-xs font-bold">{currency.format(item.price * item.qty)}</p>
                 </div>
               ))}
               <div className="border-t border-white/10 pt-3 mt-1">
                 <div className="flex justify-between font-bold">
                   <span>Total</span>
-                  <span className="text-[#d7ff7a] text-lg">${total.toFixed(2)}</span>
+                  <span className="text-[#d7ff7a] text-lg">{currency.format(Number(production.quote?.total ?? total))}</span>
                 </div>
               </div>
             </div>
@@ -274,8 +258,8 @@ export default function PaymentFlow({ onNavigate }: Props) {
         </div>
       </div>
       <div className="text-center">
-        <p className="text-3xl font-bold text-[#d7ff7a]">${total.toFixed(2)}</p>
-        <p className="text-white/40 text-sm mt-2">Order #{Math.floor(Math.random() * 9000 + 1000)}</p>
+        <p className="text-3xl font-bold text-[#d7ff7a]">{currency.format(total)}</p>
+        <p className="text-white/40 text-sm mt-2">Order #{currentOrderNumber}</p>
       </div>
       <button disabled={!import.meta.env.DEV} onClick={startProcessing} className="px-10 py-4 rounded-2xl bg-[#d7ff7a] text-[#17200f] font-bold flex items-center gap-3 hover:bg-[#c8f060] transition-all disabled:cursor-not-allowed disabled:opacity-40">
         <Check size={18} /> {import.meta.env.DEV ? "Simulate completed payment" : "Unavailable"}
@@ -305,7 +289,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
           </div>
         ))}
       </div>
-      <p className="text-3xl font-bold text-[#d7ff7a]">${total.toFixed(2)}</p>
+      <p className="text-3xl font-bold text-[#d7ff7a]">{currency.format(total)}</p>
     </div>
   );
 

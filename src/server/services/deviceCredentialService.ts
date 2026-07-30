@@ -1,30 +1,30 @@
 import { createHash, randomBytes, scrypt as nodeScrypt, timingSafeEqual } from "node:crypto";
+import {
+  formatDeviceSecretKey,
+  parseDeviceSecretKeyParts,
+  type DeviceSecretKeyParts,
+} from "../../shared/deviceKey";
 
-const KEY_PREFIX = "mdk";
 const SCRYPT_N = 32_768;
 const SCRYPT_R = 8;
 const SCRYPT_P = 1;
 const KEY_LENGTH = 64;
 const MAX_MEMORY = 128 * 1024 * 1024;
 
-export type ParsedDeviceSecretKey = {
-  publicKeyId: string;
-  secret: string;
-};
+export type ParsedDeviceSecretKey = DeviceSecretKeyParts;
 
 export function createDeviceSecretKey() {
   const publicKeyId = randomBytes(12).toString("hex");
   const secret = randomBytes(32).toString("base64url");
   return {
     publicKeyId,
-    secretKey: `${KEY_PREFIX}_${publicKeyId}_${secret}`,
+    secretKey: formatDeviceSecretKey(publicKeyId, secret),
     secret,
   };
 }
 
 export function parseDeviceSecretKey(value: string): ParsedDeviceSecretKey | null {
-  const match = value.trim().match(/^mdk_([a-f0-9]{24})_([A-Za-z0-9_-]{43})$/);
-  return match ? { publicKeyId: match[1], secret: match[2] } : null;
+  return parseDeviceSecretKeyParts(value);
 }
 
 export async function hashDeviceSecret(secret: string, salt = randomBytes(16)) {

@@ -1,12 +1,13 @@
 import { AlertTriangle, RotateCcw, Settings } from "lucide-react";
 import MorrowLogo from "../branding/MorrowLogo";
+import type { DeviceErrorStatus } from "../../types/device";
 
 export default function DeviceLoadingScreen({
   error,
   onRetry,
   onSetup,
 }: {
-  error?: "network_error" | "timeout" | "disabled" | "configuration_error" | "invalid_key";
+  error?: DeviceErrorStatus;
   onRetry?: () => void;
   onSetup?: () => void;
 }) {
@@ -14,6 +15,12 @@ export default function DeviceLoadingScreen({
     ? "The device service did not respond in time."
     : error === "disabled"
       ? "This kiosk is disabled. Contact your administrator."
+      : error === "expired"
+        ? "This device credential has expired."
+        : error === "server_error"
+          ? "The device server is unavailable or incorrectly configured."
+          : error === "protocol_error"
+            ? "The device server returned an unexpected response."
       : error === "configuration_error"
         ? "The device configuration is incomplete or invalid."
         : error

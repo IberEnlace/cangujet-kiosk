@@ -30,10 +30,12 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [initializationError, setInitializationError] = useState<DeviceErrorStatus | null>(null);
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   const initializationSequenceRef = useRef(0);
+  const initializationAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     const sequence = ++initializationSequenceRef.current;
     const controller = new AbortController();
+    initializationAbortRef.current = controller;
     setInitializationStatus("initializing");
     setInitializationError(null);
     setStatus("checking");
@@ -56,7 +58,10 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         diagnostic("initialization_failed", { code });
       }
     })();
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (initializationAbortRef.current === controller) initializationAbortRef.current = null;
+    };
   }, [initializationAttempt]);
 
   const retryInitialization = useCallback(() => {
@@ -78,6 +83,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     }
   }, []);
   const clearDeviceConfiguration = useCallback(async () => {
+    initializationAbortRef.current?.abort();
     initializationSequenceRef.current += 1;
     setConfig(null);
     setStatus("unconfigured");
@@ -86,15 +92,27 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     await service.clearConfiguration();
   }, []);
   const configureDevice = useCallback(async (secretKey: string) => {
+    initializationAbortRef.current?.abort();
+    initializationSequenceRef.current += 1;
     setStatus("connecting");
+    setInitializationError(null);
+    setInitializationStatus("registering");
     try {
       const next = await service.configureDevice(secretKey);
       if (!service.isConfigurationValid(next)) throw new DeviceConfigurationError("configuration_error");
-      setConfig(next); setStatus("configured"); setInitializationError(null); setInitializationStatus("authenticated"); return true;
+      setConfig(next);
+      setStatus("configured");
+      setInitializationError(null);
+      setInitializationStatus("authenticated");
+      diagnostic("bootstrap_applied");
+      return true;
     } catch (error) {
+      const code = error instanceof DeviceConfigurationError ? error.code : "configuration_error";
       setConfig(null);
-      setStatus(error instanceof DeviceConfigurationError ? error.code : "configuration_error");
-      setInitializationStatus("setup_required");
+      setStatus(code);
+      setInitializationError(code);
+      setInitializationStatus("error");
+      diagnostic("registration_failed", { code });
       return false;
     }
   }, []);
@@ -116,7 +134,12 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
           setInitializationStatus("setup_required");
           return;
         }
-        setConfig(current => current?.configVersion === next.configVersion ? current : next);
+        setConfig(current => current
+          && current.configVersion === next.configVersion
+          && current.bootstrap.configuration.checksum === next.bootstrap.configuration.checksum
+          && current.offline === next.offline
+          ? current
+          : next);
       } catch (error) {
         if (!active || controller.signal.aborted) return;
         if (error instanceof DeviceConfigurationError && error.code === "disabled") {

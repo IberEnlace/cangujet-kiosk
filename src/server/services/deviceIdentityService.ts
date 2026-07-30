@@ -1,10 +1,11 @@
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { DeviceRow } from "../../lib/supabase/database.types";
 import type {
   BootstrapPaymentMethod,
   BootstrapServiceMode,
   DeviceAccessTokenResponse,
   DeviceBootstrap,
+  DeviceMenuResponse,
   DeviceRegistrationResponse,
 } from "../../shared/deviceBootstrap";
 import type {
@@ -40,10 +41,19 @@ export type DeviceRegistrationResult = DeviceRegistrationResponse & {
   refreshExpiresAt: string;
 };
 
+export type AuthorizedDeviceIdentity = {
+  deviceId: string;
+  restaurantId: string;
+  branchId: string;
+  deviceType: DeviceRow["device_type"];
+};
+
 export interface DeviceIdentityApplication {
   register(secretKey: string): Promise<DeviceRegistrationResult>;
   refresh(refreshToken: string): Promise<DeviceAccessTokenResponse>;
   bootstrap(accessToken: string): Promise<DeviceBootstrap>;
+  menu(accessToken: string): Promise<DeviceMenuResponse>;
+  authorize(accessToken: string): Promise<AuthorizedDeviceIdentity>;
   revoke(accessToken: string): Promise<void>;
 }
 
@@ -67,7 +77,7 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
     }
     if (credential.expires_at && Date.parse(credential.expires_at) <= this.now().getTime()) {
       await this.safeAudit(device.id, credential.id, "registration_expired_credential");
-      throw new DeviceApiFailure("credential_expired", 401, "This device credential has expired.");
+      throw new DeviceApiFailure("credential_expired", 403, "This device credential has expired.");
     }
     if (!await this.secretVerifier(parsed.secret, credential.secret_hash)) {
       await this.safeAudit(device.id, credential.id, "registration_invalid_secret");
@@ -121,6 +131,39 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
     const bootstrap = await this.loadActiveBootstrap(authenticated.device.id);
     await this.repository.touchDeviceSession(authenticated.device.id, authenticated.session.id);
     return bootstrap;
+  }
+
+  async menu(accessToken: string): Promise<DeviceMenuResponse> {
+    const authenticated = await this.authenticate(accessToken);
+    const bootstrap = await this.loadActiveBootstrap(authenticated.device.id);
+    const menu = await this.repository.loadMenuConfiguration({
+      restaurantId: authenticated.device.restaurant_id,
+      branchId: authenticated.device.branch_id,
+      menuId: bootstrap.publishedMenuId,
+    });
+    if (!menu) {
+      throw new DeviceApiFailure("configuration_error", 503, "The published menu is not assigned to this device.");
+    }
+    await this.repository.touchDeviceSession(authenticated.device.id, authenticated.session.id);
+    return {
+      menuId: bootstrap.publishedMenuId,
+      menuVersion: bootstrap.publishedMenuVersion,
+      currency: bootstrap.currency,
+      categories: menu.categories,
+      products: menu.products,
+      customizationGroups: menu.customizationGroups,
+      customizationOptions: menu.customizationOptions,
+    };
+  }
+
+  async authorize(accessToken: string): Promise<AuthorizedDeviceIdentity> {
+    const authenticated = await this.authenticate(accessToken);
+    return {
+      deviceId: authenticated.device.id,
+      restaurantId: authenticated.device.restaurant_id,
+      branchId: authenticated.device.branch_id,
+      deviceType: authenticated.device.device_type,
+    };
   }
 
   async revoke(accessToken: string) {
@@ -188,20 +231,45 @@ function mapBootstrap(data: DeviceBootstrapData): DeviceBootstrap {
   const paymentPublicOptions = record(data.payment.provider_public_config);
   const voiceSettings = record(data.nori.voice_settings);
   const noriPublicOptions = record(data.nori.public_options);
+  const featureFlags = booleanRecord(noriPublicOptions.featureFlags);
+  featureFlags.aiAssistant = data.nori.enabled;
+  featureFlags.voiceAssistant = data.nori.voice_enabled;
+  const printerConfiguration = record(paymentPublicOptions.printer);
   const videos = Array.isArray(data.idle.videos)
     ? data.idle.videos.filter((value): value is string => typeof value === "string")
     : [];
+  const lastUpdated = latestTimestamp([
+    data.restaurant.updated_at, data.branch.updated_at, data.device.updated_at, data.theme.updated_at,
+    data.payment.updated_at, data.nori.updated_at, data.idle.updated_at, data.menu.updated_at,
+    ...data.openingHours.map(value => value.updated_at),
+  ]);
+  const checksum = createHash("sha256").update(JSON.stringify({
+    configVersion: data.device.config_version,
+    restaurant: data.restaurant.updated_at,
+    branch: data.branch.updated_at,
+    theme: data.theme.updated_at,
+    payment: data.payment.updated_at,
+    nori: data.nori.updated_at,
+    idle: data.idle.updated_at,
+    menu: [data.menu.id, data.menu.version, data.menu.updated_at],
+    languages,
+    openingHours,
+  })).digest("base64url");
+  const defaultLanguage = languages.find(language => language.default)?.code ?? languages[0]?.code ?? "en";
   return {
     restaurant: {
       id: data.restaurant.id,
       name: data.restaurant.name,
       slug: data.restaurant.slug,
       logoUrl: data.restaurant.logo_url,
+      brandColors: tokens,
     },
     branch: {
       id: data.branch.id,
       name: data.branch.name,
       code: data.branch.code,
+      address: data.branch.address,
+      phone: data.branch.phone ?? null,
       currency: data.branch.currency,
       taxRate: Number(data.branch.tax_rate),
       timezone: data.branch.timezone,
@@ -215,7 +283,12 @@ function mapBootstrap(data: DeviceBootstrapData): DeviceBootstrap {
       status: "active",
       configVersion: Number(data.device.config_version),
       lastSeenAt: data.device.last_seen_at,
+      mode: data.device.device_type,
+      defaultLanguage,
+      featureFlags,
+      printerConfiguration,
     },
+    configuration: { configVersion: Number(data.device.config_version), lastUpdated, checksum },
     configVersion: Number(data.device.config_version),
     theme: { id: data.theme.id, name: data.theme.name, tokens },
     logoUrl: data.restaurant.logo_url,
@@ -306,6 +379,16 @@ function primitiveRecord(value: unknown): Record<string, string | number | boole
     Object.entries(record(value)).filter((entry): entry is [string, string | number | boolean | null] =>
       entry[1] === null || ["string", "number", "boolean"].includes(typeof entry[1])),
   );
+}
+
+function booleanRecord(value: unknown): Record<string, boolean> {
+  return Object.fromEntries(
+    Object.entries(record(value)).filter((entry): entry is [string, boolean] => typeof entry[1] === "boolean"),
+  );
+}
+
+function latestTimestamp(values: string[]) {
+  return values.reduce((latest, value) => Date.parse(value) > Date.parse(latest) ? value : latest, values[0]);
 }
 
 function invalidKey() {

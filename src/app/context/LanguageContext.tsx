@@ -1,6 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { getLanguageOption, normalizeSupportedLanguage, type SupportedLanguage } from "../config/languages";
-import { useDevice } from "./DeviceContext";
+import { useBootstrap } from "./BootstrapContext";
 
 const LANGUAGE_STORAGE_KEY = "morrow_customer_language";
 
@@ -23,8 +23,8 @@ function restoreLanguage(fallback: SupportedLanguage): SupportedLanguage {
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
-  const { config } = useDevice();
-  const defaultLanguage = normalizeSupportedLanguage(config?.settings.defaultLanguage);
+  const { kiosk, restaurant } = useBootstrap();
+  const defaultLanguage = normalizeSupportedLanguage(kiosk?.defaultLanguage);
   const [language, setLanguageState] = useState<SupportedLanguage>(() => restoreLanguage(defaultLanguage));
   const direction = getLanguageOption(language).direction;
 
@@ -39,10 +39,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   }, [defaultLanguage]);
 
   useEffect(() => {
-    if (!config) return;
-    const enabledLanguages = config.settings.enabledLanguages.map(value => normalizeSupportedLanguage(value));
+    if (!restaurant) return;
+    const enabledLanguages = restaurant.languages.map(value => normalizeSupportedLanguage(value.code));
     if (!enabledLanguages.includes(language)) setLanguage(defaultLanguage);
-  }, [config, defaultLanguage, language, setLanguage]);
+  }, [defaultLanguage, language, restaurant, setLanguage]);
 
   useEffect(() => {
     if (typeof document === "undefined") return;

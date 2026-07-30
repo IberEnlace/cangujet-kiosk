@@ -6,14 +6,14 @@ import { useCart, type OrderType } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCustomerTranslation } from "../../hooks/useCustomerTranslation";
 import MorrowLogo from "../../components/branding/MorrowLogo";
-import { useDevice } from "../../context/DeviceContext";
+import { useBranch } from "../../context/BootstrapContext";
 
 interface ServiceSelectionProps { onBack: () => void; onContinue: () => void; }
 
 export default function ServiceSelection({ onBack, onContinue }: ServiceSelectionProps) {
   const { orderType, setOrderType } = useCart();
-  const { config } = useDevice();
-  const availableServiceOptions = serviceOptions.filter(option => config?.settings.allowedOrderTypes.includes(option.id));
+  const branch = useBranch();
+  const availableServiceOptions = serviceOptions.filter(option => branch?.serviceModes.includes(option.id));
   const { language } = useLanguage();
   const translation = useCustomerTranslation().serviceSelection;
   const reducedMotion = useReducedMotion();

@@ -49,7 +49,7 @@ test("unpaid and pending valid orders are included", () => {
 
 test("active and completed orders are included", () => {
   const result = mapped([
-    order({ status: "pending", payment_status: "unpaid", total: 4 }),
+    order({ status: "awaiting_payment", payment_status: "unpaid", total: 4 }),
     order({ status: "preparing", payment_status: "pending", total: 6 }),
     order({ status: "completed", payment_status: "paid", total: 8 }),
   ]);
@@ -73,8 +73,8 @@ test("recent orders are limited to five and sum item quantities", () => {
 });
 
 test("status labels reuse database statuses", () => {
-  assert.equal(mapOrderStatus("pending"), "Incoming");
-  assert.equal(mapOrderStatus("confirmed"), "Accepted");
+  assert.equal(mapOrderStatus("submitted"), "Incoming");
+  assert.equal(mapOrderStatus("accepted"), "Accepted");
   assert.equal(mapOrderStatus("preparing"), "Preparing");
 });
 

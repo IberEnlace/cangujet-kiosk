@@ -66,12 +66,17 @@ export function isSalesOrder(order: Pick<OrderRow, "status" | "payment_status">)
 
 export function mapOrderStatus(status: DbOrderStatus): string {
   const labels: Record<DbOrderStatus, string> = {
-    pending: "Incoming",
-    confirmed: "Accepted",
+    draft: "Draft",
+    awaiting_payment: "Awaiting Payment",
+    paid: "Paid",
+    submitted: "Incoming",
+    accepted: "Accepted",
     preparing: "Preparing",
     ready: "Ready",
     completed: "Completed",
     cancelled: "Cancelled",
+    payment_failed: "Payment Failed",
+    rejected: "Rejected",
   };
   return labels[status];
 }

@@ -30,10 +30,12 @@ export function createDeviceRouter(
       enforceRateLimit(attempts, request.ip || request.socket.remoteAddress || "unknown");
       const secretKey = typeof request.body?.secretKey === "string" ? request.body.secretKey.trim() : "";
       if (secretKey.length < 48 || secretKey.length > 256) {
-        throw new DeviceApiFailure("invalid_device_key", 401, "The device secret key is invalid.");
+        throw new DeviceApiFailure("invalid_setup_request", 400, "A valid device secret key is required.");
       }
+      diagnostic("registration_request_received");
       const result = await resolveService().register(secretKey);
       setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
+      diagnostic("registration_succeeded", 201);
       response.status(201).json({
         accessToken: result.accessToken,
         tokenType: result.tokenType,
@@ -74,12 +76,20 @@ export function createDeviceRouter(
     }
   });
 
+  router.get("/device/menu", async (request: Request, response: Response) => {
+    try {
+      response.json(await resolveService().menu(readBearerToken(request)));
+    } catch (error) {
+      sendError(response, error);
+    }
+  });
+
   return router;
 }
 
 export const deviceRouter = createDeviceRouter();
 
-function createDeviceIdentityServiceFromEnvironment() {
+export function createDeviceIdentityServiceFromEnvironment() {
   const tokenSecret = process.env.MORROW_DEVICE_TOKEN_SECRET?.trim();
   if (!tokenSecret) throw new Error("MORROW_DEVICE_TOKEN_SECRET is not configured.");
   const rawTtl = Number(process.env.MORROW_DEVICE_ACCESS_TOKEN_TTL_SECONDS ?? 900);
@@ -145,9 +155,15 @@ function enforceRateLimit(
 
 function sendError(response: Response<DeviceApiError>, error: unknown) {
   if (error instanceof DeviceApiFailure) {
+    diagnostic("device_request_failed", error.status, error.code);
     response.status(error.status).json({ code: error.code, message: error.message });
     return;
   }
   if (process.env.NODE_ENV !== "production") console.error("[MORROW] Device API failure", error);
+  diagnostic("device_request_failed", 503, "device_service_unavailable");
   response.status(503).json({ code: "device_service_unavailable", message: "The device service is unavailable." });
+}
+
+function diagnostic(event: string, status?: number, code?: string) {
+  if (process.env.NODE_ENV !== "production") console.info("[MORROW device API]", { event, status, code });
 }

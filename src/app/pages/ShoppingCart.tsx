@@ -1,21 +1,19 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   ShoppingCart as CartIcon, Trash2, Plus, Minus, Tag, Ticket,
   ChevronRight, ArrowLeft, Clock, FileText, Heart, RefreshCw,
-  Check, X, AlertCircle, Package, Sparkles, ChevronDown, ChevronUp
+  Check, X, AlertCircle, Package, ChevronDown, ChevronUp
 } from "lucide-react";
-import { useCart } from "../context/CartContext";
+import { useCart, type CartItem } from "../context/CartContext";
 import MorrowLogo from "../components/branding/MorrowLogo";
-
-const addonPlaceholderImage =
-  "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMSIgaGVpZ2h0PSIxIiB2aWV3Qm94PSIwIDAgMSAxIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciLz4=";
-
-const ADDON_SUGGESTIONS = [
-  { id: "a1", name: "Truffle Sauce", price: 1.50, image: "/images/addons/truffle-sauce.png", cal: 80 },
-  { id: "a2", name: "Extra Cheese", price: 1.00, image: "/images/addons/mozzarella.png", cal: 120 },
-  { id: "a3", name: "Onion Rings", price: 2.50, image: "/images/addons/onion-rings.png", cal: 290 },
-  { id: "a4", name: "Coleslaw", price: 2.00, image: "/images/addons/coleslaw.png", cal: 160 },
-];
+import { useBootstrap } from "../context/BootstrapContext";
+import { useCurrentOrder, useOrderSubmission } from "../context/OrderContext";
+import { OrderClientError } from "../services/orders/OrderService";
+import {
+  cartLineForValidationError,
+  requiredModifierProblems,
+  selectedModifierLabels,
+} from "../services/orders/cartModifierPipeline";
 
 type Props = { onNavigate: (route: string) => void };
 
@@ -25,15 +23,22 @@ export default function ShoppingCart({ onNavigate }: Props) {
     orderType, orderNotes, setOrderNotes,
     coupon, applyCoupon, removeCoupon,
     subtotal, tax, discount, total, estimatedMinutes,
-    addItem,
   } = useCart();
+  const { branch, menu } = useBootstrap();
+  const productionOrder = useCurrentOrder();
+  const orderSubmission = useOrderSubmission();
+  const [checkoutError, setCheckoutError] = useState("");
+  const [lineErrors, setLineErrors] = useState<Record<string, string>>({});
+  const currency = useMemo(() => new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: branch?.currency ?? "USD",
+  }), [branch?.currency]);
 
   const [couponInput, setCouponInput] = useState("");
   const [couponError, setCouponError] = useState("");
   const [couponSuccess, setCouponSuccess] = useState(false);
   const [showSaved, setShowSaved] = useState(savedItems.length > 0);
   const [expandedSection, setExpandedSection] = useState<string | null>("coupon");
-  const [addedAddons, setAddedAddons] = useState<string[]>([]);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [noteOpen, setNoteOpen] = useState(false);
 
@@ -50,33 +55,37 @@ export default function ShoppingCart({ onNavigate }: Props) {
     setTimeout(() => { removeItem(id); setDeletingId(null); }, 300);
   };
 
-  const handleAddAddon = (addon: typeof ADDON_SUGGESTIONS[0]) => {
-    addItem({ ...addon, image: addon.image ?? addonPlaceholderImage, basePrice: addon.price, category: "addon" });
-    setAddedAddons(prev => [...prev, addon.id]);
-  };
-
-  const renderAddonImage = (addon: typeof ADDON_SUGGESTIONS[0]) => {
-    if (!addon.image) {
-      return (
-        <div className="flex h-28 items-center justify-center px-3 text-center">
-          <div className="space-y-1">
-            <div className="mx-auto size-10 rounded-full border border-white/10 bg-white/[0.03]" />
-            <p className="text-[10px] uppercase tracking-[0.24em] text-white/25">Image unavailable</p>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <img
-        src={addon.image}
-        alt={addon.name}
-        className="h-28 w-full object-contain object-center p-3"
-      />
-    );
-  };
-
   const isCartEmpty = items.length === 0;
+  const incompleteLines = useMemo(() => new Map(items.flatMap(item => {
+    const problems = requiredModifierProblems(item, menu);
+    return problems.length ? [[item.id, problems.map(value => value.message).join(" ")] as const] : [];
+  })), [items, menu]);
+  const authoritativeSubtotal = productionOrder.quote ? Number(productionOrder.quote.subtotal) : subtotal;
+  const authoritativeTax = productionOrder.quote ? Number(productionOrder.quote.taxTotal) : tax;
+  const authoritativeTotal = productionOrder.quote ? Number(productionOrder.quote.total) : total;
+
+  const proceedToCheckout = async () => {
+    if (isCartEmpty || orderSubmission.isBusy || incompleteLines.size) {
+      setLineErrors(Object.fromEntries(incompleteLines));
+      return;
+    }
+    setCheckoutError("");
+    setLineErrors({});
+    try {
+      await orderSubmission.quoteCart();
+      onNavigate("payment");
+    } catch (error) {
+      if (error instanceof OrderClientError) {
+        const item = cartLineForValidationError(items, error.itemIndex, error.productId);
+        if (item) setLineErrors({ [item.id]: error.message });
+      }
+      setCheckoutError(error instanceof Error ? error.message : "The cart could not be validated.");
+    }
+  };
+  const editItem = (item: CartItem) => {
+    try { sessionStorage.setItem("morrow:edit-cart-line", item.id); } catch { /* Navigation still works. */ }
+    onNavigate("main");
+  };
 
   return (
     <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
@@ -164,11 +173,12 @@ export default function ShoppingCart({ onNavigate }: Props) {
 
                   <div className="flex-1 min-w-0">
                     <h3 className="font-semibold text-sm truncate">{item.name}</h3>
-                    {item.customizations && Object.keys(item.customizations).length > 0 && (
+                    {(selectedModifierLabels(item).length > 0 || item.customizations && Object.keys(item.customizations).length > 0) && (
                       <p className="text-xs text-white/40 mt-0.5 truncate">
-                        {Object.values(item.customizations).join(" · ")}
+                        {(selectedModifierLabels(item).length ? selectedModifierLabels(item) : Object.values(item.customizations ?? {})).join(" · ")}
                       </p>
                     )}
+                    {(incompleteLines.has(item.id) || lineErrors[item.id]) && <div className="mt-2"><p role="alert" className="text-xs text-red-300">{lineErrors[item.id] ?? incompleteLines.get(item.id)}</p><button type="button" onClick={() => editItem(item)} className="mt-1 text-xs font-bold text-[#d7ff7a] underline underline-offset-4">Edit required choices</button></div>}
                     {item.calories && (
                       <p className="text-xs text-white/30 mt-0.5">{item.calories * item.qty} cal</p>
                     )}
@@ -192,8 +202,8 @@ export default function ShoppingCart({ onNavigate }: Props) {
                   </div>
 
                   <div className="text-right min-w-[70px]">
-                    <p className="font-bold text-[#d7ff7a]">${(item.price * item.qty).toFixed(2)}</p>
-                    <p className="text-xs text-white/30">${item.price.toFixed(2)} each</p>
+                    <p className="font-bold text-[#d7ff7a]">{currency.format(item.price * item.qty)}</p>
+                    <p className="text-xs text-white/30">{currency.format(item.price)} each</p>
                   </div>
 
                   {/* Actions */}
@@ -235,7 +245,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
                       <img src={item.image} alt={item.name} className="size-14 rounded-xl object-cover opacity-60" />
                       <div className="flex-1">
                         <h3 className="font-medium text-sm text-white/60">{item.name}</h3>
-                        <p className="text-xs text-white/30">${item.price.toFixed(2)}</p>
+                        <p className="text-xs text-white/30">{currency.format(item.price)}</p>
                       </div>
                       <button
                         onClick={() => moveToCart(item.id)}
@@ -276,42 +286,6 @@ export default function ShoppingCart({ onNavigate }: Props) {
             )}
           </div>
 
-          {/* Recommended Add-ons */}
-          {!isCartEmpty && (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Sparkles size={16} className="text-[#d7ff7a]" />
-                <h3 className="text-sm font-semibold text-white/70">Recommended Add-ons</h3>
-              </div>
-              <div className="grid grid-cols-4 gap-3">
-                {ADDON_SUGGESTIONS.map(addon => {
-                  const added = addedAddons.includes(addon.id);
-                  return (
-                    <div key={addon.id} className="flex h-full flex-col overflow-hidden rounded-2xl border border-white/8 bg-white/[0.04] transition-all hover:border-[#d7ff7a]/20 group">
-                      <div className="flex-1">
-                        {renderAddonImage(addon)}
-                      </div>
-                      <div className="p-3 pt-0">
-                        <p className="text-xs font-medium truncate">{addon.name}</p>
-                        {addon.cal !== undefined && (
-                          <p className="text-[10px] text-white/40 mt-0.5">{addon.cal} cal</p>
-                        )}
-                        <div className="flex items-center justify-between mt-2">
-                          <span className="text-xs font-bold text-[#d7ff7a]">+${addon.price.toFixed(2)}</span>
-                          <button
-                            onClick={() => !added && handleAddAddon(addon)}
-                            className={`size-6 rounded-lg flex items-center justify-center transition-all text-xs ${added ? "bg-[#d7ff7a] text-[#17200f]" : "bg-white/10 hover:bg-[#d7ff7a]/20 hover:text-[#d7ff7a]"}`}
-                          >
-                            {added ? <Check size={12} /> : <Plus size={12} />}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
         </div>
 
         {/* Right: Order Summary */}
@@ -400,19 +374,19 @@ export default function ShoppingCart({ onNavigate }: Props) {
             <div className="flex flex-col gap-2.5 text-sm">
               <div className="flex justify-between text-white/60">
                 <span>Subtotal ({items.reduce((s, i) => s + i.qty, 0)} items)</span>
-                <span>${subtotal.toFixed(2)}</span>
+                <span>{currency.format(authoritativeSubtotal)}</span>
               </div>
 
               {coupon && (
                 <div className="flex justify-between text-[#d7ff7a]">
                   <span className="flex items-center gap-1.5"><Ticket size={12} /> {coupon.code}</span>
-                  <span>-${(coupon.type === "percent" ? subtotal * coupon.discount / 100 : coupon.discount).toFixed(2)}</span>
+                  <span>-{currency.format(coupon.type === "percent" ? subtotal * coupon.discount / 100 : coupon.discount)}</span>
                 </div>
               )}
 
               <div className="flex justify-between text-white/50">
-                <span>Tax (10%)</span>
-                <span>${tax.toFixed(2)}</span>
+                <span>Tax ({Math.round((branch?.taxRate ?? 0) * 100)}%)</span>
+                <span>{currency.format(authoritativeTax)}</span>
               </div>
 
               <div className="flex justify-between text-white/50">
@@ -423,32 +397,33 @@ export default function ShoppingCart({ onNavigate }: Props) {
               <div className="border-t border-white/10 pt-3 flex justify-between items-baseline">
                 <span className="font-bold text-base">Total</span>
                 <div className="text-right">
-                  <p className="text-2xl font-bold tracking-tight text-[#d7ff7a]">${total.toFixed(2)}</p>
+                  <p className="text-2xl font-bold tracking-tight text-[#d7ff7a]">{currency.format(authoritativeTotal)}</p>
                   {discount > 0 && (
-                    <p className="text-xs text-white/40 line-through">${(total + discount).toFixed(2)}</p>
+                    <p className="text-xs text-white/40 line-through">{currency.format(total + discount)}</p>
                   )}
                 </div>
               </div>
 
               {discount > 0 && (
                 <div className="bg-[#d7ff7a]/10 border border-[#d7ff7a]/20 rounded-xl px-3 py-2 text-center">
-                  <p className="text-xs text-[#d7ff7a] font-semibold">🎉 You saved ${discount.toFixed(2)} on this order!</p>
+                  <p className="text-xs text-[#d7ff7a] font-semibold">🎉 You saved {currency.format(discount)} on this order!</p>
                 </div>
               )}
             </div>
           </div>
 
           {/* Checkout Button */}
+          {checkoutError && <p role="alert" className="rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-200">{checkoutError}</p>}
           <button
-            onClick={() => !isCartEmpty && onNavigate("payment")}
-            disabled={isCartEmpty}
+            onClick={() => void proceedToCheckout()}
+            disabled={isCartEmpty || orderSubmission.isBusy || incompleteLines.size > 0}
             className={`w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all ${
-              isCartEmpty
+              isCartEmpty || incompleteLines.size > 0
                 ? "bg-white/5 text-white/20 cursor-not-allowed"
                 : "bg-[#d7ff7a] text-[#17200f] hover:bg-[#c8f060] shadow-lg shadow-[#d7ff7a]/20 active:scale-[0.98]"
             }`}
           >
-            Proceed to Checkout
+            {orderSubmission.isBusy ? "Validating order…" : "Proceed to Checkout"}
             <ChevronRight size={20} />
           </button>
 

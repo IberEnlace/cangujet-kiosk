@@ -2,8 +2,8 @@ import type { SupportedLanguage } from "../config/languages";
 import type { OrderType } from "../context/CartContext";
 import type { DeviceBootstrap } from "../../shared/deviceBootstrap";
 
-export type DeviceStatus = "checking" | "unconfigured" | "connecting" | "configured" | "invalid_key" | "network_error" | "timeout" | "disabled" | "configuration_error";
-export type DeviceInitializationStatus = "initializing" | "authenticated" | "setup_required" | "error";
+export type DeviceStatus = "checking" | "unconfigured" | "connecting" | "configured" | "invalid_request" | "invalid_key" | "network_error" | "timeout" | "disabled" | "expired" | "conflict" | "server_error" | "protocol_error" | "configuration_error";
+export type DeviceInitializationStatus = "initializing" | "registering" | "authenticated" | "setup_required" | "error";
 export type DeviceErrorStatus = Exclude<DeviceStatus, "checking" | "unconfigured" | "connecting" | "configured">;
 export type DevicePaymentMethod = "card" | "pay_at_cashier" | "qr";
 
@@ -18,6 +18,7 @@ export interface KioskSettings {
 }
 
 export interface KioskDeviceConfig {
+  bootstrap: DeviceBootstrap;
   deviceId: string;
   kioskId: string;
   kioskName: string;
@@ -41,6 +42,7 @@ export interface KioskDeviceConfig {
   realtimeConfiguration: DeviceBootstrap["realtimeConfiguration"];
   settings: KioskSettings;
   configuredAt: string;
+  offline: boolean;
 }
 
 export class DeviceConfigurationError extends Error {

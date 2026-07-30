@@ -5,7 +5,7 @@ import { supportedLanguages, type SupportedLanguage } from "../../config/languag
 import { useLanguage } from "../../context/LanguageContext";
 import { useCustomerTranslation } from "../../hooks/useCustomerTranslation";
 import MorrowLogo from "../../components/branding/MorrowLogo";
-import { useDevice } from "../../context/DeviceContext";
+import { useRestaurant } from "../../context/BootstrapContext";
 
 interface LanguageSelectionProps {
   onBack: () => void;
@@ -14,8 +14,8 @@ interface LanguageSelectionProps {
 
 export default function LanguageSelection({ onBack, onContinue }: LanguageSelectionProps) {
   const { language, setLanguage, resetLanguage } = useLanguage();
-  const { config } = useDevice();
-  const availableLanguages = supportedLanguages.filter(option => config?.settings.enabledLanguages.includes(option.code));
+  const restaurant = useRestaurant();
+  const availableLanguages = supportedLanguages.filter(option => restaurant?.languages.some(item => item.code === option.code));
   const translation = useCustomerTranslation().languageSelection;
   const reducedMotion = useReducedMotion();
   const [selectedLanguage, setSelectedLanguage] = useState<SupportedLanguage | null>(null);
@@ -59,7 +59,7 @@ export default function LanguageSelection({ onBack, onContinue }: LanguageSelect
 
         <section className="my-auto py-10 text-center sm:py-14" aria-labelledby="language-heading">
           <motion.div initial={reducedMotion ? undefined : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .55, delay: .08 }}>
-            <span className="font-['Space_Mono'] text-[10px] font-bold uppercase tracking-[.35em] text-[#d7ff7a] sm:text-xs">{translation.eyebrow}</span>
+            <span className="font-['Space_Mono'] text-[10px] font-bold uppercase tracking-[.35em] text-[#d7ff7a] sm:text-xs">{language === "tr" ? `${restaurant?.name ?? ""}'a hoş geldiniz` : `Welcome to ${restaurant?.name ?? ""}`}</span>
             <h1 id="language-heading" className="mt-4 text-[clamp(2.5rem,6vw,5.2rem)] font-bold leading-[1.05] tracking-[-.055em]">{translation.title}</h1>
             <p className="mx-auto mt-4 max-w-2xl text-[clamp(1rem,2vw,1.3rem)] text-white/55">{translation.subtitle}</p>
           </motion.div>
@@ -84,7 +84,7 @@ export default function LanguageSelection({ onBack, onContinue }: LanguageSelect
           </div>
         </section>
 
-        <footer className="text-center font-['Space_Mono'] text-[9px] uppercase tracking-[.25em] text-white/25">Morrow ordering experience</footer>
+        <footer className="text-center font-['Space_Mono'] text-[9px] uppercase tracking-[.25em] text-white/25">{restaurant?.name} ordering experience</footer>
       </div>
     </motion.main>
   );

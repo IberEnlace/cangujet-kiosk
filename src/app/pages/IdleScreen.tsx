@@ -3,13 +3,12 @@ import { ArrowRight, Hand } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import BackgroundVideo from "../components/idle/BackgroundVideo";
 import MorrowLogo from "../components/branding/MorrowLogo";
-import { idleScreenConfig as fallbackConfig } from "../config/idleScreenConfig";
-import { useDevice } from "../context/DeviceContext";
+import { useKiosk } from "../context/BootstrapContext";
 
 export default function IdleScreen({ onStart }: { onStart: () => void }) {
-  const { config: deviceConfig } = useDevice();
-  const bootstrapConfig = deviceConfig?.idleScreenConfiguration;
-  const config = bootstrapConfig ? {
+  const kiosk = useKiosk();
+  const bootstrapConfig = kiosk!.idle;
+  const config = {
     videos: bootstrapConfig.videos,
     videoIntervalMs: bootstrapConfig.videoIntervalMs,
     minimumPlaybackBeforeTransitionMs: bootstrapConfig.minimumPlaybackMs,
@@ -19,7 +18,7 @@ export default function IdleScreen({ onStart }: { onStart: () => void }) {
     description: bootstrapConfig.description,
     buttonLabel: bootstrapConfig.buttonLabel,
     touchLabel: bootstrapConfig.touchLabel,
-  } : fallbackConfig;
+  };
   const [isStarting, setIsStarting] = useState(false);
   const startingRef = useRef(false);
   const reducedMotion = useReducedMotion();

@@ -11,8 +11,7 @@ export function subscribeToBranchOrders(input: { branchId: string; audience: "ki
   input.onStatus("connecting");
   const channel = client.channel(name)
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "orders", filter: `branch_id=eq.${input.branchId}` }, input.onSignal)
-    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders", filter: `branch_id=eq.${input.branchId}` }, input.onSignal)
-    .on("postgres_changes", { event: "*", schema: "public", table: "order_items" }, input.onSignal);
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "orders", filter: `branch_id=eq.${input.branchId}` }, input.onSignal);
   subscribe(channel, input.onSignal, input.onStatus);
   return { unsubscribe: async () => { await client.removeChannel(channel); input.onStatus("disconnected"); } };
 }

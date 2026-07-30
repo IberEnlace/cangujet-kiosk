@@ -16,10 +16,12 @@ test("customer payment paths publish typed lifecycle transitions", () => {
 });
 
 test("payment retries reuse the already-created correlated order", () => {
-  const selection = readFileSync("src/app/pages/PaymentFlow.tsx", "utf8");
-  assert.match(selection, /currentOrderId && currentOrderNumber/);
-  assert.match(selection, /idempotencyKey/);
-  assert.match(selection, /recordCreatedOrder\(created\)/);
+  const context = readFileSync("src/app/context/OrderContext.tsx", "utf8");
+  assert.match(context, /PENDING_ORDER_KEY/);
+  assert.match(context, /pending\.requestSignature === requestSignature/);
+  assert.match(context, /idempotencyKey: createKey/);
+  assert.match(context, /idempotencyKey: \(restored\.order \? restored : restorePending\(\)\)\.paymentKey/);
+  assert.match(context, /recordCreatedOrder/);
 });
 
 test("successful and pay-at-cashier orders transfer active cart into the confirmation snapshot", () => {
@@ -35,7 +37,7 @@ test("successful and pay-at-cashier orders transfer active cart into the confirm
 test("failed and cancelled terminal paths do not call placeOrder", () => {
   const card = readFileSync("src/app/pages/customer/CardTerminalPayment.tsx", "utf8");
   const successBlock = card.match(/if \(result\.status !== "approved"[\s\S]+?navigationTimerRef\.current/)?.[0] ?? "";
-  assert.match(successBlock, /placeOrder\(\)/);
+  assert.match(successBlock, /placeOrder\(\{/);
   const failureBlock = card.match(/nextStatus === "declined"[\s\S]+?nextStatus === "cancelled"/)?.[0] ?? "";
   assert.doesNotMatch(failureBlock, /placeOrder\(\)/);
 });

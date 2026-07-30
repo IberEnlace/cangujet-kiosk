@@ -1,86 +1,91 @@
 import localCatalog from "../../data/morrow-menu-ai.json";
-import { supabase } from "../../../lib/supabase/client";
+import type { DeviceMenuResponse } from "../../../shared/deviceBootstrap";
 import type { NormalizedMenu, NormalizedMenuProduct } from "./menuModels";
 import { repositoryFailure, type RepositoryResult } from "./repositoryResult";
+import { DEVICE_ACCESS_TOKEN_STORAGE_KEY } from "../device/DeviceConfigurationService";
 
 const CACHE_MS = 30_000;
-let cached: { expires: number; result: RepositoryResult<NormalizedMenu> } | null = null;
-let pending: Promise<RepositoryResult<NormalizedMenu>> | null = null;
+let cached: { key: string; expires: number; result: RepositoryResult<NormalizedMenu> } | null = null;
+let pending: { key: string; request: Promise<RepositoryResult<NormalizedMenu>> } | null = null;
 
 export function invalidateMenuCache() { cached = null; pending = null; }
 export function getLocalMenu(): NormalizedMenu { return mapLocalCatalog(localCatalog); }
 
-export async function loadMenu(options: { signal?: AbortSignal; force?: boolean } = {}): Promise<RepositoryResult<NormalizedMenu>> {
+export async function loadMenu(options: {
+  signal?: AbortSignal;
+  force?: boolean;
+  expected?: { menuId: string; menuVersion: number; currency: string };
+} = {}): Promise<RepositoryResult<NormalizedMenu>> {
   if (options.signal?.aborted) return repositoryFailure("aborted", "Menu request was cancelled.");
-  if (!options.force && cached && cached.expires > Date.now()) return cached.result;
-  if (!options.force && pending) return pending;
-  pending = loadPreferredMenu(options.signal).then(result => {
+  const key = options.expected ? `${options.expected.menuId}:${options.expected.menuVersion}` : "device";
+  if (!options.force && cached && cached.key === key && cached.expires > Date.now()) return cached.result;
+  if (!options.force && pending?.key === key) return pending.request;
+  const request = loadPreferredMenu(options.signal, options.expected).then(result => {
     if (result.ok || result.error.code !== "aborted") {
-      cached = { expires: Date.now() + CACHE_MS, result };
+      cached = { key, expires: Date.now() + CACHE_MS, result };
     }
-    pending = null;
+    if (pending?.request === request) pending = null;
     return result;
   });
-  return pending;
+  pending = { key, request };
+  return request;
 }
 
-async function loadPreferredMenu(signal?: AbortSignal): Promise<RepositoryResult<NormalizedMenu>> {
-  if (!supabase) return repositoryFailure("configuration", "Menu database is not configured.");
+async function loadPreferredMenu(
+  signal?: AbortSignal,
+  expected?: { menuId: string; menuVersion: number; currency: string },
+): Promise<RepositoryResult<NormalizedMenu>> {
+  const accessToken = typeof sessionStorage === "undefined"
+    ? null
+    : sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+  if (!accessToken) return repositoryFailure("unauthorized", "The device session is not authenticated.");
+  let response: Response;
   try {
-    let categoryQuery = supabase.from("categories").select("*").eq("is_active", true).order("display_order");
-    let productQuery = supabase.from("products").select("*").eq("is_active", true).eq("is_available", true);
-    let groupQuery = supabase.from("product_customization_groups").select("*").order("display_order");
-    let optionQuery = supabase.from("product_customization_options").select("*").order("display_order");
-    if (signal) {
-      categoryQuery = categoryQuery.abortSignal(signal); productQuery = productQuery.abortSignal(signal);
-      groupQuery = groupQuery.abortSignal(signal); optionQuery = optionQuery.abortSignal(signal);
-    }
-    const [categories, products, groups, options] = await Promise.all([
-      categoryQuery,
-      productQuery,
-      groupQuery,
-      optionQuery,
-    ]);
-    if (signal?.aborted) {
-      return repositoryFailure("aborted", "Menu request was cancelled.");
-    }
-    if (categories.error || products.error || groups.error || options.error) {
-      const menuErrors = {
-        categories: formatSupabaseError(categories.error),
-        products: formatSupabaseError(products.error),
-        product_customization_groups: formatSupabaseError(groups.error),
-        product_customization_options: formatSupabaseError(options.error),
-      };
-      console.error(
-        `[MORROW] Supabase menu errors:\n${JSON.stringify(menuErrors, null, 2)}`,
-      );
-      return repositoryFailure("network", "Menu could not be loaded from the database.", menuErrors);
-    }
-    const mapped = mapDatabaseMenu(categories.data, products.data, groups.data, options.data);
-    if (!validateMenu(mapped)) return repositoryFailure("invalid_data", "The database returned an invalid menu.");
-    return { ok: true, data: mapped, source: "supabase" };
+    response = await globalThis.fetch("/api/v1/device/menu", {
+      headers: { authorization: `Bearer ${accessToken}` },
+      credentials: "include",
+      signal,
+    });
   } catch (cause) {
     if (signal?.aborted) {
       return repositoryFailure("aborted", "Menu request was cancelled.", cause);
     }
-    console.error("[MORROW] Unexpected Supabase menu error:", cause);
+    if (import.meta.env?.DEV) console.error("[MORROW] Device menu request failed:", cause);
     return repositoryFailure("network", "Menu could not be loaded from the database.", cause);
   }
-}
-
-function formatSupabaseError(error: { code?: string; message?: string; details?: string; hint?: string } | null) {
-  if (!error) return null;
-  return {
-    code: error.code ?? null,
-    message: error.message ?? null,
-    details: error.details ?? null,
-    hint: error.hint ?? null,
-  };
+  if (!response.ok) {
+    return repositoryFailure(
+      response.status === 401 || response.status === 403 ? "unauthorized" : "configuration",
+      response.status === 401 || response.status === 403
+        ? "The device is not authorized to load this menu."
+        : "Menu configuration could not be loaded.",
+    );
+  }
+  let payload: unknown;
+  try {
+    const body = await response.text();
+    payload = body ? JSON.parse(body) : null;
+  } catch (cause) {
+    return repositoryFailure("invalid_data", "The menu endpoint returned malformed JSON.", cause);
+  }
+  if (!isDeviceMenuResponse(payload)) return repositoryFailure("invalid_data", "The menu endpoint returned invalid data.");
+  if (expected && (payload.menuId !== expected.menuId || payload.menuVersion !== expected.menuVersion || payload.currency !== expected.currency)) {
+    return repositoryFailure("conflict", "The menu response does not match the active bootstrap.");
+  }
+  const mapped = mapDatabaseMenu(
+    payload.categories,
+    payload.products,
+    payload.customizationGroups,
+    payload.customizationOptions,
+    payload.currency,
+  );
+  if (!validateMenu(mapped)) return repositoryFailure("invalid_data", "The database returned an invalid menu.");
+  return { ok: true, data: mapped, source: "supabase" };
 }
 
 type LocalProduct = (typeof localCatalog.products)[number];
 function mapLocalCatalog(catalog: typeof localCatalog): NormalizedMenu {
-  const categories = catalog.categories.map((slug, index) => ({ id: slug, slug: slug.replace(/_/g, "-"), name: title(slug), description: "", image: "", displayOrder: index, active: true }));
+  const categories = catalog.categories.map((slug, index) => ({ id: slug, slug: slug.replace(/_/g, "-"), name: title(slug), localizedNames: {}, description: "", image: "", icon: "", displayOrder: index, active: true }));
   return { categories, products: catalog.products.map(mapLocalProduct), currency: catalog.restaurant.defaultCurrency };
 }
 
@@ -97,9 +102,9 @@ function mapLocalProduct(product: LocalProduct): NormalizedMenuProduct {
     customizations: product.customizations, removableIngredients: product.removableIngredients,
     allergenSafetyMessage: product.allergens.safetyMessage,
     customizationGroups: product.customizationGroups.map((group, groupIndex) => ({
-      id: group.id, name: group.name, required: group.required, minSelections: group.minSelections, maxSelections: group.maxSelections, displayOrder: groupIndex,
+      id: group.id, databaseId: group.id, name: group.name, required: group.required, minSelections: group.minSelections, maxSelections: group.maxSelections, displayOrder: groupIndex,
       options: group.options.map((option, optionIndex) => ({
-        id: option.id, name: option.name, priceDelta: option.priceAdjustment, priceAdjustment: option.priceAdjustment, available: option.available, displayOrder: optionIndex,
+        id: option.id, databaseId: option.id, name: option.name, priceDelta: option.priceAdjustment, priceAdjustment: option.priceAdjustment, available: option.available, displayOrder: optionIndex,
         allergensAdded: list(option.allergensAdded), allergensRemoved: list(option.allergensRemoved),
         nutritionAdjustment: option.nutritionAdjustment, isDefault: option.default, default: option.default,
       })),
@@ -107,7 +112,7 @@ function mapLocalProduct(product: LocalProduct): NormalizedMenuProduct {
   };
 }
 
-function mapDatabaseMenu(categories: Array<Record<string, unknown>>, products: Array<Record<string, unknown>>, groups: Array<Record<string, unknown>>, options: Array<Record<string, unknown>>): NormalizedMenu {
+export function mapDatabaseMenu(categories: Array<Record<string, unknown>>, products: Array<Record<string, unknown>>, groups: Array<Record<string, unknown>>, options: Array<Record<string, unknown>>, currency: string): NormalizedMenu {
   const categorySlug = new Map(categories.map(row => [String(row.id), String(row.slug).replace(/-/g, "_")]));
   const optionsByGroup = new Map<string, Array<Record<string, unknown>>>();
   for (const option of options) optionsByGroup.set(String(option.group_id), [...(optionsByGroup.get(String(option.group_id)) ?? []), option]);
@@ -126,7 +131,7 @@ function mapDatabaseMenu(categories: Array<Record<string, unknown>>, products: A
       recommendedWith: strings(metadata.recommendedWith), customizations: strings(metadata.customizations), removableIngredients: strings(metadata.removableIngredients),
       allergenSafetyMessage: String(metadata.allergenSafetyMessage ?? ""),
       customizationGroups: (groupsByProduct.get(String(row.id)) ?? []).map(group => ({
-        id: String(group.source_id), name: String(group.name), required: Boolean(group.required), minSelections: Number(group.minimum_selections),
+        id: String(group.source_id), databaseId: String(group.id), name: String(group.name), required: Boolean(group.required), minSelections: Number(group.minimum_selections),
         maxSelections: Number(group.maximum_selections), displayOrder: Number(group.display_order),
         options: (optionsByGroup.get(String(group.id)) ?? []).map(option => {
           const optionMetadata = object(option.metadata);
@@ -137,15 +142,34 @@ function mapDatabaseMenu(categories: Array<Record<string, unknown>>, products: A
       })),
     };
   });
-  return { categories: categories.map(row => ({ id: String(row.id), slug: String(row.slug), name: String(row.name), description: String(row.description ?? ""), image: String(row.image_url ?? ""), displayOrder: Number(row.display_order), active: Boolean(row.is_active) })), products: normalizedProducts, currency: normalizedProducts[0]?.currency ?? "EUR" };
+  return { categories: categories.map(row => ({ id: String(row.id), slug: String(row.slug), name: String(row.name), localizedNames: stringRecord(row.localized_names), description: String(row.description ?? ""), image: String(row.image_url ?? ""), icon: String(row.icon ?? ""), displayOrder: Number(row.display_order), active: Boolean(row.is_active) && row.is_visible !== false })), products: normalizedProducts, currency };
 }
 
 export function validateMenu(menu: NormalizedMenu) {
-  return new Set(menu.products.map(product => product.id)).size === menu.products.length
-    && menu.products.every(product => product.id && product.name && product.category && Number.isFinite(product.price) && product.price >= 0 && product.currency.length === 3);
+  const categoryKeys = new Set(menu.categories.filter(category => category.active).map(category => category.slug.replace(/-/g, "_")));
+  return menu.categories.length > 0
+    && menu.products.length > 0
+    && new Set(menu.categories.map(category => category.id)).size === menu.categories.length
+    && new Set(menu.products.map(product => product.id)).size === menu.products.length
+    && menu.products.every(product => product.id && product.name && categoryKeys.has(product.category)
+      && Number.isFinite(product.price) && product.price >= 0 && product.currency.length === 3);
 }
 function title(value: string) { return value.split("_").map(part => part[0]?.toUpperCase() + part.slice(1)).join(" "); }
 function list(value: string[] | string) { return Array.isArray(value) ? value : value.trim() ? [value] : []; }
 function strings(value: unknown): string[] { return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : []; }
 function object(value: unknown): Record<string, unknown> { return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {}; }
 function numbers(value: unknown): Record<string, number> { return Object.fromEntries(Object.entries(object(value)).filter((entry): entry is [string, number] => typeof entry[1] === "number")); }
+function stringRecord(value: unknown): Record<string, string> { return Object.fromEntries(Object.entries(object(value)).filter((entry): entry is [string, string] => typeof entry[1] === "string")); }
+
+function isDeviceMenuResponse(value: unknown): value is DeviceMenuResponse {
+  if (!value || typeof value !== "object") return false;
+  const payload = value as Partial<DeviceMenuResponse>;
+  return typeof payload.menuId === "string"
+    && Number.isInteger(payload.menuVersion)
+    && typeof payload.currency === "string"
+    && payload.currency.length === 3
+    && Array.isArray(payload.categories)
+    && Array.isArray(payload.products)
+    && Array.isArray(payload.customizationGroups)
+    && Array.isArray(payload.customizationOptions);
+}

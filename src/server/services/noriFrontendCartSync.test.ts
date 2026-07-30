@@ -34,9 +34,11 @@ test("frontend response add_to_cart action calls the CartContext adapter", () =>
   const results = executeNoriCartActions([addAction()], { addItem: () => { calls += 1; } }, { executedActionIds: new Set() });
   assert.equal(calls, 1); assert.equal(results[0]?.status, "success");
 });
-test("frontend resolves burger-beef-classic by product id", () => {
+test("frontend keeps product identity separate from customization-specific cart line identity", () => {
   const mapped = mapNoriAddActionToCartItem(addAction());
-  assert.equal(mapped?.id, "burger-beef-classic"); assert.equal(mapped?.name, "Morrow Classic Beef Burger");
+  assert.equal(mapped?.productId, "burger-beef-classic");
+  assert.equal(mapped?.id, "burger-beef-classic::no-sauce");
+  assert.equal(mapped?.name, "Morrow Classic Beef Burger");
 });
 test("frontend preserves the full customization object", () => {
   const customization = mapNoriAddActionToCartItem(addAction())?.noriCustomizations?.[0];
@@ -105,8 +107,10 @@ test("actual response executor updates CartContext and the next request snapshot
   const nextPayload = { message: "Show my cart.", cart: serializeNoriCart(cartRef.current) };
 
   assert.equal(addCalls, 1);
-  assert.equal(contextItems[0]?.id, "burger-beef-classic");
-  assert.equal(cartRef.current[0]?.id, "burger-beef-classic");
+  assert.equal(contextItems[0]?.productId, "burger-beef-classic");
+  assert.equal(cartRef.current[0]?.productId, "burger-beef-classic");
+  assert.equal(contextItems[0]?.id, "burger-beef-classic::no-sauce");
+  assert.equal(cartRef.current[0]?.id, "burger-beef-classic::no-sauce");
   assert.deepEqual(nextPayload.cart, [{
     productId: "burger-beef-classic",
     name: "Morrow Classic Beef Burger",

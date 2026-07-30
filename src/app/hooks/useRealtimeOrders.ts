@@ -1,116 +1,221 @@
 import { useCallback, useEffect, useState } from "react";
-import { isSupabaseConfigured } from "../../lib/supabase/client";
+import type { OrderTracking, ProductionOrder } from "../../shared/orders";
 import { useAuth } from "../auth/AuthContext";
-import { useCart, type KitchenOrder } from "../context/CartContext";
-import { fetchBranchOrders, fetchCompletedTodayCount, getKitchenColumn, isKitchenOrderVisible, mergeOrders, type OperationalOrder } from "../services/supabase/kitchenOrderService";
-import { fetchPublicOrderBoard } from "../services/supabase/publicOrderBoardService";
-import { subscribeToBranchOrders, subscribeToPublicBoardSignal, type RealtimeConnectionStatus } from "../services/supabase/realtimeOrderService";
-import { getKitchenAction, transitionOrderStatus } from "../services/supabase/orderStatusService";
-import type { PublicBoardRow } from "../../lib/supabase/database.types";
-import type { TrackingRow } from "../../lib/supabase/database.types";
-import { getOrderTracking } from "../services/supabase/orderStatusService";
+import type { KitchenOrder } from "../context/CartContext";
+import { kitchenOrderService } from "../services/orders/KitchenOrderService";
+import { OrderClientError, orderService } from "../services/orders/OrderService";
+import { orderTrackingService } from "../services/orders/OrderTrackingService";
+import {
+  subscribeToBranchOrders,
+  subscribeToPublicBoardSignal,
+  type RealtimeConnectionStatus,
+} from "../services/supabase/realtimeOrderService";
+
+const RECONCILIATION_MS = 15_000;
 
 export function useKitchenOrders() {
-  const auth = useAuth(); const demo = useCart();
-  const [live, setLive] = useState<OperationalOrder[]>([]); const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
-  const [error, setError] = useState(""); const [pendingId, setPendingId] = useState<string | null>(null); const [doneToday, setDoneToday] = useState(0);
-  const allowUnpaid = import.meta.env?.DEV && import.meta.env?.VITE_MORROW_ALLOW_UNPAID_KITCHEN_ORDERS === "true";
+  const auth = useAuth();
+  const [live, setLive] = useState<ProductionOrder[]>([]);
+  const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
+  const [error, setError] = useState("");
+  const [pendingId, setPendingId] = useState<string | null>(null);
   const branchId = auth.profile?.branch_id;
+
   const fetchCurrent = useCallback(async () => {
-    if (!branchId) return;
-    const result = await fetchBranchOrders(branchId, "kitchen", allowUnpaid);
-    if (result.ok) {
-      setLive(mergeOrders([], result.data).filter(order => isKitchenOrderVisible(order)));
-      const completedCount = await fetchCompletedTodayCount(branchId);
-      if (completedCount !== null) setDoneToday(completedCount);
+    try {
+      const current = await kitchenOrderService.list();
+      setLive(previous => reconcile(previous, current));
       setError("");
+      setConnection("connected");
+      console.info("[MORROW order]", { event: "kitchen_reconciliation", resultCode: "ok" });
+    } catch (caught) {
+      setError(message(caught));
+      setConnection(navigator.onLine ? "error" : "disconnected");
     }
-    else setError(result.error.message);
-  }, [allowUnpaid, branchId]);
-  useEffect(() => {
-    if (!isSupabaseConfigured || !branchId) { setConnection("disconnected"); return; }
-    void fetchCurrent();
-    const subscription = subscribeToBranchOrders({ branchId, audience: "kitchen", onSignal: () => void fetchCurrent(), onStatus: setConnection });
-    return () => { void subscription.unsubscribe(); };
-  }, [branchId, fetchCurrent]);
-  useEffect(() => {
-    const timer = window.setInterval(() => setLive(current => current.filter(order => isKitchenOrderVisible(order))), 15_000);
-    return () => window.clearInterval(timer);
   }, []);
-  const transition = useCallback(async (id: string) => {
-    const order = live.find(value => value.id === id); const action = order && getKitchenAction(order.status);
-    if (!order || !action) return false;
-    if (import.meta.env?.DEV) console.debug("[MORROW] Kitchen transition", { orderId: id, currentDatabaseStatus: order.status, requestedNextStatus: action.nextStatus });
-    setPendingId(id); const result = await transitionOrderStatus(id, action.nextStatus); setPendingId(null);
-    if (!result.ok) { setError(result.error.message); return false; }
-    setLive(current => current.map(value => value.id === id ? {
-      ...value,
-      status: result.data.status,
-      updated_at: result.data.changedAt,
-      confirmed_at: result.data.status === "confirmed" ? result.data.changedAt : value.confirmed_at,
-      preparing_at: result.data.status === "preparing" ? result.data.changedAt : value.preparing_at,
-      ready_at: result.data.status === "ready" ? result.data.changedAt : value.ready_at,
-      completed_at: result.data.status === "completed" ? result.data.changedAt : value.completed_at,
-    } : value));
-    setError("");
-    await fetchCurrent(); return true;
+
+  useEffect(() => {
+    if (!branchId) { setConnection("disconnected"); return; }
+    void fetchCurrent();
+    const subscription = subscribeToBranchOrders({
+      branchId,
+      audience: "kitchen",
+      onSignal: () => void fetchCurrent(),
+      onStatus: status => {
+        setConnection(status);
+        if (status === "reconnecting" || status === "connected") {
+          console.info("[MORROW order]", { event: "realtime_reconnect", branchId, resultCode: status });
+        }
+      },
+    });
+    const timer = window.setInterval(() => void fetchCurrent(), RECONCILIATION_MS);
+    const online = () => void fetchCurrent();
+    window.addEventListener("online", online);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("online", online);
+      void subscription.unsubscribe();
+    };
+  }, [branchId, fetchCurrent]);
+
+  const changeStatus = useCallback(async (id: string, requestedStatus?: "rejected" | "cancelled", reason?: string) => {
+    if (!navigator.onLine) { setError("Reconnect before updating this order."); return false; }
+    const order = live.find(value => value.id === id);
+    if (!order) return false;
+    setPendingId(id);
+    const before = live;
+    try {
+      const updated = requestedStatus
+        ? await kitchenOrderService.setStatus(order, requestedStatus, reason)
+        : await kitchenOrderService.next(order);
+      setLive(current => reconcile(current, [updated]));
+      setError("");
+      return true;
+    } catch (caught) {
+      setLive(before);
+      setError(message(caught));
+      if (caught instanceof OrderClientError && caught.code === "order_conflict") await fetchCurrent();
+      return false;
+    } finally {
+      setPendingId(null);
+    }
   }, [fetchCurrent, live]);
-  return { orders: isSupabaseConfigured ? live.flatMap(order => getKitchenColumn(order.status) ? [toKitchenOrder(order)] : []) : demo.kitchenOrders, isDemo: !isSupabaseConfigured, connection, error, pendingId, doneToday, transition, refresh: fetchCurrent };
+
+  const doneToday = live.filter(order => order.status === "completed"
+    && new Date(order.completedAt ?? order.updatedAt).toDateString() === new Date().toDateString()).length;
+  return {
+    orders: live.map(toKitchenOrder),
+    isDemo: false,
+    connection,
+    error,
+    pendingId,
+    doneToday,
+    transition: (id: string) => changeStatus(id),
+    reject: (id: string, reason: string) => changeStatus(id, "rejected", reason),
+    cancel: (id: string, reason: string) => changeStatus(id, "cancelled", reason),
+    refresh: fetchCurrent,
+  };
 }
 
 export function usePublicOrderBoard() {
-  const demo = useCart(); const [orders, setOrders] = useState<PublicBoardRow[]>([]); const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
-  const fetchCurrent = useCallback(async () => { const result = await fetchPublicOrderBoard(); if (result.ok) setOrders(result.data); }, []);
+  const [orders, setOrders] = useState<ProductionOrder[]>([]);
+  const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
+  const fetchCurrent = useCallback(async () => {
+    try {
+      setOrders(await orderService.listDisplay());
+      setConnection("connected");
+    } catch {
+      setConnection(navigator.onLine ? "error" : "disconnected");
+    }
+  }, []);
   useEffect(() => {
-    if (!isSupabaseConfigured) { setConnection("disconnected"); return; }
-    void fetchCurrent(); const subscription = subscribeToPublicBoardSignal(() => void fetchCurrent(), setConnection);
-    return () => { void subscription.unsubscribe(); };
+    void fetchCurrent();
+    const subscription = subscribeToPublicBoardSignal(() => void fetchCurrent(), setConnection);
+    const timer = window.setInterval(() => void fetchCurrent(), RECONCILIATION_MS);
+    return () => { window.clearInterval(timer); void subscription.unsubscribe(); };
   }, [fetchCurrent]);
-  const demoRows: PublicBoardRow[] = demo.kitchenOrders.filter(order => ["received","preparing","cooking","ready","completed"].includes(order.status)).map(order => ({
-    order_number: String(order.number), public_status: order.status === "ready" ? "ready" : order.status === "completed" ? "completed" : "preparing", created_at: new Date(order.startTime).toISOString(), ready_at: order.status === "ready" ? new Date().toISOString() : null,
-  }));
-  return { orders: isSupabaseConfigured ? orders : demoRows, connection, isDemo: !isSupabaseConfigured };
+  return {
+    orders: orders.map(order => ({
+      order_number: order.orderNumber,
+      public_status: order.status === "ready" ? "ready" : order.status === "completed" ? "completed" : "preparing",
+      created_at: order.createdAt,
+      ready_at: order.readyAt,
+    })),
+    connection,
+    isDemo: false,
+  };
 }
 
 export function useCashierOrders() {
-  const auth = useAuth(); const [orders, setOrders] = useState<OperationalOrder[]>([]); const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
+  const auth = useAuth();
+  const [orders, setOrders] = useState<ProductionOrder[]>([]);
+  const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
   const branchId = auth.profile?.branch_id;
   const fetchCurrent = useCallback(async () => {
-    if (!branchId) return;
-    const result = await fetchBranchOrders(branchId, "cashier");
-    if (result.ok) setOrders(current => mergeOrders(current, result.data));
-  }, [branchId]);
+    try {
+      const currentOrders = await orderService.listActive("staff");
+      setOrders(current => reconcile(current, currentOrders));
+      setConnection("connected");
+    } catch {
+      setConnection(navigator.onLine ? "error" : "disconnected");
+    }
+  }, []);
   useEffect(() => {
-    if (!isSupabaseConfigured || !branchId) { setConnection("disconnected"); return; }
-    void fetchCurrent(); const subscription = subscribeToBranchOrders({ branchId, audience: "cashier", onSignal: () => void fetchCurrent(), onStatus: setConnection });
-    return () => { void subscription.unsubscribe(); };
+    if (!branchId) { setConnection("disconnected"); return; }
+    void fetchCurrent();
+    const subscription = subscribeToBranchOrders({ branchId, audience: "cashier", onSignal: () => void fetchCurrent(), onStatus: setConnection });
+    const timer = window.setInterval(() => void fetchCurrent(), RECONCILIATION_MS);
+    return () => { window.clearInterval(timer); void subscription.unsubscribe(); };
   }, [branchId, fetchCurrent]);
-  return { orders, connection, isDemo: !isSupabaseConfigured, refresh: fetchCurrent };
+  return { orders, connection, isDemo: false, refresh: fetchCurrent };
 }
 
-export function useOrderTracking(orderId: string, trackingToken: string) {
-  const [tracking, setTracking] = useState<TrackingRow | null>(null); const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
+export function useOrderTracking(_orderId: string, customerReference: string) {
+  const [tracking, setTracking] = useState<OrderTracking | null>(null);
+  const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
   const fetchCurrent = useCallback(async () => {
-    if (!orderId || !trackingToken) return;
-    const result = await getOrderTracking(orderId, trackingToken);
-    if (result.ok) setTracking(result.data);
-  }, [orderId, trackingToken]);
+    if (!customerReference) return;
+    try {
+      setTracking(await orderTrackingService.get(customerReference));
+      setConnection("connected");
+    } catch {
+      setConnection(navigator.onLine ? "error" : "disconnected");
+    }
+  }, [customerReference]);
   useEffect(() => {
-    if (!isSupabaseConfigured || !orderId || !trackingToken) { setConnection("disconnected"); return; }
-    void fetchCurrent(); const subscription = subscribeToPublicBoardSignal(() => void fetchCurrent(), setConnection);
-    return () => { void subscription.unsubscribe(); };
-  }, [fetchCurrent, orderId, trackingToken]);
-  return { tracking, connection, isDemo: !isSupabaseConfigured };
+    if (!customerReference) { setConnection("disconnected"); return; }
+    void fetchCurrent();
+    const subscription = subscribeToPublicBoardSignal(() => void fetchCurrent(), setConnection);
+    const timer = window.setInterval(() => void fetchCurrent(), 10_000);
+    return () => { window.clearInterval(timer); void subscription.unsubscribe(); };
+  }, [customerReference, fetchCurrent]);
+  return { tracking, connection, isDemo: false };
 }
 
-function toKitchenOrder(order: OperationalOrder): KitchenOrder {
-  const number = Number(order.order_number.match(/(\d+)$/)?.[1]) || 0;
-  const column = getKitchenColumn(order.status);
-  if (!column) throw new Error("Cancelled orders cannot be mapped to a Kitchen column.");
-  return { id: order.id, number, status: column, databaseStatus: order.status, priority: false, delayed: false,
-    startTime: new Date(order.created_at).getTime(), completedAt: order.completed_at ? new Date(order.completed_at).getTime() : undefined,
-    estimatedMinutes: 12, type: order.order_type === "takeaway" ? "take_away" : "dine_in",
-    items: order.items.map(item => ({ name: item.product_name_snapshot, qty: item.quantity, notes: item.notes ?? undefined,
-      customizations: Array.isArray(item.customizations) ? item.customizations.flatMap(value => typeof value === "object" && value && "name" in value ? [String(value.name)] : []) : undefined })),
+export function reconcile(previous: ProductionOrder[], incoming: ProductionOrder[]) {
+  const byId = new Map(previous.map(order => [order.id, order]));
+  for (const order of incoming) {
+    const existing = byId.get(order.id);
+    if (!existing || order.version >= existing.version) byId.set(order.id, order);
+  }
+  const incomingIds = new Set(incoming.map(order => order.id));
+  return [...byId.values()]
+    .filter(order => incomingIds.has(order.id) || order.status === "completed")
+    .sort((a, b) => Date.parse(a.placedAt ?? a.createdAt) - Date.parse(b.placedAt ?? b.createdAt));
+}
+
+function toKitchenOrder(order: ProductionOrder): KitchenOrder {
+  return {
+    id: order.id,
+    number: Number(order.orderNumber.match(/(\d+)$/)?.[1]) || 0,
+    status: kitchenColumn(order),
+    databaseStatus: order.status,
+    priority: false,
+    delayed: false,
+    startTime: Date.parse(order.placedAt ?? order.createdAt),
+    completedAt: order.completedAt ? Date.parse(order.completedAt) : undefined,
+    estimatedMinutes: 12,
+    type: order.serviceMode,
+    source: order.source,
+    paymentStatus: order.paymentStatus,
+    items: order.items.map(item => ({
+      name: item.productName,
+      qty: item.quantity,
+      notes: item.notes ?? undefined,
+      customizations: item.modifiers.map(value => value.name),
+      allergenWarnings: item.allergens,
+    })),
   };
+}
+
+function kitchenColumn(order: ProductionOrder): KitchenOrder["status"] {
+  if (order.status === "submitted") return "received";
+  if (order.status === "accepted") return "preparing";
+  if (order.status === "preparing") return "cooking";
+  if (order.status === "ready") return "ready";
+  return "completed";
+}
+
+function message(error: unknown) {
+  return error instanceof Error ? error.message : "Orders could not be synchronized.";
 }

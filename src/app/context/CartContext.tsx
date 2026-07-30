@@ -8,11 +8,15 @@ import {
   type NoriOrderLifecycleEvent,
   type NoriOrderLifecycleState,
 } from "../../shared/noriOrderLifecycle";
+import { useBranch } from "./BootstrapContext";
+import type { ProductionOrder } from "../../shared/orders";
+import { mergeCartItem } from "../services/orders/cartModifierPipeline";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
 export type CartItem = {
   id: string;
+  productId?: string;
   name: string;
   price: number;
   basePrice: number;
@@ -21,10 +25,28 @@ export type CartItem = {
   category: string;
   customizations?: Record<string, string>;
   noriCustomizations?: NoriSelectedCustomization[];
+  selectedModifiers?: CartModifierSelection[];
+  requiredModifierGroups?: CartModifierRequirement[];
   noriActionId?: string;
   adjustedNutrition?: NoriSelectedCustomization["nutritionAdjustment"];
   savedForLater?: boolean;
   calories?: number;
+};
+
+export type CartModifierSelection = {
+  modifierGroupId: string;
+  modifierId: string;
+  groupName: string;
+  optionName: string;
+  priceAdjustment: number;
+};
+
+export type CartModifierRequirement = {
+  modifierGroupId: string;
+  name: string;
+  minimumSelections: number;
+  maximumSelections: number;
+  required: boolean;
 };
 
 export type OrderType = "dine_in" | "take_away";
@@ -42,7 +64,7 @@ export type PreparationStation = "kitchen" | "grill" | "drinks" | "dessert" | "n
 export type KitchenOrder = {
   id: string;
   number: number;
-  databaseStatus?: import("../../lib/supabase/database.types").DbOrderStatus;
+  databaseStatus?: import("../../shared/orders").ProductionOrderStatus;
   items: { name: string; qty: number; notes?: string; station?: PreparationStation; customizations?: string[]; allergenWarnings?: string[] }[];
   status: OrderStatus;
   priority: boolean;
@@ -52,6 +74,8 @@ export type KitchenOrder = {
   estimatedMinutes: number;
   type: OrderType;
   customer?: string;
+  source?: import("../../shared/orders").ProductionOrderSource;
+  paymentStatus?: import("../../shared/orders").ProductionPaymentStatus | null;
 };
 
 export type UserProfile = {
@@ -149,10 +173,6 @@ type CartContextType = {
   recordCreatedOrder: (order: { id: string; number: string; total: number; trackingToken?: string }) => void;
   placeOrder: (created?: { id: string; number: string; total: number }) => void;
 
-  // Kitchen orders (demo data)
-  kitchenOrders: KitchenOrder[];
-  updateKitchenOrderStatus: (id: string, status: OrderStatus) => void;
-
   // User
   user: UserProfile;
   updateUser: (updates: Partial<UserProfile>) => void;
@@ -167,15 +187,6 @@ const VALID_COUPONS: Record<string, CouponResult> = {
   SUMMER5: { code: "SUMMER5", discount: 5, type: "fixed", description: "$5 Summer special" },
   VIP30: { code: "VIP30", discount: 30, type: "percent", description: "30% VIP discount" },
 };
-
-const initialKitchenOrders: KitchenOrder[] = [
-  { id: "ko1", number: 42, items: [{ name: "Spicy Nori Burger", qty: 2 }, { name: "Rosemary Fries", qty: 2 }], status: "cooking", priority: true, delayed: false, startTime: Date.now() - 420000, estimatedMinutes: 8, type: "dine_in", customer: "Ahmed" },
-  { id: "ko2", number: 43, items: [{ name: "Smoky Truffle Beef", qty: 1 }, { name: "Iced Matcha Latte", qty: 2 }], status: "preparing", priority: false, delayed: false, startTime: Date.now() - 120000, estimatedMinutes: 12, type: "take_away", customer: "Sara" },
-  { id: "ko3", number: 44, items: [{ name: "Zen Garden Bowl", qty: 3 }], status: "received", priority: false, delayed: true, startTime: Date.now() - 900000, estimatedMinutes: 15, type: "dine_in", customer: "Mike" },
-  { id: "ko4", number: 41, items: [{ name: "Tiny Tenders Combo", qty: 2 }, { name: "Rosemary Fries", qty: 1 }], status: "ready", priority: false, delayed: false, startTime: Date.now() - 600000, estimatedMinutes: 10, type: "take_away", customer: "Lena" },
-  { id: "ko5", number: 40, items: [{ name: "Spicy Nori Burger", qty: 1 }], status: "completed", priority: false, delayed: false, startTime: Date.now() - 1200000, estimatedMinutes: 9, type: "dine_in", customer: "Omar" },
-  { id: "ko6", number: 45, items: [{ name: "Smoky Truffle Beef", qty: 2 }, { name: "Iced Matcha Latte", qty: 1 }], status: "received", priority: true, delayed: false, startTime: Date.now() - 60000, estimatedMinutes: 11, type: "dine_in", customer: "Nora" },
-];
 
 const initialUser: UserProfile = {
   name: "Alex Morrow",
@@ -221,51 +232,47 @@ function readSessionOrderType(): OrderType | null {
   } catch { return null; }
 }
 
-function preparationStationForCategory(category: string): PreparationStation {
-  const normalized = category.toLowerCase();
-  if (normalized.includes("burger")) return "grill";
-  if (normalized.includes("drink") || normalized.includes("coffee")) return "drinks";
-  if (normalized.includes("dessert")) return "dessert";
-  return "kitchen";
-}
-
-function readKitchenOrders(): KitchenOrder[] {
-  const stored = readStored<Array<Omit<KitchenOrder, "type"> & { type: string }>>("morrow_kitchen_orders", initialKitchenOrders);
-  return stored.map(order => ({
-    ...order,
-    type: isOrderType(order.type) ? order.type : order.type === "take-away" ? "take_away" : "dine_in",
-  }));
+function readPendingProductionOrder(): ProductionOrder | null {
+  try {
+    const value = sessionStorage.getItem("morrow:pending-production-order");
+    if (!value) return null;
+    const parsed = JSON.parse(value) as { order?: ProductionOrder | null };
+    return parsed.order?.id && parsed.order.orderNumber ? parsed.order : null;
+  } catch { return null; }
 }
 
 export function CartProvider({ children }: { children: ReactNode }) {
+  const branch = useBranch();
+  const recoveredOrder = useRef(readPendingProductionOrder()).current;
   const providerInstanceId = useRef(crypto.randomUUID()).current;
-  const [items, setItems] = useState<CartItem[]>(() => readStored("morrow_cart", [
-    { id: "b1", name: "Spicy Nori Burger", price: 8.90, basePrice: 8.90, qty: 2, image: "https://images.unsplash.com/photo-1606149059549-6042addafc5a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", category: "burger", calories: 520 },
-    { id: "s1", name: "Rosemary Fries", price: 3.50, basePrice: 3.50, qty: 1, image: "https://images.unsplash.com/photo-1573080496219-bb080dd4f877?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", category: "side", calories: 320 },
-    { id: "d1", name: "Iced Matcha Latte", price: 4.50, basePrice: 4.50, qty: 1, image: "https://images.unsplash.com/photo-1543007630-9710e4a00a20?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=85&w=600", category: "drink", calories: 150 },
-  ]));
+  const [items, setItems] = useState<CartItem[]>(() => readStored("morrow_cart", []));
   const [savedItems, setSavedItems] = useState<CartItem[]>([]);
-  const [confirmedOrderItems, setConfirmedOrderItems] = useState<CartItem[]>([]);
+  const [confirmedOrderItems, setConfirmedOrderItems] = useState<CartItem[]>(() => recoveredOrder?.items.map(item => ({
+    id: item.productId, name: item.productName, price: Number(item.unitPrice), basePrice: Number(item.unitPrice),
+    qty: item.quantity, image: "", category: "", customizations: Object.fromEntries(item.modifiers.map((value, index) => [String(index), value.name])),
+  })) ?? []);
   const [orderType, setOrderTypeState] = useState<OrderType | null>(readSessionOrderType);
   const [orderNotes, setOrderNotes] = useState("");
   const [coupon, setCoupon] = useState<CouponResult | null>(null);
   const [giftCardBalance, setGiftCardBalance] = useState(0);
   const [rewardsApplied, setRewardsApplied] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(() =>
+    recoveredOrder?.paymentMethod === "card_terminal" ? "credit"
+      : recoveredOrder?.paymentMethod === "pay_at_cashier" ? "cashier"
+        : recoveredOrder?.paymentMethod === "cash" ? "cash" : null);
   const [orderStatus, setOrderStatus] = useState<OrderStatus>("idle");
-  const [createdOrderTotal, setCreatedOrderTotal] = useState<number | null>(null);
-  const [currentTrackingToken, setCurrentTrackingToken] = useState("");
-  const [queueNumber, setQueueNumber] = useState(0);
-  const [currentOrderId, setCurrentOrderId] = useState("");
-  const [currentOrderNumber, setCurrentOrderNumber] = useState("");
+  const [createdOrderTotal, setCreatedOrderTotal] = useState<number | null>(() => recoveredOrder ? Number(recoveredOrder.total) : null);
+  const [currentTrackingToken, setCurrentTrackingToken] = useState(() => recoveredOrder?.customerReference ?? "");
+  const [queueNumber, setQueueNumber] = useState(() => Number(recoveredOrder?.orderNumber.match(/(\d+)$/)?.[1]) || 0);
+  const [currentOrderId, setCurrentOrderId] = useState(() => recoveredOrder?.id ?? "");
+  const [currentOrderNumber, setCurrentOrderNumber] = useState(() => recoveredOrder?.orderNumber ?? "");
   const [orderLifecycle, setOrderLifecycle] = useState<NoriOrderLifecycleState>(() => initialNoriOrderLifecycle());
   const paymentStatus: PaymentStatus | null = orderLifecycle.paymentStatus === "completed"
     ? "paid"
     : orderLifecycle.paymentStatus === "idle" ? null : "pending";
-  const [kitchenOrders, setKitchenOrders] = useState<KitchenOrder[]>(readKitchenOrders);
   const [user, setUser] = useState<UserProfile>(() => readStored("morrow_user_profile", initialUser));
   const cartCorrelationSignature = items
-    .map(item => `${item.id}:${item.qty}:${item.price}:${item.noriCustomizations?.map(value => value.optionId).sort().join(",") ?? ""}`)
+    .map(item => `${item.id}:${item.qty}:${item.price}:${item.selectedModifiers?.map(value => value.modifierId).sort().join(",") ?? item.noriCustomizations?.map(value => value.optionId).sort().join(",") ?? ""}`)
     .sort()
     .join("|");
   const previousCartCorrelationSignature = useRef(cartCorrelationSignature);
@@ -281,7 +288,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => { localStorage.setItem("morrow_cart", JSON.stringify(items)); }, [items]);
-  useEffect(() => { localStorage.setItem("morrow_kitchen_orders", JSON.stringify(kitchenOrders)); }, [kitchenOrders]);
   useEffect(() => { localStorage.setItem("morrow_user_profile", JSON.stringify(user)); }, [user]);
   useEffect(() => {
     if (previousCartCorrelationSignature.current === cartCorrelationSignature) return;
@@ -296,7 +302,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   // Computed totals
   const subtotal = items.reduce((sum, i) => sum + i.price * i.qty, 0);
-  const taxRate = 0.10;
+  const taxRate = branch?.taxRate ?? 0;
   const rewardsDiscount = rewardsApplied * 0.01; // 1 point = $0.01
   const couponDiscount = coupon
     ? coupon.type === "percent"
@@ -312,9 +318,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
 
   const addItem = useCallback((item: Omit<CartItem, "qty">) => {
     setItems(prev => {
-      const existing = prev.find(i => i.id === item.id);
-      if (existing) return prev.map(i => i.id === item.id ? { ...i, ...item, qty: i.qty + 1 } : i);
-      return [...prev, { ...item, qty: 1 }];
+      if (!hasCompleteStoredModifiers(item)) return prev;
+      return mergeCartItem(prev, item);
     });
   }, []);
 
@@ -408,50 +413,16 @@ export function CartProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const placeOrder = useCallback((created?: { id: string; number: string; total: number }) => {
-    const num = Math.floor(Math.random() * 50) + 50;
-    const id = `ORD-${Date.now().toString().slice(-6)}`;
-    const effectiveId = created?.id || currentOrderId || id;
-    const effectiveNumber = created ? Number(created.number.match(/(\d+)$/)?.[1]) || num : queueNumber || num;
+    const effectiveId = created?.id || currentOrderId;
+    const effectiveNumber = Number((created?.number || currentOrderNumber).match(/(\d+)$/)?.[1]);
+    if (!effectiveId || !Number.isFinite(effectiveNumber)) return;
     if (created) setCreatedOrderTotal(created.total);
     setQueueNumber(effectiveNumber); setCurrentOrderId(effectiveId);
     setOrderStatus("received");
-
-    // Add to kitchen
-    const newOrder: KitchenOrder = {
-      id: effectiveId,
-      number: effectiveNumber,
-      items: items.map(i => ({ name: i.name, qty: i.qty, notes: orderNotes || undefined, customizations: i.customizations ? Object.values(i.customizations) : undefined, station: preparationStationForCategory(i.category) })),
-      status: "received",
-      priority: false,
-      delayed: false,
-      startTime: Date.now(),
-      estimatedMinutes,
-      type: orderType ?? "dine_in",
-    };
-    setKitchenOrders(prev => [newOrder, ...prev]);
-
-    // Update user points
-    const pointsEarned = Math.floor(total * 10);
-    setUser(prev => ({
-      ...prev,
-      loyaltyPoints: prev.loyaltyPoints + pointsEarned,
-      orderHistory: [{
-        id,
-        date: new Date().toISOString().split("T")[0],
-        items: items.map(i => ({ name: i.name, qty: i.qty, price: i.price })),
-        total,
-        status: "completed",
-        paymentMethod: paymentMethod || "cash",
-      }, ...prev.orderHistory],
-    }));
     setConfirmedOrderItems(items.map(item => ({ ...item })));
     setItems([]);
     setSavedItems([]);
-  }, [items, orderNotes, estimatedMinutes, orderType, total, paymentMethod, currentOrderId, queueNumber]);
-
-  const updateKitchenOrderStatus = useCallback((id: string, status: OrderStatus) => {
-    setKitchenOrders(prev => prev.map(o => o.id === id ? { ...o, status, completedAt: status === "completed" ? Date.now() : undefined } : o));
-  }, []);
+  }, [currentOrderId, currentOrderNumber, items]);
 
   const updateUser = useCallback((updates: Partial<UserProfile>) => {
     setUser(prev => ({ ...prev, ...updates }));
@@ -478,7 +449,6 @@ export function CartProvider({ children }: { children: ReactNode }) {
       paymentMethod, paymentStatus, setPaymentMethod, orderStatus, setOrderStatus, currentTrackingToken,
       orderLifecycle, transitionOrderLifecycle, recordCreatedOrder,
       queueNumber, currentOrderId, currentOrderNumber, placeOrder,
-      kitchenOrders, updateKitchenOrderStatus,
       user, updateUser, toggleFavorite,
     }}>
       {children}
@@ -490,4 +460,14 @@ export function useCart() {
   const ctx = useContext(CartContext);
   if (!ctx) throw new Error("useCart must be used within CartProvider");
   return ctx;
+}
+
+export function hasCompleteStoredModifiers(item: Pick<CartItem, "requiredModifierGroups" | "selectedModifiers">) {
+  return (item.requiredModifierGroups ?? []).every(group => {
+    const count = (item.selectedModifiers ?? [])
+      .filter(selection => selection.modifierGroupId === group.modifierGroupId).length;
+    return count >= group.minimumSelections
+      && (!group.required || count > 0)
+      && count <= group.maximumSelections;
+  });
 }

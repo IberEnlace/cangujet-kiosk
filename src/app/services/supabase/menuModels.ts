@@ -3,7 +3,7 @@ export type NormalizedMenuOption = {
   allergensAdded: string[]; allergensRemoved: string[]; nutritionAdjustment: Record<string, number>; isDefault: boolean; default: boolean;
 };
 export type NormalizedMenuGroup = {
-  id: string; name: string; required: boolean; minSelections: number; maxSelections: number; displayOrder: number; options: NormalizedMenuOption[];
+  id: string; databaseId?: string; name: string; required: boolean; minSelections: number; maxSelections: number; displayOrder: number; options: NormalizedMenuOption[];
 };
 export type NormalizedMenuProduct = {
   id: string; name: string; slug: string; description: string; category: string; price: number; currency: string; image: string;
@@ -13,5 +13,15 @@ export type NormalizedMenuProduct = {
   recommendedWith: string[]; customizations: string[]; removableIngredients: string[]; allergenSafetyMessage: string;
   customizationGroups: NormalizedMenuGroup[];
 };
-export type NormalizedMenuCategory = { id: string; slug: string; name: string; description: string; image: string; displayOrder: number; active: boolean };
+export type NormalizedMenuCategory = {
+  id: string;
+  slug: string;
+  name: string;
+  localizedNames?: Record<string, string>;
+  description: string;
+  image: string;
+  icon?: string;
+  displayOrder: number;
+  active: boolean;
+};
 export type NormalizedMenu = { categories: NormalizedMenuCategory[]; products: NormalizedMenuProduct[]; currency: string };

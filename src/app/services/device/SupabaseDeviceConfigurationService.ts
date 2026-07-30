@@ -31,16 +31,24 @@ class DeviceHttpError extends Error {
     public readonly code: string,
   ) {
     super(code);
+    this.name = "DeviceHttpError";
   }
 }
 
 export class SupabaseDeviceConfigurationService implements DeviceConfigurationService {
+  private readonly fetcher: Fetcher;
+  private readonly requestTimeoutMs: number;
+
   constructor(
-    private readonly fetcher: Fetcher = fetch,
-    private readonly requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
-  ) {}
+    fetcher?: Fetcher,
+    requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  ) {
+    this.fetcher = fetcher ?? ((input, init) => globalThis.fetch(input, init));
+    this.requestTimeoutMs = requestTimeoutMs;
+  }
 
   async configureDevice(secretKey: string, options: DeviceRequestOptions = {}): Promise<KioskDeviceConfig> {
+    diagnostic("registration_request_started");
     try {
       const result = await this.request<DeviceRegistrationResponse>("/api/v1/devices/register", {
         method: "POST",
@@ -52,9 +60,14 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       this.saveAccessToken(result.accessToken);
       const config = this.mapBootstrap(result.bootstrap, new Date().toISOString());
       this.savePublicConfiguration(config);
+      diagnostic("bootstrap_applied");
+      diagnostic("registration_succeeded");
       return config;
     } catch (error) {
-      throw this.toConfigurationError(error);
+      diagnosticError("registration_catch", error);
+      const normalized = this.toConfigurationError(error);
+      diagnostic("registration_failed", { code: normalized.code });
+      throw normalized;
     }
   }
 
@@ -83,11 +96,16 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
         }
         bootstrap = await this.loadBootstrap(accessToken, options.signal);
       }
-      const config = this.mapBootstrap(bootstrap, cached?.configuredAt ?? new Date().toISOString());
+      const config = this.mapBootstrap(bootstrap, new Date().toISOString());
       this.savePublicConfiguration(config);
       return config;
     } catch (error) {
-      throw this.toConfigurationError(error);
+      const normalized = this.toConfigurationError(error);
+      if (cached && ["network_error", "timeout", "server_error"].includes(normalized.code)) {
+        diagnostic("offline_bootstrap_restored", { code: normalized.code, configVersion: cached.configVersion });
+        return { ...cached, offline: true };
+      }
+      throw normalized;
     }
   }
 
@@ -114,6 +132,9 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       "deviceId", "kioskId", "kioskName", "branchId", "branchName", "restaurantId",
       "restaurantName", "currency", "locale", "timezone", "configuredAt", "publishedMenuId",
     ])) return false;
+    if (!isRecord(value.bootstrap) || !isRecord(value.bootstrap.restaurant)
+      || !isRecord(value.bootstrap.branch) || !isRecord(value.bootstrap.device)
+      || !isRecord(value.bootstrap.configuration)) return false;
     if (!Number.isInteger(value.configVersion) || Number(value.configVersion) < 1) return false;
     if (!isRecord(value.settings)) return false;
     const settings = value.settings;
@@ -132,6 +153,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       && typeof settings.receiptPrintingEnabled === "boolean"
       && typeof settings.aiAssistantEnabled === "boolean"
       && typeof settings.voiceAssistantEnabled === "boolean"
+      && typeof value.offline === "boolean"
       && isRecord(value.theme)
       && isRecord(value.paymentConfiguration)
       && isRecord(value.noriConfiguration)
@@ -174,6 +196,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       : enabledLanguages[0];
     const locale = bootstrap.languages.find(language => language.code === defaultLanguage)?.locale;
     const config: KioskDeviceConfig = {
+      bootstrap,
       deviceId: bootstrap.device.id,
       kioskId: bootstrap.device.id,
       kioskName: bootstrap.device.name,
@@ -205,6 +228,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
         voiceAssistantEnabled: bootstrap.noriConfiguration.voiceEnabled,
       },
       configuredAt,
+      offline: false,
     };
     if (!this.isConfigurationValid(config)) throw new DeviceConfigurationError("configuration_error");
     return config;
@@ -240,6 +264,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
   private async request<T>(url: string, init: RequestInit, expectsJson: boolean): Promise<T> {
     const controller = new AbortController();
     let timedOut = false;
+    const isRegistration = url === "/api/v1/devices/register";
     const abortFromCaller = () => controller.abort();
     if (init.signal?.aborted) controller.abort();
     else init.signal?.addEventListener("abort", abortFromCaller, { once: true });
@@ -247,37 +272,80 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       timedOut = true;
       controller.abort();
     }, this.requestTimeoutMs);
+
+    let response: Response;
     try {
-      const response = await this.fetcher(url, { ...init, signal: controller.signal });
-      diagnostic("api_response", { path: url, status: response.status });
-      if (!response.ok) {
-        const body = await readErrorBody(response);
-        throw new DeviceHttpError(response.status, body?.code ?? "device_service_unavailable");
-      }
-      if (!expectsJson) return undefined as T;
-      return await response.json() as T;
+      if (isRegistration) diagnostic("registration_before_fetch");
+      response = await this.fetcher(url, { ...init, signal: controller.signal });
+      if (isRegistration) diagnostic("registration_after_fetch");
     } catch (error) {
-      if (error instanceof DeviceHttpError || error instanceof DeviceConfigurationError) throw error;
+      if (isRegistration) diagnosticError("registration_fetch_catch", error);
       if (timedOut) throw new DeviceConfigurationError("timeout");
       if (init.signal?.aborted) throw error;
-      throw new DeviceConfigurationError("network_error");
+      if (error instanceof TypeError) throw new DeviceConfigurationError("network_error");
+      throw error;
     } finally {
       globalThis.clearTimeout(timeout);
       init.signal?.removeEventListener("abort", abortFromCaller);
     }
+
+    diagnostic("api_response", { path: url, status: response.status });
+    if (isRegistration) {
+      diagnostic("registration_response_received", { status: response.status });
+      diagnostic("registration_response_status", { status: response.status });
+      diagnostic("registration_response_headers", { headers: safeResponseHeaders(response.headers) });
+      diagnostic("registration_before_parsing_body");
+    }
+
+    let bodyText: string;
+    try {
+      bodyText = await response.text();
+    } catch (error) {
+      if (isRegistration) diagnosticError("registration_body_read_catch", error);
+      throw new DeviceConfigurationError("protocol_error");
+    }
+
+    const body = parseJsonBody(bodyText);
+    if (isRegistration) {
+      diagnostic("registration_after_parsing_body", {
+        empty: bodyText.trim().length === 0,
+        validJson: body.valid,
+      });
+    }
+
+    if (!response.ok) {
+      const apiError = body.valid && isDeviceApiError(body.value) ? body.value : null;
+      const code = apiError?.code ?? fallbackHttpErrorCode(response.status);
+      if (isRegistration) {
+        diagnostic("registration_before_application_error", { status: response.status, code });
+      }
+      throw new DeviceHttpError(response.status, code);
+    }
+
+    if (!expectsJson) return undefined as T;
+    if (!body.valid || bodyText.trim().length === 0) {
+      if (isRegistration) {
+        diagnostic("registration_before_application_error", {
+          status: response.status,
+          code: "protocol_error",
+        });
+      }
+      throw new DeviceConfigurationError("protocol_error");
+    }
+    return body.value as T;
   }
 
   private toConfigurationError(error: unknown) {
     if (error instanceof DeviceConfigurationError) return error;
     if (!(error instanceof DeviceHttpError)) return new DeviceConfigurationError("configuration_error");
     if (error.code === "device_disabled") return new DeviceConfigurationError("disabled");
-    if (error.code === "invalid_device_key" || error.code === "credential_expired") {
-      return new DeviceConfigurationError("invalid_key");
-    }
+    if (error.code === "credential_expired") return new DeviceConfigurationError("expired");
+    if (error.code === "invalid_device_key") return new DeviceConfigurationError("invalid_key");
+    if (error.code === "invalid_setup_request" || error.status === 400) return new DeviceConfigurationError("invalid_request");
+    if (error.status === 409) return new DeviceConfigurationError("conflict");
     if (error.code === "configuration_error") return new DeviceConfigurationError("configuration_error");
-    return error.status >= 500
-      ? new DeviceConfigurationError("network_error")
-      : new DeviceConfigurationError("configuration_error");
+    if (error.status >= 500) return new DeviceConfigurationError("server_error");
+    return new DeviceConfigurationError("protocol_error");
   }
 }
 
@@ -285,13 +353,44 @@ function diagnostic(event: string, details: Record<string, unknown> = {}) {
   if (import.meta.env?.DEV) console.info("[MORROW device]", { event, ...details });
 }
 
-async function readErrorBody(response: Response): Promise<DeviceApiError | null> {
+function diagnosticError(event: string, error: unknown) {
+  if (!import.meta.env?.DEV) return;
+  const value = error instanceof Error ? error : null;
+  console.error("[MORROW device]", {
+    event,
+    constructor: value?.constructor?.name ?? typeof error,
+    name: value?.name ?? null,
+    message: value?.message ?? String(error),
+    stack: value?.stack ?? null,
+    instanceofDOMException: typeof DOMException !== "undefined" && error instanceof DOMException,
+    instanceofTypeError: error instanceof TypeError,
+  });
+}
+
+function safeResponseHeaders(headers: Headers) {
+  return Object.fromEntries([...headers.entries()].map(([name, value]) => [
+    name,
+    /^(authorization|cookie|set-cookie)$/i.test(name) ? "[redacted]" : value,
+  ]));
+}
+
+function parseJsonBody(bodyText: string): { valid: true; value: unknown } | { valid: false; value: null } {
+  if (bodyText.trim().length === 0) return { valid: false, value: null };
   try {
-    const value: unknown = await response.json();
-    return isRecord(value) && typeof value.code === "string" && typeof value.message === "string"
-      ? { code: value.code, message: value.message }
-      : null;
+    return { valid: true, value: JSON.parse(bodyText) as unknown };
   } catch {
-    return null;
+    return { valid: false, value: null };
   }
+}
+
+function isDeviceApiError(value: unknown): value is DeviceApiError {
+  return isRecord(value) && typeof value.code === "string" && typeof value.message === "string";
+}
+
+function fallbackHttpErrorCode(status: number) {
+  if (status === 400) return "invalid_setup_request";
+  if (status === 401) return "invalid_device_key";
+  if (status === 403) return "device_disabled";
+  if (status === 409) return "device_session_conflict";
+  return "device_service_unavailable";
 }

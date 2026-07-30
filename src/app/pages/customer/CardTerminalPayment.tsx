@@ -8,6 +8,8 @@ import { getCustomerTranslation } from "../../i18n/customerTranslations";
 import { MockPaymentTerminalService } from "../../services/payment/MockPaymentTerminalService";
 import type { CardPaymentStatus } from "../../types/payment";
 import MorrowLogo from "../../components/branding/MorrowLogo";
+import { useBranch } from "../../context/BootstrapContext";
+import { useCurrentOrder, useOrderSubmission } from "../../context/OrderContext";
 
 setWasmUrl("/animations/dotlottie-player.wasm");
 
@@ -19,7 +21,15 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
     currentOrderId, currentOrderNumber,
   } = useCart();
   const { language, direction } = useLanguage();
+  const branch = useBranch();
+  const production = useCurrentOrder();
+  const submission = useOrderSubmission();
+  const authoritativeTotal = Number(production.order?.total ?? production.quote?.total ?? total);
   const copy = getCustomerTranslation(language).cardTerminal;
+  const currency = useMemo(() => new Intl.NumberFormat(LANGUAGE_CONFIG[language].locale, {
+    style: "currency",
+    currency: branch?.currency ?? "USD",
+  }), [branch?.currency, language]);
   const terminal = useMemo(() => new MockPaymentTerminalService(), []);
   const [status, setStatus] = useState<CardPaymentStatus>("waiting");
   const [animation, setAnimation] = useState<DotLottie | null>(null);
@@ -45,8 +55,8 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
     });
     void terminal.startPayment({
       orderId: currentOrderId || `pending-${Date.now()}`,
-      amount: total,
-      currency: "EUR",
+      amount: authoritativeTotal,
+      currency: branch?.currency ?? "USD",
       timeoutMs: 75_000,
       onStatusChange: nextStatus => {
         setStatus(nextStatus);
@@ -81,26 +91,33 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
           });
         }
       },
-    }).then(result => {
+    }).then(async result => {
       if (result.status !== "approved" || finalizedRef.current) return;
       finalizedRef.current = true;
-      const completedAt = new Date().toISOString();
-      transitionOrderLifecycle({
-        paymentStatus: "completed",
-        paymentMethod: "card",
-        orderStatus: "paid",
-        orderId: currentOrderId || undefined,
-        orderNumber: currentOrderNumber || undefined,
-        completedAt,
-        source: "card_terminal",
-        updatedAt: completedAt,
-      });
-      placeOrder();
-      navigationTimerRef.current = window.setTimeout(onApproved, 1_800);
+      try {
+        const paid = await submission.capturePayment("card_terminal", result.transactionId);
+        const submitted = await submission.submitOrder();
+        const completedAt = new Date().toISOString();
+        transitionOrderLifecycle({
+          paymentStatus: "completed",
+          paymentMethod: "card",
+          orderStatus: "submitted",
+          orderId: submitted.id,
+          orderNumber: submitted.orderNumber,
+          completedAt,
+          source: "card_terminal",
+          updatedAt: completedAt,
+        });
+        placeOrder({ id: submitted.id, number: submitted.orderNumber, total: Number(paid.total) });
+        navigationTimerRef.current = window.setTimeout(onApproved, 1_800);
+      } catch {
+        finalizedRef.current = false;
+        setStatus("terminal_unavailable");
+      }
     });
   }, [
     currentOrderId, currentOrderNumber, onApproved, placeOrder, setPaymentMethod,
-    statusLabels, terminal, total, transitionOrderLifecycle,
+    authoritativeTotal, branch?.currency, statusLabels, submission, terminal, transitionOrderLifecycle,
   ]);
 
   useEffect(() => {
@@ -142,7 +159,7 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[900px] flex-col px-5 py-6 sm:px-10 sm:py-10">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-3"><MorrowLogo variant="symbol" priority className="size-12 object-contain" /><p className="text-xs text-white/40">Secure terminal payment</p></div>
-          <p className="text-xl font-bold text-[#d7ff7a] sm:text-2xl">{new Intl.NumberFormat(LANGUAGE_CONFIG[language].locale, { style: "currency", currency: "EUR" }).format(total)}</p>
+          <p className="text-xl font-bold text-[#d7ff7a] sm:text-2xl">{currency.format(authoritativeTotal)}</p>
         </header>
 
         <section className="flex flex-1 flex-col items-center justify-center py-10 text-center">
@@ -160,7 +177,7 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
           <p className="mt-5 max-w-xl text-base leading-7 text-white/45 sm:text-xl">{copy.helper}</p>
 
           <div role="status" aria-live="polite" className={`mt-7 flex min-h-20 w-full max-w-2xl items-center justify-center gap-4 rounded-2xl border px-5 ${status === "approved" ? "border-[#d7ff7a]/30 bg-[#d7ff7a]/10 text-[#d7ff7a]" : canRetry ? "border-red-400/25 bg-red-500/10 text-red-300" : "border-white/10 bg-white/[.04]"}`}>
-            {statusIcon}<div className="text-start"><p className="text-lg font-bold">{statusLabels[status]}</p>{status === "approved" && <p className="text-sm opacity-70">{copy.paid}: {total.toFixed(2)} EUR</p>}{status === "declined" && <p className="max-w-md text-xs opacity-70">{copy.declinedHelp}</p>}{status === "timeout" && <p className="max-w-md text-xs opacity-70">{copy.timeoutHelp}</p>}</div>
+            {statusIcon}<div className="text-start"><p className="text-lg font-bold">{statusLabels[status]}</p>{status === "approved" && <p className="text-sm opacity-70">{copy.paid}: {currency.format(authoritativeTotal)}</p>}{status === "declined" && <p className="max-w-md text-xs opacity-70">{copy.declinedHelp}</p>}{status === "timeout" && <p className="max-w-md text-xs opacity-70">{copy.timeoutHelp}</p>}</div>
           </div>
         </section>
 
