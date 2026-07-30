@@ -1,5 +1,6 @@
 import type { SupportedLanguage } from "../config/languages";
 import type { OrderType } from "../context/CartContext";
+import type { DeviceBootstrap } from "../../shared/deviceBootstrap";
 
 export type DeviceStatus = "checking" | "unconfigured" | "connecting" | "configured" | "invalid_key" | "network_error" | "disabled" | "configuration_error";
 export type DevicePaymentMethod = "card" | "pay_at_cashier" | "qr";
@@ -26,6 +27,16 @@ export interface KioskDeviceConfig {
   locale: string;
   timezone: string;
   menuVersion?: string;
+  publishedMenuId: string;
+  configVersion: number;
+  theme: DeviceBootstrap["theme"];
+  logoUrl: string | null;
+  taxRate: number;
+  openingHours: DeviceBootstrap["openingHours"];
+  paymentConfiguration: DeviceBootstrap["paymentConfiguration"];
+  noriConfiguration: DeviceBootstrap["noriConfiguration"];
+  idleScreenConfiguration: DeviceBootstrap["idleScreenConfiguration"];
+  realtimeConfiguration: DeviceBootstrap["realtimeConfiguration"];
   settings: KioskSettings;
   configuredAt: string;
 }

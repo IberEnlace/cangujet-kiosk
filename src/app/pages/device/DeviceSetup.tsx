@@ -42,7 +42,7 @@ export default function DeviceSetup({ onConfigured, onDeviceInfo }: { onConfigur
           </form>
         </>}
       </section>
-      <footer className="flex flex-wrap justify-center gap-2 text-xs text-white/40">{config && <button onClick={onDeviceInfo} className="flex min-h-11 items-center gap-2 rounded-xl bg-white/5 px-4"><Info size={15}/>{text.info}</button>}<button onClick={() => { clearDeviceConfiguration(); setSecretKey(""); }} className="flex min-h-11 items-center gap-2 rounded-xl bg-white/5 px-4"><Trash2 size={15}/>{text.clear}</button></footer>
+      <footer className="flex flex-wrap justify-center gap-2 text-xs text-white/40">{config && <button onClick={onDeviceInfo} className="flex min-h-11 items-center gap-2 rounded-xl bg-white/5 px-4"><Info size={15}/>{text.info}</button>}<button onClick={() => { void clearDeviceConfiguration(); setSecretKey(""); }} className="flex min-h-11 items-center gap-2 rounded-xl bg-white/5 px-4"><Trash2 size={15}/>{text.clear}</button></footer>
     </div>
   </main>;
 }

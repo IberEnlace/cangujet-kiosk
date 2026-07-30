@@ -93,7 +93,10 @@ function Application() {
     clearCart(); setOrderStatus("idle"); resetOrderType(); resetLanguage(); resetConversation(); sessionStorage.removeItem("morrow:nori-entry-category"); sessionStorage.removeItem("morrow:nori-voice-responses"); setKioskSession(v => v + 1); navigateTo(ROUTES.idle);
   }, [clearCart, resetConversation, resetLanguage, resetOrderType, setOrderStatus]);
 
-  useKioskIdleReset({ timeoutMs: CUSTOMER_IDLE_TIMEOUT_MS, enabled: CUSTOMER_ROUTES.includes(route), onIdle: resetKiosk });
+  const kioskIdleTimeoutMs = device.config
+    ? device.config.idleScreenConfiguration.timeoutSeconds * 1000
+    : CUSTOMER_IDLE_TIMEOUT_MS;
+  useKioskIdleReset({ timeoutMs: kioskIdleTimeoutMs, enabled: CUSTOMER_ROUTES.includes(route), onIdle: resetKiosk });
 
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => { if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === "m") { event.preventDefault(); navigateTo(ROUTES.deviceSetup); } };
