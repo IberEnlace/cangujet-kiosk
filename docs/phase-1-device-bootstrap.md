@@ -9,6 +9,8 @@
 
 None of these values belong in a `VITE_` variable or a browser bundle.
 
+`npm run dev` loads the server values from `.env`, starts the API on port `8787`, and proxies the Vite `/api` path to that server. Production must route the same-origin `/api` path to the Express server; the device client intentionally uses relative API URLs so its HttpOnly refresh cookie remains same-origin.
+
 ## Provisioning
 
 Apply `supabase/migrations/202607300001_production_device_identity_bootstrap.sql`, then create a device credential from a trusted operator machine:
@@ -36,4 +38,4 @@ Disable a device by setting `devices.status` to `disabled`. Revoke one credentia
 
 Registration returns a short-lived access token and sets the refresh token as an HttpOnly, SameSite Strict cookie. The browser keeps the access token in session storage and caches only the public bootstrap in local storage.
 
-The kiosk reloads bootstrap on startup and polls it every 60 seconds. Configuration triggers increment the device `config_version`; a changed version replaces the active public configuration without changing the kiosk UI.
+The kiosk reloads bootstrap on startup and polls it every 60 seconds. Each device request times out after 12 seconds. Startup failures display retry and device-setup actions instead of leaving the loading screen active. Configuration triggers increment the device `config_version`; a changed version replaces the active public configuration without changing the kiosk UI.

@@ -53,7 +53,6 @@ const LOGIN_COPY: Record<StaffRole, { title: string; description: string }> = {
 };
 
 const CUSTOMER_ROUTES: AppRoute[] = [ROUTES.language, ROUTES.service, ROUTES.categories, ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice, ROUTES.kiosk, ROUTES.cart, ROUTES.payment, ROUTES.cardPayment, ROUTES.orderConfirmation, ROUTES.tracking];
-const PROTECTED_CUSTOMER_ROUTES: AppRoute[] = [ROUTES.idle, ...CUSTOMER_ROUTES];
 const ORDER_SESSION_ROUTES: AppRoute[] = [ROUTES.cart, ROUTES.payment, ROUTES.cardPayment, ROUTES.orderConfirmation, ROUTES.tracking];
 const NORI_ROUTES: AppRoute[] = [ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice];
 
@@ -118,9 +117,9 @@ function Application() {
   const staffPage = (role: StaffRole, child: ReactNode) => <StaffLayout role={role} onLoggedOut={() => navigateTo(getLoginRouteForRole(role))} onChangeMode={() => navigateTo(ROUTES.selectRole)}>{child}</StaffLayout>;
 
   useEffect(() => {
-    if (device.status === "checking") return;
-    if (!device.config && PROTECTED_CUSTOMER_ROUTES.includes(route)) navigateTo(ROUTES.deviceSetup);
-  }, [device.config, device.status, route]);
+    if (device.initializationStatus === "initializing" || device.initializationStatus === "error") return;
+    if (device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) navigateTo(ROUTES.deviceSetup);
+  }, [device.initializationStatus, route]);
   useEffect(() => {
     if (items.length > 0 || currentOrderId || !ORDER_SESSION_ROUTES.includes(route)) return;
     window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle);
@@ -131,9 +130,14 @@ function Application() {
     else if (route === ROUTES.noriVoice && device.config.settings.voiceAssistantEnabled === false) navigateTo(ROUTES.noriChat);
   }, [device.config, route]);
 
-  if (device.status === "checking") return <DeviceLoadingScreen />;
+  if (device.initializationStatus === "initializing") return <DeviceLoadingScreen />;
+  if (device.initializationStatus === "error") return <DeviceLoadingScreen
+    error={device.initializationError ?? "configuration_error"}
+    onRetry={device.retryInitialization}
+    onSetup={() => { void device.clearDeviceConfiguration(); navigateTo(ROUTES.deviceSetup); }}
+  />;
   if (auth.isLoading && (route.startsWith("/admin") || route.startsWith("/cashier") || route.startsWith("/kitchen"))) return <DeviceLoadingScreen />;
-  if (!device.config && PROTECTED_CUSTOMER_ROUTES.includes(route)) return <DeviceLoadingScreen />;
+  if (device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => { window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle); }} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
   if ([ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice].includes(route as "/nori" | "/nori/chat" | "/nori/voice") && !device.config?.settings.aiAssistantEnabled) return null;
   if (route === ROUTES.noriVoice && device.config?.settings.voiceAssistantEnabled === false) return null;
   if (guardedRoute !== route) return null;

@@ -44,7 +44,7 @@ test("device registration maps one bootstrap and never persists the raw key or a
   const publicCache = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY) ?? "";
   assert.doesNotMatch(publicCache, /mdk_public_secret|signed-access-token/);
   assert.equal(calls[0].url, "/api/v1/devices/register");
-  assert.equal(calls[0].init.credentials, "same-origin");
+  assert.equal(calls[0].init.credentials, "include");
 });
 
 test("startup restores a session through the HttpOnly refresh cookie and reloads bootstrap", async () => {
@@ -62,6 +62,7 @@ test("startup restores a session through the HttpOnly refresh cookie and reloads
     "/api/v1/device/bootstrap",
   ]);
   assert.equal(calls[1].init.headers && (calls[1].init.headers as Record<string, string>).authorization, "Bearer refreshed-token");
+  assert.equal(calls[0].init.credentials, "include");
 });
 
 test("an expired access token refreshes once before retrying bootstrap", async () => {
@@ -81,6 +82,87 @@ test("an expired access token refreshes once before retrying bootstrap", async (
     "/api/v1/devices/session/refresh",
     "/api/v1/device/bootstrap",
   ]);
+});
+
+test("no stored session performs one refresh attempt and returns setup required", async () => {
+  localStorage.setItem(DEVICE_CONFIG_STORAGE_KEY, JSON.stringify({ stale: true }));
+  const { fetcher, calls } = queuedFetch(
+    jsonResponse({ code: "invalid_device_session", message: "missing" }, 401),
+  );
+  const service = new SupabaseDeviceConfigurationService(fetcher);
+
+  assert.equal(await service.getSavedConfiguration(), null);
+  assert.deepEqual(calls.map(call => call.url), ["/api/v1/devices/session/refresh"]);
+  assert.equal(localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY), null);
+  assert.equal(sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY), null);
+});
+
+test("invalid stored session attempts refresh once and never loops bootstrap", async () => {
+  sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, "invalid-token");
+  const { fetcher, calls } = queuedFetch(
+    jsonResponse({ code: "invalid_device_session", message: "invalid" }, 401),
+    jsonResponse({ code: "invalid_device_session", message: "invalid" }, 401),
+  );
+  const service = new SupabaseDeviceConfigurationService(fetcher);
+
+  assert.equal(await service.getSavedConfiguration(), null);
+  assert.deepEqual(calls.map(call => call.url), [
+    "/api/v1/device/bootstrap",
+    "/api/v1/devices/session/refresh",
+  ]);
+});
+
+test("bootstrap network failure is explicit and does not attempt refresh", async () => {
+  sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, "stored-token");
+  let calls = 0;
+  const service = new SupabaseDeviceConfigurationService((async () => {
+    calls += 1;
+    throw new TypeError("offline");
+  }) as typeof fetch);
+
+  await assert.rejects(
+    service.getSavedConfiguration(),
+    (error: unknown) => error instanceof DeviceConfigurationError && error.code === "network_error",
+  );
+  assert.equal(calls, 1);
+});
+
+test("a stalled bootstrap aborts at the request timeout", async () => {
+  sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, "stored-token");
+  const fetcher = ((_: string | URL | Request, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+    init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+  })) as typeof fetch;
+  const service = new SupabaseDeviceConfigurationService(fetcher, 5);
+
+  await assert.rejects(
+    service.getSavedConfiguration(),
+    (error: unknown) => error instanceof DeviceConfigurationError && error.code === "timeout",
+  );
+});
+
+test("invalid bootstrap payload becomes a recoverable configuration error", async () => {
+  sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, "stored-token");
+  const service = new SupabaseDeviceConfigurationService(queuedFetch(jsonResponse({ invalid: true })).fetcher);
+
+  await assert.rejects(
+    service.getSavedConfiguration(),
+    (error: unknown) => error instanceof DeviceConfigurationError && error.code === "configuration_error",
+  );
+});
+
+test("retry after a network failure can complete without a refresh or bootstrap loop", async () => {
+  sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, "stored-token");
+  let calls = 0;
+  const fetcher = (async () => {
+    calls += 1;
+    if (calls === 1) throw new TypeError("offline");
+    return jsonResponse(bootstrap());
+  }) as typeof fetch;
+  const service = new SupabaseDeviceConfigurationService(fetcher);
+
+  await assert.rejects(service.getSavedConfiguration(), DeviceConfigurationError);
+  assert.equal((await service.getSavedConfiguration())?.deviceId, "device-1");
+  assert.equal(calls, 2);
 });
 
 test("registration surfaces safe device setup states", async () => {

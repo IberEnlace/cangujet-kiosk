@@ -2,7 +2,9 @@ import type { SupportedLanguage } from "../config/languages";
 import type { OrderType } from "../context/CartContext";
 import type { DeviceBootstrap } from "../../shared/deviceBootstrap";
 
-export type DeviceStatus = "checking" | "unconfigured" | "connecting" | "configured" | "invalid_key" | "network_error" | "disabled" | "configuration_error";
+export type DeviceStatus = "checking" | "unconfigured" | "connecting" | "configured" | "invalid_key" | "network_error" | "timeout" | "disabled" | "configuration_error";
+export type DeviceInitializationStatus = "initializing" | "authenticated" | "setup_required" | "error";
+export type DeviceErrorStatus = Exclude<DeviceStatus, "checking" | "unconfigured" | "connecting" | "configured">;
 export type DevicePaymentMethod = "card" | "pay_at_cashier" | "qr";
 
 export interface KioskSettings {
@@ -42,7 +44,7 @@ export interface KioskDeviceConfig {
 }
 
 export class DeviceConfigurationError extends Error {
-  constructor(public readonly code: Exclude<DeviceStatus, "checking" | "unconfigured" | "connecting" | "configured">) {
+  constructor(public readonly code: DeviceErrorStatus) {
     super(code);
     this.name = "DeviceConfigurationError";
   }

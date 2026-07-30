@@ -14,10 +14,12 @@ import {
 import {
   DEVICE_ACCESS_TOKEN_STORAGE_KEY,
   DEVICE_CONFIG_STORAGE_KEY,
+  type DeviceRequestOptions,
   type DeviceConfigurationService,
 } from "./DeviceConfigurationService";
 
 type Fetcher = typeof fetch;
+const DEFAULT_REQUEST_TIMEOUT_MS = 12_000;
 const PAYMENT_METHODS: DevicePaymentMethod[] = ["card", "pay_at_cashier", "qr"];
 const isRecord = (value: unknown): value is Record<string, unknown> => typeof value === "object" && value !== null;
 const hasStrings = (value: Record<string, unknown>, keys: string[]) =>
@@ -33,16 +35,20 @@ class DeviceHttpError extends Error {
 }
 
 export class SupabaseDeviceConfigurationService implements DeviceConfigurationService {
-  constructor(private readonly fetcher: Fetcher = fetch) {}
+  constructor(
+    private readonly fetcher: Fetcher = fetch,
+    private readonly requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+  ) {}
 
-  async configureDevice(secretKey: string): Promise<KioskDeviceConfig> {
+  async configureDevice(secretKey: string, options: DeviceRequestOptions = {}): Promise<KioskDeviceConfig> {
     try {
       const result = await this.request<DeviceRegistrationResponse>("/api/v1/devices/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        credentials: "same-origin",
+        credentials: "include",
         body: JSON.stringify({ secretKey }),
-      });
+        signal: options.signal,
+      }, true);
       this.saveAccessToken(result.accessToken);
       const config = this.mapBootstrap(result.bootstrap, new Date().toISOString());
       this.savePublicConfiguration(config);
@@ -52,26 +58,30 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
     }
   }
 
-  async getSavedConfiguration(): Promise<KioskDeviceConfig | null> {
+  async getSavedConfiguration(options: DeviceRequestOptions = {}): Promise<KioskDeviceConfig | null> {
     const cached = this.readPublicConfiguration();
+    diagnostic("restored_session", {
+      accessTokenFound: Boolean(sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY)),
+      publicCacheFound: Boolean(cached),
+    });
     try {
       let accessToken = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
-      if (!accessToken) accessToken = await this.refreshAccessToken();
+      if (!accessToken) accessToken = await this.refreshAccessToken(options.signal);
       if (!accessToken) {
         this.clearLocalConfiguration();
         return null;
       }
       let bootstrap: DeviceBootstrap;
       try {
-        bootstrap = await this.loadBootstrap(accessToken);
+        bootstrap = await this.loadBootstrap(accessToken, options.signal);
       } catch (error) {
         if (!(error instanceof DeviceHttpError) || error.status !== 401) throw error;
-        accessToken = await this.refreshAccessToken();
+        accessToken = await this.refreshAccessToken(options.signal);
         if (!accessToken) {
           this.clearLocalConfiguration();
           return null;
         }
-        bootstrap = await this.loadBootstrap(accessToken);
+        bootstrap = await this.loadBootstrap(accessToken, options.signal);
       }
       const config = this.mapBootstrap(bootstrap, cached?.configuredAt ?? new Date().toISOString());
       this.savePublicConfiguration(config);
@@ -81,15 +91,16 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
     }
   }
 
-  async clearConfiguration() {
+  async clearConfiguration(options: DeviceRequestOptions = {}) {
     const accessToken = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
     try {
       if (accessToken) {
-        await this.fetcher("/api/v1/devices/session", {
+        await this.request<void>("/api/v1/devices/session", {
           method: "DELETE",
           headers: { authorization: `Bearer ${accessToken}` },
-          credentials: "same-origin",
-        });
+          credentials: "include",
+          signal: options.signal,
+        }, false);
       }
     } catch {
       // Local setup must still be cleared when the server is unreachable.
@@ -128,19 +139,23 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       && isRecord(value.realtimeConfiguration);
   }
 
-  private async loadBootstrap(accessToken: string) {
+  private async loadBootstrap(accessToken: string, signal?: AbortSignal) {
+    diagnostic("bootstrap_request_started");
     return this.request<DeviceBootstrap>("/api/v1/device/bootstrap", {
       headers: { authorization: `Bearer ${accessToken}` },
-      credentials: "same-origin",
-    });
+      credentials: "include",
+      signal,
+    }, true);
   }
 
-  private async refreshAccessToken() {
+  private async refreshAccessToken(signal?: AbortSignal) {
+    diagnostic("refresh_attempted");
     try {
       const result = await this.request<DeviceAccessTokenResponse>("/api/v1/devices/session/refresh", {
         method: "POST",
-        credentials: "same-origin",
-      });
+        credentials: "include",
+        signal,
+      }, true);
       this.saveAccessToken(result.accessToken);
       return result.accessToken;
     } catch (error) {
@@ -222,18 +237,34 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
     localStorage.removeItem(DEVICE_CONFIG_STORAGE_KEY);
   }
 
-  private async request<T>(url: string, init: RequestInit): Promise<T> {
-    let response: Response;
+  private async request<T>(url: string, init: RequestInit, expectsJson: boolean): Promise<T> {
+    const controller = new AbortController();
+    let timedOut = false;
+    const abortFromCaller = () => controller.abort();
+    if (init.signal?.aborted) controller.abort();
+    else init.signal?.addEventListener("abort", abortFromCaller, { once: true });
+    const timeout = globalThis.setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, this.requestTimeoutMs);
     try {
-      response = await this.fetcher(url, init);
-    } catch {
+      const response = await this.fetcher(url, { ...init, signal: controller.signal });
+      diagnostic("api_response", { path: url, status: response.status });
+      if (!response.ok) {
+        const body = await readErrorBody(response);
+        throw new DeviceHttpError(response.status, body?.code ?? "device_service_unavailable");
+      }
+      if (!expectsJson) return undefined as T;
+      return await response.json() as T;
+    } catch (error) {
+      if (error instanceof DeviceHttpError || error instanceof DeviceConfigurationError) throw error;
+      if (timedOut) throw new DeviceConfigurationError("timeout");
+      if (init.signal?.aborted) throw error;
       throw new DeviceConfigurationError("network_error");
+    } finally {
+      globalThis.clearTimeout(timeout);
+      init.signal?.removeEventListener("abort", abortFromCaller);
     }
-    if (!response.ok) {
-      const body = await readErrorBody(response);
-      throw new DeviceHttpError(response.status, body?.code ?? "device_service_unavailable");
-    }
-    return response.json() as Promise<T>;
   }
 
   private toConfigurationError(error: unknown) {
@@ -248,6 +279,10 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       ? new DeviceConfigurationError("network_error")
       : new DeviceConfigurationError("configuration_error");
   }
+}
+
+function diagnostic(event: string, details: Record<string, unknown> = {}) {
+  if (import.meta.env?.DEV) console.info("[MORROW device]", { event, ...details });
 }
 
 async function readErrorBody(response: Response): Promise<DeviceApiError | null> {
