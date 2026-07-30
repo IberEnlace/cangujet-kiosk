@@ -2,11 +2,28 @@ export type Json = string | number | boolean | null | { [key: string]: Json | un
 export type StaffRole = "admin" | "cashier" | "kitchen";
 export type ProfileRow = { id: string; full_name: string; role: StaffRole; branch_id: string | null; is_active: boolean; created_at: string; updated_at: string };
 type Table<Row, Insert = Partial<Row>, Update = Partial<Row>> = { Row: Row; Insert: Insert; Update: Update; Relationships: [] };
+export type RestaurantRow = { id: string; name: string; slug: string; logo_url: string | null; status: "active" | "disabled"; created_at: string; updated_at: string };
+export type StaffMembershipRow = { id: string; user_id: string; restaurant_id: string; branch_id: string | null; role: StaffRole; is_active: boolean; created_at: string; updated_at: string };
+export type LanguageRow = { code: string; name: string; native_name: string; locale: string; direction: "ltr" | "rtl"; is_active: boolean };
+export type RestaurantLanguageRow = { restaurant_id: string; language_code: string; is_default: boolean; display_order: number };
+export type ThemeRow = { id: string; restaurant_id: string; name: string; tokens: Json; is_active: boolean; created_at: string; updated_at: string };
 export type CategoryRow = { id: string; name: string; slug: string; description: string | null; image_url: string | null; icon: string; display_order: number; is_active: boolean; created_at: string; updated_at: string };
 export type ProductRow = { id: string; category_id: string; name: string; slug: string; description: string | null; price: number; currency: string; image_url: string | null; display_order: number; calories: number | null; protein: number | null; carbohydrates: number | null; fat: number | null; fiber: number | null; sugars: number | null; sodium: number | null; ingredients: Json; allergens: string[]; dietary_tags: string[]; recommendation_score: number; is_available: boolean; is_active: boolean; metadata: Json; created_at: string; updated_at: string };
 export type CustomizationGroupRow = { id: string; product_id: string; source_id: string; name: string; minimum_selections: number; maximum_selections: number; required: boolean; display_order: number };
 export type CustomizationOptionRow = { id: string; group_id: string; source_id: string; name: string; price_delta: number; is_available: boolean; display_order: number; metadata: Json };
-export type BranchRow = { id: string; name: string; code: string; address: string | null; currency: string; timezone: string; tax_rate: number; is_active: boolean; created_at: string; updated_at: string };
+export type BranchRow = { id: string; restaurant_id: string; name: string; code: string; address: string | null; currency: string; timezone: string; tax_rate: number; service_modes: string[]; allow_unpaid_kitchen_orders: boolean; is_active: boolean; created_at: string; updated_at: string };
+export type BranchOpeningHoursRow = { id: string; branch_id: string; day_of_week: number; sequence: number; opens_at: string | null; closes_at: string | null; is_closed: boolean; created_at: string; updated_at: string };
+export type PaymentConfigurationRow = { branch_id: string; enabled_methods: string[]; receipt_printing_enabled: boolean; provider_public_config: Json; created_at: string; updated_at: string };
+export type NoriConfigurationRow = { branch_id: string; enabled: boolean; voice_enabled: boolean; voice_settings: Json; public_options: Json; created_at: string; updated_at: string };
+export type IdleScreenConfigurationRow = { branch_id: string; timeout_seconds: number; video_interval_ms: number; minimum_playback_ms: number; transition_ms: number; title: string; slogan: string; description: string; button_label: string; touch_label: string; videos: Json; created_at: string; updated_at: string };
+export type MenuRow = { id: string; restaurant_id: string; name: string; status: "draft" | "published" | "archived"; version: number; published_at: string | null; created_at: string; updated_at: string };
+export type MenuBranchRow = { menu_id: string; branch_id: string; is_active: boolean; assigned_at: string };
+export type DeviceType = "kiosk" | "cashier_terminal" | "kitchen_display" | "order_display" | "admin_terminal";
+export type DeviceStatus = "pending" | "active" | "disabled" | "retired";
+export type DeviceRow = { id: string; restaurant_id: string; branch_id: string; device_type: DeviceType; name: string; status: DeviceStatus; config_version: number; last_seen_at: string | null; created_at: string; updated_at: string };
+export type DeviceCredentialRow = { id: string; device_id: string; public_key_id: string; secret_hash: string; expires_at: string | null; last_used_at: string | null; revoked_at: string | null; created_at: string; updated_at: string };
+export type DeviceSessionRow = { id: string; device_id: string; credential_id: string; access_token_hash: string; refresh_token_hash: string | null; expires_at: string; refresh_expires_at: string | null; last_seen_at: string; revoked_at: string | null; created_at: string };
+export type DeviceAuditEventRow = { id: number; device_id: string | null; credential_id: string | null; event_type: string; metadata: Json; occurred_at: string };
 export type DbOrderStatus = Database["public"]["Enums"]["order_status"];
 export type DbPaymentStatus = Database["public"]["Enums"]["payment_status"];
 export type OrderRow = { id: string; branch_id: string; order_number: string; order_type: "dine_in" | "takeaway"; status: DbOrderStatus; payment_status: DbPaymentStatus; subtotal: number; tax: number; total: number; currency: string; customer_note: string | null; source: "kiosk" | "cashier" | "nori"; created_by: string | null; created_at: string; updated_at: string; confirmed_at: string | null; preparing_at: string | null; ready_at: string | null; completed_at: string | null; cancelled_at: string | null; idempotency_key: string | null };
@@ -23,6 +40,11 @@ export type CreateOrderRow = { order_id: string; order_number: string; subtotal:
 export interface Database {
   public: {
     Tables: {
+      restaurants: Table<RestaurantRow>;
+      staff_memberships: Table<StaffMembershipRow>;
+      languages: Table<LanguageRow>;
+      restaurant_languages: Table<RestaurantLanguageRow>;
+      themes: Table<ThemeRow>;
       profiles: {
         Row: ProfileRow;
         Insert: Omit<ProfileRow, "created_at" | "updated_at"> & { created_at?: string; updated_at?: string };
@@ -30,6 +52,16 @@ export interface Database {
         Relationships: [];
       };
       branches: Table<BranchRow>;
+      branch_opening_hours: Table<BranchOpeningHoursRow>;
+      payment_configurations: Table<PaymentConfigurationRow>;
+      nori_configurations: Table<NoriConfigurationRow>;
+      idle_screen_configurations: Table<IdleScreenConfigurationRow>;
+      menus: Table<MenuRow>;
+      menu_branches: Table<MenuBranchRow>;
+      devices: Table<DeviceRow>;
+      device_credentials: Table<DeviceCredentialRow>;
+      device_sessions: Table<DeviceSessionRow>;
+      device_audit_events: Table<DeviceAuditEventRow>;
       categories: Table<CategoryRow>;
       products: Table<ProductRow>;
       product_customization_groups: Table<CustomizationGroupRow>;
@@ -49,6 +81,8 @@ export interface Database {
       current_user_role: { Args: Record<string, never>; Returns: StaffRole | null };
       current_user_branch_id: { Args: Record<string, never>; Returns: string | null };
       is_admin: { Args: Record<string, never>; Returns: boolean };
+      is_restaurant_member: { Args: { p_restaurant_id: string }; Returns: boolean };
+      is_restaurant_admin: { Args: { p_restaurant_id: string }; Returns: boolean };
       resolve_active_branch: { Args: { p_code: string }; Returns: Pick<BranchRow, "id" | "name" | "code" | "currency" | "timezone" | "tax_rate">[] };
       create_order: { Args: CreateOrderArgs; Returns: CreateOrderRow[] };
       transition_order_status: { Args: { p_order_id: string; p_next_status: DbOrderStatus; p_reason?: string | null }; Returns: { order_id: string; previous_status: DbOrderStatus; new_status: DbOrderStatus; changed_at: string }[] };
@@ -61,6 +95,9 @@ export interface Database {
       payment_status: "unpaid" | "pending" | "paid" | "failed" | "refunded";
       order_source: "kiosk" | "cashier" | "nori";
       nori_message_role: "user" | "assistant" | "system" | "tool";
+      device_type: DeviceType;
+      device_status: DeviceStatus;
+      menu_status: "draft" | "published" | "archived";
     };
     CompositeTypes: Record<string, never>;
   };

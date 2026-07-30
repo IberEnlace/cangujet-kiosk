@@ -15,7 +15,8 @@
     "test:agent": "tsx --test src/server/services/*.test.ts src/app/services/*.test.ts src/app/services/supabase/*.test.ts",
     "supabase:seed-menu": "node scripts/supabase-menu.mjs seed",
     "supabase:repair-menu-images": "node scripts/supabase-menu.mjs repair-images",
-    "supabase:verify-menu": "node scripts/supabase-menu.mjs verify"
+    "supabase:verify-menu": "node scripts/supabase-menu.mjs verify",
+    "devices:provision": "node --env-file=.env --import tsx scripts/provision-device.ts"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",

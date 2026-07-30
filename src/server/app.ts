@@ -1,11 +1,13 @@
 import express, { type NextFunction, type Request, type Response } from "express";
 import { noriRouter } from "./routes/noriRoutes";
 import { menuRouter } from "./routes/menuRoutes";
+import { deviceRouter } from "./routes/deviceRoutes";
 import type { NoriChatError } from "./types/noriChat";
 
 export const serverApp = express();
 serverApp.disable("x-powered-by");
 serverApp.use(express.json({ limit: "7mb" }));
+serverApp.use("/api/v1", deviceRouter);
 serverApp.use("/api/nori", noriRouter);
 serverApp.use("/api", menuRouter);
 serverApp.get("/api/health", (_request, response) => response.json({ status: "ok" }));
