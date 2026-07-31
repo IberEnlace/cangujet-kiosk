@@ -10,6 +10,7 @@ import type {
 } from "../../shared/orders";
 import {
   createSupabaseOrderRepositoryFromEnvironment,
+  type OrderActor,
   OrderRepositoryOperationError,
 } from "../repositories/orderRepository";
 import {
@@ -26,15 +27,48 @@ export function createOrderRouter(
   const resolve = () => service ??= serviceFactory();
 
   router.post("/orders/quote", asyncRoute(async (request, response, requestId) => {
-    const actor = await resolve().authenticate(readBearerToken(request));
-    diagnostic("order_quote_requested", requestId, actor);
-    response.json(await resolve().quote(actor, request.body as OrderQuoteRequest));
+    let actor: OrderActor | undefined;
+    try {
+      actor = await resolve().authenticate(readBearerToken(request));
+      const workflowAttemptId = sanitizeHeader(request.header("x-workflow-attempt-id"));
+      diagnostic("order_quote_requested", requestId, actor, undefined, "ok", { workflowAttemptId });
+      const result = await resolve().quote(actor, request.body as OrderQuoteRequest);
+      response.json(result);
+    } catch (error) {
+      if (error instanceof OrderDomainFailure) throw error;
+      throw new OrderDomainFailure(
+        "order_quote_failed",
+        500,
+        "The order service could not calculate the order quote.",
+        undefined,
+        undefined,
+        process.env.NODE_ENV !== "production"
+          ? { details: String(error instanceof Error ? error.stack || error.message : error) }
+          : undefined,
+        error,
+      );
+    }
   }));
 
   router.post("/orders", asyncRoute(async (request, response, requestId) => {
+    console.info("[SERVER ROUTE ENTRY POST /orders]", { idempotencyKey: (request.body as any)?.idempotencyKey, path: request.originalUrl });
     const actor = await resolve().authenticate(readBearerToken(request));
-    const result = await resolve().create(actor, request.body as OrderCreateRequest);
-    diagnostic(result.duplicate ? "duplicate_idempotent_request" : "order_created", requestId, actor, result.order.id);
+    const workflowAttemptId = sanitizeHeader(request.header("x-workflow-attempt-id"));
+    const body = request.body as OrderCreateRequest;
+    const result = await resolve().create(actor, body);
+    diagnostic(
+      result.duplicate ? "duplicate_idempotent_request" : "order_created",
+      requestId,
+      actor,
+      result.order.id,
+      "ok",
+      {
+        workflowAttemptId,
+        operation: "create_order",
+        idempotencyKey: body.idempotencyKey,
+        reusedKey: result.duplicate,
+      },
+    );
     response.status(result.duplicate ? 200 : 201).json(result.order);
   }));
 
@@ -73,18 +107,54 @@ export function createOrderRouter(
   router.post("/orders/:orderId/payments", asyncRoute(async (request, response, requestId) => {
     const actor = await resolve().authenticate(readBearerToken(request));
     const orderId = routeParam(request.params.orderId);
-    diagnostic("payment_initiated", requestId, actor, orderId);
-    const result = await resolve().pay(actor, orderId, request.body as OrderPaymentRequest);
-    diagnostic(result.duplicate ? "duplicate_idempotent_request" : result.paymentStatus === "captured" ? "payment_captured" : "payment_initiated", requestId, actor, result.order.id);
-    response.status(result.duplicate ? 200 : 201).json(result);
+    const body = request.body as OrderPaymentRequest;
+    diagnostic("payment_capture_requested", requestId, actor, orderId);
+    try {
+      const result = await resolve().pay(actor, orderId, body);
+      if (body.method !== "pay_at_cashier" && (result.paymentStatus !== "captured" || result.order.status !== "paid")) {
+        throw new OrderDomainFailure("payment_failed", 422, "Payment capture could not be confirmed.");
+      }
+      if (result.order.status === "paid") {
+        diagnostic("order_paid", requestId, actor, result.order.id);
+      }
+      diagnostic(
+        result.duplicate ? "duplicate_idempotent_request" : "payment_captured",
+        requestId,
+        actor,
+        result.order.id,
+      );
+      response.status(result.duplicate ? 200 : 201).json(result);
+    } catch (error) {
+      diagnostic(
+        "payment_capture_failed",
+        requestId,
+        actor,
+        orderId,
+        error instanceof OrderDomainFailure ? error.code : "server_error",
+      );
+      throw error;
+    }
   }));
 
   router.post("/orders/:orderId/submit", asyncRoute(async (request, response, requestId) => {
     const actor = await resolve().authenticate(readBearerToken(request));
+    const orderId = routeParam(request.params.orderId);
     const expectedVersion = integer(request.body?.expectedVersion);
-    const order = await resolve().submit(actor, routeParam(request.params.orderId), expectedVersion);
-    diagnostic("order_submitted", requestId, actor, order.id);
-    response.json(order);
+    diagnostic("order_submit_requested", requestId, actor, orderId);
+    try {
+      const order = await resolve().submit(actor, orderId, expectedVersion);
+      diagnostic("order_submitted", requestId, actor, order.id);
+      response.json(order);
+    } catch (error) {
+      diagnostic(
+        "order_submit_failed",
+        requestId,
+        actor,
+        orderId,
+        error instanceof OrderDomainFailure ? error.code : "server_error",
+      );
+      throw error;
+    }
   }));
 
   router.post("/orders/:orderId/status", asyncRoute(async (request, response, requestId) => {
@@ -148,7 +218,23 @@ function asyncRoute(
         const actor = safeActor(request);
         diagnostic("transition_rejected", requestId, actor, routeParam(request.params.orderId), failure.code);
       }
-      response.status(failure.status).json(failure.toJSON(requestId));
+      // Guard against writing to a socket that was already closed (e.g., Vite
+      // proxy ECONNRESET). Without this check, calling response.json() on a
+      // finished socket throws, which would become an unhandled rejection and
+      // crash or silently swallow the error in Node.js.
+      if (!response.headersSent) {
+        try {
+          const body = failure.toJSON(requestId) as OrderApiError;
+          // Promote existingOrderId from details so the client can read it
+          // without having to parse the opaque `details` field.
+          const existingOrderId = typeof failure.details?.existingOrderId === "string"
+            ? failure.details.existingOrderId
+            : undefined;
+          response.status(failure.status).json({ ...body, ...(existingOrderId ? { existingOrderId } : {}) });
+        } catch (sendError) {
+          console.error("[MORROW order] Failed to send error response after socket closed", { requestId, sendError });
+        }
+      }
     }
   };
 }
@@ -175,12 +261,20 @@ function routeParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] ?? "" : value ?? "";
 }
 
+/** Returns a safe, log-friendly copy of a request header or undefined. */
+function sanitizeHeader(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  // Allow UUIDs, alphanumeric, hyphens, underscores — reject anything else.
+  return /^[A-Za-z0-9_-]{1,128}$/.test(value) ? value : undefined;
+}
+
 function diagnostic(
   event: string,
   requestId: string,
   actor: { actorType: string; actorId: string; restaurantId: string; branchId: string; deviceId: string | null },
   orderId?: string,
   resultCode = "ok",
+  extra?: Record<string, unknown>,
 ) {
   console.info("[MORROW order]", {
     event,
@@ -192,6 +286,7 @@ function diagnostic(
     actorType: actor.actorType,
     actorId: actor.actorId,
     resultCode,
+    ...extra,
   });
 }
 
@@ -203,17 +298,25 @@ function logInternalOrderError(
   requestId: string,
   request: Request,
   failure: OrderDomainFailure,
+  actor?: { actorType: string; actorId: string; restaurantId: string; branchId: string; deviceId: string | null },
 ) {
   const chain = errorChain(failure);
   const repositoryError = chain.find(
     (value): value is OrderRepositoryOperationError => value instanceof OrderRepositoryOperationError,
   );
   const raw = repositoryError?.supabaseError ?? errorRecord(chain[chain.length - 1]);
-  const diagnostic = {
+  const diagnosticData = {
     event: "internal_order_error",
     requestId,
+    restaurantId: actor?.restaurantId ?? "unknown",
+    branchId: actor?.branchId ?? "unknown",
+    deviceId: actor?.deviceId ?? null,
+    actorType: actor?.actorType ?? "unknown",
+    actorId: actor?.actorId ?? "unknown",
     method: request.method,
     path: request.originalUrl || request.url,
+    errorName: failure.name,
+    errorMessage: failure.message,
     stack: chain.map(value => value instanceof Error ? value.stack ?? null : null),
     exceptionChain: chain.map(value => ({
       constructor: value && typeof value === "object" ? value.constructor?.name ?? null : typeof value,
@@ -233,7 +336,7 @@ function logInternalOrderError(
     operation: repositoryError?.operation ?? null,
     failingQuery: repositoryError?.query ?? null,
   };
-  console.error("[MORROW order internal error]", diagnostic, chain[chain.length - 1]);
+  console.error("[MORROW order internal error]", diagnosticData, chain[chain.length - 1]);
 }
 
 function errorChain(error: unknown) {

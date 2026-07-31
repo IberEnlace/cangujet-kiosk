@@ -44,6 +44,26 @@ test("valid required modifier selections reach the quote endpoint and return 200
   assert.deepEqual(received, request);
 });
 
+test("quote endpoint returns structured JSON error on unexpected internal failure", async () => {
+  const fake = service({
+    quote: async () => {
+      throw new Error("Unexpected calculation failure in quote");
+    },
+  });
+  await withApi(fake, async base => {
+    const response = await fetch(`${base}/api/v1/orders/quote`, {
+      method: "POST",
+      headers: { authorization: "Bearer valid", "content-type": "application/json" },
+      body: JSON.stringify({ items: [], serviceMode: "dine_in", language: "en" }),
+    });
+    assert.equal(response.status, 500);
+    const body = await response.json() as Record<string, unknown>;
+    assert.equal(body.code, "order_quote_failed");
+    assert.equal(typeof body.message, "string");
+    assert.equal(typeof body.requestId, "string");
+  });
+});
+
 test("internal order errors keep the client response safe and log complete database diagnostics", async () => {
   const originalError = console.error;
   const logs: unknown[][] = [];

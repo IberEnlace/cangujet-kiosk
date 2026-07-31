@@ -100,6 +100,7 @@ export interface OrderRepository {
     nextStatus: ProductionOrderStatus;
     reason: string | null;
   }): Promise<ProductionOrder>;
+  findExistingOrderForIdempotency?(actor: OrderActor, source: string, idempotencyKey: string): Promise<{ request_fingerprint: string } | null>;
 }
 
 type RpcRow = Record<string, unknown>;
@@ -124,6 +125,21 @@ export class OrderRepositoryOperationError extends Error {
   ) {
     super(supabaseError.message || fallback);
     this.name = "OrderRepositoryOperationError";
+  }
+}
+
+/**
+ * Thrown when the same idempotency key was already used with a *different*
+ * request payload fingerprint. The `existingOrderId` is the order that owns
+ * the key (may be null if the RPC did not return it).
+ */
+export class IdempotencyConflictError extends Error {
+  constructor(
+    public readonly existingOrderId: string | null,
+    public readonly conflictReason: "fingerprint_mismatch" | "key_reuse",
+  ) {
+    super("idempotency_conflict");
+    this.name = "IdempotencyConflictError";
   }
 }
 
@@ -222,7 +238,30 @@ export class SupabaseOrderRepository implements OrderRepository {
     };
   }
 
+  async findExistingOrderForIdempotency(actor: OrderActor, source: string, idempotencyKey: string) {
+    try {
+      const res = await (this.client as any)
+        .from("orders")
+        .select("request_fingerprint")
+        .eq("restaurant_id", actor.restaurantId)
+        .eq("branch_id", actor.branchId)
+        .eq("source", source)
+        .eq("idempotency_key", idempotencyKey)
+        .maybeSingle();
+      return res.data ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   async createOrder(input: PersistOrderInput) {
+    console.info("order_create_rpc_request", {
+      idempotencyKey: input.idempotencyKey,
+      restaurantId: input.actor.restaurantId,
+      branchId: input.actor.branchId,
+      deviceId: input.actor.deviceId,
+      requestFingerprint: input.requestFingerprint,
+    });
     const result = await (this.client as any).rpc("create_production_order", {
       p_restaurant_id: input.actor.restaurantId,
       p_branch_id: input.actor.branchId,
@@ -238,6 +277,13 @@ export class SupabaseOrderRepository implements OrderRepository {
       p_menu_id: input.quote.menuId,
       p_menu_version: input.quote.menuVersion,
       p_quote: input.quote,
+    });
+    console.info("order_create_rpc_result", {
+      data: result.data,
+      errorCode: result.error?.code,
+      errorMessage: result.error?.message,
+      errorDetails: result.error?.details,
+      errorHint: result.error?.hint,
     });
     return parseRpcEnvelope(result, "Order could not be created.", "create_production_order");
   }
@@ -338,6 +384,13 @@ function parseRpcEnvelope(
 ): any {
   const value = firstRpcValue(result, fallback, rpcName);
   if (!value || typeof value !== "object") throw new Error(fallback);
+  const envelope = value as Record<string, unknown>;
+  // Some RPC implementations signal idempotency conflicts via an envelope
+  // status field rather than a PostgreSQL RAISE EXCEPTION.
+  if (envelope.status === "idempotency_conflict") {
+    const existingId = typeof envelope.existing_order_id === "string" ? envelope.existing_order_id : null;
+    throw new IdempotencyConflictError(existingId, "fingerprint_mismatch");
+  }
   return value;
 }
 

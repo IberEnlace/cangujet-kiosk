@@ -17,6 +17,7 @@ import type {
   OrderRepository,
   PricingModifier,
 } from "../repositories/orderRepository";
+import { IdempotencyConflictError } from "../repositories/orderRepository";
 import type { DeviceIdentityApplication } from "./deviceIdentityService";
 
 const MAX_LINES = 50;
@@ -97,10 +98,32 @@ export class OrderDomainService {
 
   async create(actor: OrderActor, request: OrderCreateRequest) {
     assertIdempotencyKey(request.idempotencyKey);
-    const quote = await this.quote(actor, request);
     const source = actor.role === "cashier" ? "cashier" : request.source === "nori" ? "nori" : "kiosk";
+    const fingerprint = fingerprintOrderCreatePayload(request, source);
+    let existingFingerprint: string | null = null;
+    try {
+      const existing = await this.repository.findExistingOrderForIdempotency?.(actor, source, request.idempotencyKey);
+      if (existing) existingFingerprint = existing.request_fingerprint;
+    } catch {
+      // Ignore lookup failure for logging
+    }
+
+    console.info("order_create_idempotency_debug", {
+      idempotencyKey: request.idempotencyKey,
+      normalizedPayload: {
+        source,
+        serviceMode: request.serviceMode,
+        language: request.language,
+        notes: request.notes ?? null,
+        items: request.items,
+      },
+      requestFingerprint: fingerprint,
+      existingFingerprint,
+    });
+
+    const quote = await this.quote(actor, request);
     if (actor.role === "kitchen") throw new OrderDomainFailure("unauthorized", 403, "Kitchen users cannot create orders.");
-    const fingerprint = fingerprintRequest({ ...request, source });
+
     try {
       return await this.repository.createOrder({
         actor,
@@ -132,10 +155,12 @@ export class OrderDomainService {
   }
 
   async active(actor: OrderActor, audience: "kitchen" | "cashier") {
-    if (audience === "kitchen" && !["kitchen", "admin"].includes(actor.role)) {
+    const isKitchenAuthorized = ["kitchen", "admin"].includes(actor.role) || (actor.role === "device" && actor.deviceType === "kitchen_display");
+    if (audience === "kitchen" && !isKitchenAuthorized) {
       throw new OrderDomainFailure("unauthorized", 403, "Kitchen access is required.");
     }
-    if (audience === "cashier" && !["cashier", "admin"].includes(actor.role)) {
+    const isCashierAuthorized = ["cashier", "admin"].includes(actor.role) || (actor.role === "device" && actor.deviceType === "cashier_terminal");
+    if (audience === "cashier" && !isCashierAuthorized) {
       throw new OrderDomainFailure("unauthorized", 403, "Cashier access is required.");
     }
     return this.repository.listActiveOrders(actor, audience);
@@ -183,7 +208,32 @@ export class OrderDomainService {
   }
 
   async submit(actor: OrderActor, orderId: string, expectedVersion: number) {
-    return this.transition(actor, orderId, "submitted", expectedVersion, null);
+    const order = await this.get(actor, orderId);
+    if (order.status === "submitted") {
+      return order;
+    }
+    if (order.status !== "paid") {
+      throw new OrderDomainFailure("invalid_order_transition", 409, `Order cannot move from ${order.status} to submitted.`);
+    }
+    if (order.version !== expectedVersion) {
+      throw new OrderDomainFailure("order_conflict", 409, "The order changed elsewhere. Refresh and try again.");
+    }
+    enforceTransitionRole(actor, order, "submitted");
+    try {
+      const result = await this.repository.transitionOrder({
+        actor,
+        orderId,
+        expectedVersion,
+        nextStatus: "submitted",
+        reason: null,
+      });
+      if (!result || result.status !== "submitted") {
+        throw new OrderDomainFailure("server_error", 500, "Submitted order status could not be verified.");
+      }
+      return result;
+    } catch (error) {
+      throw mapRepositoryFailure(error);
+    }
   }
 
   async transition(
@@ -233,8 +283,17 @@ export function calculateQuote(request: OrderQuoteRequest, context: OrderPricing
   let taxMinor = 0;
   const taxRate = decimalRate(context.taxRate);
   const items = request.items.map((item, itemIndex) => {
-    const product = productById.get(item.productId)!;
-    const selected = item.modifierIds.map(id => modifierById.get(id)!);
+    const product = productById.get(item.productId);
+    if (!product) {
+      throw new OrderDomainFailure("product_unavailable", 422, "This product is no longer available.", itemIndex, item?.productId);
+    }
+    const selected = item.modifierIds.map(id => {
+      const modifier = modifierById.get(id);
+      if (!modifier) {
+        throw new OrderDomainFailure("modifier_unavailable", 422, "A selected modifier is unavailable.", itemIndex, product.id);
+      }
+      return modifier;
+    });
     validateSelections(itemIndex, product.id, selected, groupsByProduct.get(product.id) ?? [], modifiersByGroup);
     const unitMinor = moneyToMinor(product.price);
     const modifierUnitMinor = selected.reduce((sum, value) => sum + moneyToMinor(value.price), 0);
@@ -254,7 +313,7 @@ export function calculateQuote(request: OrderQuoteRequest, context: OrderPricing
       taxRate: normalizeRate(context.taxRate),
       notes: normalizedOptionalText(item.notes, 300),
       sortOrder: itemIndex,
-      allergens: product.allergens,
+      allergens: product.allergens ?? [],
       modifiers: selected.map(modifier => ({
         modifierGroupId: modifier.groupId,
         modifierId: modifier.id,
@@ -375,43 +434,82 @@ function assertIdempotencyKey(value: string) {
   }
 }
 
-function fingerprintRequest(value: unknown) {
+export function fingerprintOrderCreatePayload(request: OrderCreateRequest, source: string) {
+  const normalizedPayload = {
+    source,
+    serviceMode: request.serviceMode,
+    language: request.language,
+    notes: normalizedOptionalText(request.notes, 500),
+    items: (request.items ?? []).map(item => ({
+      productId: item.productId,
+      quantity: item.quantity,
+      modifierIds: [...(item.modifierIds ?? [])].sort(),
+      notes: normalizedOptionalText(item.notes, 300),
+    })),
+  };
+  return fingerprintRequest(normalizedPayload);
+}
+
+export function fingerprintRequest(value: unknown) {
   return createHash("sha256").update(stableJson(value)).digest("hex");
 }
 
 function stableJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(stableJson).join(",")}]`;
   if (value && typeof value === "object") {
-    return `{${Object.entries(value as Record<string, unknown>).sort(([a], [b]) => a.localeCompare(b)).map(([key, nested]) => `${JSON.stringify(key)}:${stableJson(nested)}`).join(",")}}`;
+    return `{${Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([key, nested]) => `${JSON.stringify(key)}:${stableJson(nested)}`)
+      .join(",")}}`;
   }
   return JSON.stringify(value);
 }
 
-function moneyToMinor(value: string) {
+export function moneyToMinor(value: unknown): number {
   const normalized = normalizeMoney(value);
   const [whole, fraction] = normalized.split(".");
   return Number(whole) * 100 + Number(fraction);
 }
 
-function minorToMoney(value: number) {
-  if (!Number.isSafeInteger(value) || value < 0) throw new Error("invalid_money");
+export function minorToMoney(value: number): string {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new OrderDomainFailure("invalid_order_request", 400, "A valid monetary total is required.");
+  }
   return `${Math.floor(value / 100)}.${String(value % 100).padStart(2, "0")}`;
 }
 
-function normalizeMoney(value: string) {
-  if (!/^\d{1,10}(?:\.\d{1,2})?$/.test(value)) {
+export function normalizeMoney(value: unknown): string {
+  if (value === null || value === undefined || value === "") return "0.00";
+  let str: string;
+  if (typeof value === "number") {
+    if (!Number.isFinite(value) || value < 0) {
+      throw new OrderDomainFailure("invalid_order_request", 400, "A valid monetary amount is required.");
+    }
+    str = value.toFixed(2);
+  } else if (typeof value === "string") {
+    str = value.trim();
+    if (!str) return "0.00";
+  } else {
     throw new OrderDomainFailure("invalid_order_request", 400, "A valid monetary amount is required.");
   }
-  const [whole, fraction = ""] = value.split(".");
-  return `${Number(whole)}.${fraction.padEnd(2, "0")}`;
+  const num = Number(str);
+  if (Number.isNaN(num) || !Number.isFinite(num) || num < 0 || num > 9999999999) {
+    throw new OrderDomainFailure("invalid_order_request", 400, "A valid monetary amount is required.");
+  }
+  return num.toFixed(2);
 }
 
-function decimalRate(value: string) {
-  if (!/^(?:0(?:\.\d{1,6})?|1(?:\.0{1,6})?)$/.test(value)) throw new Error("invalid_tax_rate");
-  return Math.round(Number(value) * 1_000_000);
+export function decimalRate(value: unknown): number {
+  if (value === null || value === undefined || value === "") return 0;
+  const num = typeof value === "number" ? value : Number(String(value).trim());
+  if (Number.isNaN(num) || num < 0 || num > 1) {
+    throw new OrderDomainFailure("invalid_order_request", 400, "A valid tax rate is required.");
+  }
+  return Math.round(num * 1_000_000);
 }
 
-function normalizeRate(value: string) {
+export function normalizeRate(value: unknown): string {
   return (decimalRate(value) / 1_000_000).toFixed(6);
 }
 
@@ -435,6 +533,21 @@ function groupBy<T>(values: T[], key: (value: T) => string) {
 
 function mapRepositoryFailure(error: unknown) {
   if (error instanceof OrderDomainFailure) return error;
+  // Typed conflict from the repository layer (same key + different fingerprint).
+  if (error instanceof IdempotencyConflictError) {
+    return new OrderDomainFailure(
+      "idempotency_conflict",
+      409,
+      "This idempotency key was already used for a different request.",
+      undefined,
+      undefined,
+      {
+        existingOrderId: error.existingOrderId ?? undefined,
+        conflictReason: error.conflictReason,
+      },
+      error,
+    );
+  }
   const message = error instanceof Error ? error.message : "server_error";
   if (message.includes("idempotency_conflict")) return new OrderDomainFailure("idempotency_conflict", 409, "This idempotency key was already used for a different request.", undefined, undefined, undefined, error);
   if (message.includes("price_changed")) return new OrderDomainFailure("price_changed", 409, "The menu changed. Refresh and review the order.", undefined, undefined, undefined, error);

@@ -96,7 +96,13 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
       finalizedRef.current = true;
       try {
         const paid = await submission.capturePayment("card_terminal", result.transactionId);
+        if (paid.status !== "paid") {
+          throw new Error(`Payment did not persist paid status. Current status: ${paid.status}`);
+        }
         const submitted = await submission.submitOrder();
+        if (submitted.status !== "submitted") {
+          throw new Error(`Submit did not persist submitted status. Current status: ${submitted.status}`);
+        }
         const completedAt = new Date().toISOString();
         transitionOrderLifecycle({
           paymentStatus: "completed",
@@ -110,8 +116,15 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
         });
         placeOrder({ id: submitted.id, number: submitted.orderNumber, total: Number(paid.total) });
         navigationTimerRef.current = window.setTimeout(onApproved, 1_800);
-      } catch {
+      } catch (error) {
         finalizedRef.current = false;
+        // idempotency_conflict on capture means the payment key was already used
+        // with a different fingerprint (e.g., ECONNRESET on a prior capture attempt
+        // that actually succeeded server-side). Rotate all keys so the next retry
+        // starts from a clean state. The user will be prompted to tap the card again.
+        if (error instanceof Error && (error as any).code === "idempotency_conflict") {
+          submission.clearOrderSession();
+        }
         setStatus("terminal_unavailable");
       }
     });

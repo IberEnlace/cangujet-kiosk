@@ -549,10 +549,13 @@ exception when unique_violation then
     and coalesce(device_id, '00000000-0000-0000-0000-000000000000'::uuid)
       = coalesce(p_device_id, '00000000-0000-0000-0000-000000000000'::uuid)
     and source::text = p_source and idempotency_key = p_idempotency_key;
-  if found and v_existing.request_fingerprint = p_request_fingerprint then
-    return jsonb_build_object('order', public.production_order_json(v_existing.id), 'duplicate', true);
+  if found then
+    if v_existing.request_fingerprint = p_request_fingerprint then
+      return jsonb_build_object('order', public.production_order_json(v_existing.id), 'duplicate', true);
+    end if;
+    raise exception 'idempotency_conflict';
   end if;
-  raise exception 'idempotency_conflict';
+  raise;
 end;
 $$;
 

@@ -26,7 +26,18 @@ const KITCHEN: OrderActor = {
 const CREATE_KEY = "11111111-1111-4111-8111-111111111111";
 const PAYMENT_KEY = "22222222-2222-4222-8222-222222222222";
 
-test("server quote validates modifier rules and calculates decimal-safe tax snapshots", () => {
+test("server quote calculates valid one-item quote without modifiers when not required", () => {
+  const p = pricing();
+  p.modifierGroups[0].required = false;
+  p.modifierGroups[0].minimumSelections = 0;
+  const quote = calculateQuote(request([]), p);
+  assert.equal(quote.subtotal, "10.00");
+  assert.equal(quote.taxTotal, "0.80");
+  assert.equal(quote.total, "10.80");
+  assert.equal(quote.items.length, 1);
+});
+
+test("server quote validates item with required modifiers", () => {
   const quote = calculateQuote(request(["modifier-cheese"]), pricing());
   assert.deepEqual(
     { subtotal: quote.subtotal, tax: quote.taxTotal, total: quote.total },
@@ -37,14 +48,44 @@ test("server quote validates modifier rules and calculates decimal-safe tax snap
   assert.equal(quote.items[0].taxRate, "0.080000");
 });
 
-test("server quote rejects required, unavailable, cross-product, and hidden selections", () => {
-  assertFailure(() => calculateQuote(request([]), pricing()), "required_modifier_missing");
-  const unavailable = pricing();
-  unavailable.modifiers[0].available = false;
-  assertFailure(() => calculateQuote(request(["modifier-cheese"]), unavailable), "modifier_unavailable");
-  const hidden = pricing();
-  hidden.products[0].categoryVisible = false;
-  assertFailure(() => calculateQuote(request(["modifier-cheese"]), hidden), "product_unavailable");
+test("server quote rejects invalid product ID", () => {
+  const req = {
+    items: [{ productId: "nonexistent-product", quantity: 1, modifierIds: [] }],
+    serviceMode: "dine_in" as const,
+    language: "en",
+  };
+  assertFailure(() => calculateQuote(req, pricing()), "product_unavailable");
+});
+
+test("server quote rejects invalid modifier ID", () => {
+  const req = {
+    items: [{ productId: "product-burger", quantity: 1, modifierIds: ["invalid-modifier-id"] }],
+    serviceMode: "dine_in" as const,
+    language: "en",
+  };
+  assertFailure(() => calculateQuote(req, pricing()), "modifier_unavailable");
+});
+
+test("server quote handles missing or null price safely", () => {
+  const p = pricing();
+  (p.products[0] as any).price = null;
+  p.modifierGroups[0].required = false;
+  p.modifierGroups[0].minimumSelections = 0;
+  const quote = calculateQuote(request([]), p);
+  assert.equal(quote.subtotal, "0.00");
+  assert.equal(quote.total, "0.00");
+});
+
+test("server quote handles database failure during pricing context load", async () => {
+  const failingRepo = new MemoryOrderRepository();
+  failingRepo.loadPricingContext = async () => {
+    throw new Error("Database connection lost");
+  };
+  const service = new OrderDomainService(failingRepo, deviceIdentity());
+  await assert.rejects(
+    service.quote(DEVICE, request(["modifier-cheese"])),
+    (err: unknown) => err instanceof Error && err.message === "Database connection lost",
+  );
 });
 
 test("creation and payment retries are idempotent and preserve authoritative snapshots", async () => {

@@ -1,7 +1,7 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   CreditCard, QrCode, Users, Check, ArrowLeft, ChevronRight, Loader2,
-  Shield, Lock, Receipt
+  Shield, Lock, Receipt, RefreshCw
 } from "lucide-react";
 import { useCart, type PaymentMethod } from "../context/CartContext";
 import MorrowLogo from "../components/branding/MorrowLogo";
@@ -58,6 +58,9 @@ export default function PaymentFlow({ onNavigate }: Props) {
   const [screen, setScreen] = useState<Screen>("select");
   const [submitting, setSubmitting] = useState(false);
   const [orderError, setOrderError] = useState("");
+  const [conflictMethod, setConflictMethod] = useState<CustomerPaymentMethod | null>(null);
+  /** Ref-backed guard mirrors the inFlightRef inside OrderContext for the outer submitting UI state. */
+  const submittingRef = useRef(false);
 
   // Processing
   const [processingStep, setProcessingStep] = useState(0);
@@ -65,10 +68,11 @@ export default function PaymentFlow({ onNavigate }: Props) {
   const processingSteps = ["Connecting to payment gateway...", "Verifying card details...", "Authorizing payment...", "Confirming order..."];
 
   const handleMethodSelect = async (id: CustomerPaymentMethod) => {
-    if (submitting || !orderType) return;
-
+    if (submittingRef.current || production.isBusy || !orderType) return;
+    submittingRef.current = true;
     setSubmitting(true);
     setOrderError("");
+    setConflictMethod(null);
     const lifecycleMethod = id === "credit" ? "card" : id === "cashier" ? "pay_at_cashier" : "qr";
     transitionOrderLifecycle({
       paymentStatus: "pending",
@@ -80,15 +84,21 @@ export default function PaymentFlow({ onNavigate }: Props) {
 
     try {
       let created = await submission.createOrder();
-      if (id === "cashier") created = await submission.capturePayment("pay_at_cashier");
-      setSubmitting(false);
+      let finalOrder = created;
+      if (id === "cashier") {
+        await submission.capturePayment("pay_at_cashier");
+        finalOrder = await submission.submitOrder();
+        if (finalOrder.status !== "submitted") {
+          throw new Error("Order submission could not be verified.");
+        }
+      }
       setPaymentMethod(id);
       transitionOrderLifecycle({
-        paymentStatus: id === "cashier" ? "pay_at_cashier_pending" : "pending",
+        paymentStatus: id === "cashier" ? "completed" : "pending",
         paymentMethod: lifecycleMethod,
-        orderStatus: "awaiting_payment",
-        orderId: created.id,
-        orderNumber: created.orderNumber,
+        orderStatus: finalOrder.status === "submitted" ? "submitted" : "awaiting_payment",
+        orderId: finalOrder.id,
+        orderNumber: finalOrder.orderNumber,
         source: "order_service",
         updatedAt: new Date().toISOString(),
       });
@@ -103,12 +113,13 @@ export default function PaymentFlow({ onNavigate }: Props) {
         return;
       }
 
-      placeOrder({ id: created.id, number: created.orderNumber, total: Number(created.total) });
+      placeOrder({ id: finalOrder.id, number: finalOrder.orderNumber, total: Number(finalOrder.total) });
       onNavigate("confirmation");
     } catch (error) {
+      const isConflict = error instanceof Error && (error as any).code === "idempotency_conflict";
       const message = error instanceof Error ? error.message : "Your order could not be created.";
-      setSubmitting(false);
       setOrderError(message);
+      if (isConflict) setConflictMethod(id);
       transitionOrderLifecycle({
         paymentStatus: "failed",
         paymentMethod: lifecycleMethod,
@@ -116,6 +127,9 @@ export default function PaymentFlow({ onNavigate }: Props) {
         source: "order_service",
         updatedAt: new Date().toISOString(),
       });
+    } finally {
+      submittingRef.current = false;
+      setSubmitting(false);
     }
   };
 
@@ -185,7 +199,7 @@ export default function PaymentFlow({ onNavigate }: Props) {
               <button
                 key={m.id}
                 onClick={() => void handleMethodSelect(m.id)}
-                disabled={submitting}
+                disabled={submitting || production.isBusy}
                 className={`relative flex min-h-32 items-center gap-4 rounded-2xl border p-5 text-left transition-all group active:scale-[0.98] focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#d7ff7a] min-[520px]:last:col-span-2 min-[520px]:last:w-[calc(50%-0.375rem)] min-[520px]:last:justify-self-center ${colorMap[m.color]}`}
               >
                 <span className={`size-14 shrink-0 rounded-2xl bg-white/5 flex items-center justify-center ${iconColorMap[m.color]} group-hover:scale-110 transition-transform`}>
@@ -199,7 +213,30 @@ export default function PaymentFlow({ onNavigate }: Props) {
               </button>
             ))}
           </div>
-          {orderError && <div role="alert" className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-200">{orderError}<button type="button" onClick={() => setOrderError("")} className="ms-3 underline">Dismiss</button></div>}
+          {orderError && !conflictMethod && (
+            <div role="alert" className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 p-3 text-sm text-red-200">
+              {orderError}
+              <button type="button" onClick={() => setOrderError("")} className="ms-3 underline">Dismiss</button>
+            </div>
+          )}
+          {conflictMethod && (
+            <div role="alert" className="mt-4 rounded-xl border border-yellow-400/20 bg-yellow-500/10 p-4 text-sm text-yellow-200">
+              <p className="font-semibold mb-1">A previous attempt conflicted</p>
+              <p className="text-yellow-200/70 text-xs mb-3">{orderError}</p>
+              <button
+                type="button"
+                onClick={() => {
+                  submission.clearOrderSession();
+                  setConflictMethod(null);
+                  setOrderError("");
+                  void handleMethodSelect(conflictMethod);
+                }}
+                className="flex items-center gap-2 rounded-lg bg-yellow-400/20 px-3 py-2 text-xs font-semibold hover:bg-yellow-400/30 transition-colors"
+              >
+                <RefreshCw size={12} /> Try again with new attempt
+              </button>
+            </div>
+          )}
           {submitting && <p role="status" className="mt-4 text-sm text-[#d7ff7a]">Creating your order securely…</p>}
         </div>
 

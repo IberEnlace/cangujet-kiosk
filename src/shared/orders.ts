@@ -153,7 +153,8 @@ export type OrderErrorCode =
   | "unauthorized"
   | "offline"
   | "timeout"
-  | "server_error";
+  | "server_error"
+  | "order_quote_failed";
 
 export type OrderApiError = {
   code: OrderErrorCode;
@@ -161,5 +162,7 @@ export type OrderApiError = {
   requestId: string;
   itemIndex?: number;
   productId?: string;
+  /** Returned on idempotency_conflict when the same key+payload was already committed. */
+  existingOrderId?: string;
   details?: Record<string, unknown>;
 };

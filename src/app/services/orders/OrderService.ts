@@ -36,10 +36,17 @@ export class OrderClientError extends Error {
 export class OrderService {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  /** Updated by OrderContext whenever the workflow attempt rotates. */
+  private workflowAttemptId: string | null = null;
 
   constructor(options: OrderServiceOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? ((input, init) => window.fetch(input, init));
     this.timeoutMs = options.timeoutMs ?? 15_000;
+  }
+
+  /** Called by OrderContext to bind the current workflow attempt ID to all requests. */
+  setWorkflowAttemptId(id: string | null) {
+    this.workflowAttemptId = id;
   }
 
   quote(request: OrderQuoteRequest, authentication: OrderAuthentication = "device") {
@@ -130,6 +137,7 @@ export class OrderService {
         headers: {
           accept: "application/json",
           "x-request-id": requestId,
+          ...(this.workflowAttemptId ? { "x-workflow-attempt-id": this.workflowAttemptId } : {}),
           ...(options.body === undefined ? {} : { "content-type": "application/json" }),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
@@ -163,7 +171,18 @@ async function authorizationToken(authentication: OrderAuthentication) {
   if (authentication === "none") return null;
   if (authentication === "staff") return getStaffAccessToken();
   try {
-    return sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    let token = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    if (!token && typeof window !== "undefined") {
+      const response = await fetch("/api/v1/devices/session/refresh", { method: "POST", credentials: "include" });
+      if (response.ok) {
+        const body = (await response.json()) as { accessToken?: string };
+        if (body.accessToken) {
+          sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, body.accessToken);
+          token = body.accessToken;
+        }
+      }
+    }
+    return token;
   } catch {
     return null;
   }
