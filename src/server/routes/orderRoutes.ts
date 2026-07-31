@@ -86,7 +86,15 @@ export function createOrderRouter(
     const actor = await resolve().authenticate(readBearerToken(request));
     const orders = await resolve().active(actor, "kitchen");
     diagnostic("kitchen_reconciliation", requestId, actor, undefined, "ok");
-    response.json(orders);
+    response.setHeader(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate",
+    );
+    response.setHeader("Pragma", "no-cache");
+    response.setHeader("Expires", "0");
+    response.removeHeader("ETag");
+
+    response.status(200).json(orders);
   }));
 
   router.get("/kitchen/orders/:orderId", asyncRoute(async (request, response) => {

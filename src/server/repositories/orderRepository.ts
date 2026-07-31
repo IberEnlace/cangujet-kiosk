@@ -422,7 +422,11 @@ function isServiceMode(value: string): value is ProductionServiceMode {
 }
 
 function persistenceActorType(actor: OrderActor) {
-  return actor.role === "device" ? "device" : actor.role;
+  if (actor.role === "device") return "device";
+  if (actor.role === "cashier" || actor.role === "kitchen" || actor.role === "admin" || actor.role === "system" || actor.role === "staff") {
+    return actor.role;
+  }
+  return actor.actorType === "staff" ? "staff" : "cashier";
 }
 
 export type { OrderItemSnapshot };
