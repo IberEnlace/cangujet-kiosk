@@ -1,5 +1,5 @@
 import type { ProductionOrder, ProductionOrderStatus } from "../../../shared/orders";
-import { orderService } from "./OrderService";
+import { orderService, type OrderAuthentication } from "./OrderService";
 
 export const COMPLETED_KITCHEN_VISIBILITY_MS = 5 * 60_000;
 
@@ -11,8 +11,8 @@ const NEXT_KITCHEN_STATUS: Partial<Record<ProductionOrderStatus, ProductionOrder
 };
 
 export class KitchenOrderService {
-  list() {
-    return orderService.listKitchen();
+  list(authentication: OrderAuthentication = "staff") {
+    return orderService.listKitchen(authentication);
   }
 
   next(order: ProductionOrder) {

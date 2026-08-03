@@ -84,7 +84,12 @@ test("3. Order creation with same key but modified payload throws idempotency_co
 
   await assert.rejects(
     service.create(DEVICE, req2),
-    (err: unknown) => err instanceof OrderDomainFailure && err.code === "idempotency_conflict",
+    (err: unknown) => err instanceof OrderDomainFailure
+      && err.code === "idempotency_conflict"
+      && err.status === 409
+      && err.details?.existingOrderId === "ord-1"
+      && err.details?.conflictReason === "fingerprint_mismatch"
+      && err.details?.retryable === true,
   );
 });
 
@@ -158,6 +163,26 @@ test("6. Uncommitted order creation retry with identical payload returns duplica
   assert.equal(attempt2.order.id, attempt1.order.id);
 });
 
+test("7. Concurrent identical requests converge on one order instead of returning 409", async () => {
+  const repo = new MockOrderRepository();
+  const service = new OrderDomainService(repo, deviceIdentity());
+  const request: OrderCreateRequest = {
+    idempotencyKey: KEY_1,
+    serviceMode: "dine_in",
+    language: "en",
+    items: [{ productId: "p-1", quantity: 1, modifierIds: [] }],
+  };
+
+  const [first, second] = await Promise.all([
+    service.create(DEVICE, request),
+    service.create(DEVICE, request),
+  ]);
+
+  assert.equal(first.order.id, second.order.id);
+  assert.deepEqual([first.duplicate, second.duplicate].sort(), [false, true]);
+  assert.equal(repo.orders.size, 1);
+});
+
 class MockOrderRepository implements OrderRepository {
   readonly orders = new Map<string, any>();
   readonly idempotency = new Map<string, { fingerprint: string; orderId: string }>();
@@ -170,6 +195,12 @@ class MockOrderRepository implements OrderRepository {
       products: [{ id: "p-1", name: "Espresso", price: "2.50", currency: "EUR", active: true, available: true, categoryActive: true, categoryVisible: true, allergens: [] }],
       modifierGroups: [], modifiers: [],
     };
+  }
+  async findExistingOrderForIdempotency(_actor: OrderActor, _source: string, key: string) {
+    const existing = this.idempotency.get(key);
+    return existing
+      ? { id: existing.orderId, request_fingerprint: existing.fingerprint }
+      : null;
   }
   async createOrder(input: PersistOrderInput) {
     const existing = this.idempotency.get(input.idempotencyKey);
@@ -199,6 +230,7 @@ class MockOrderRepository implements OrderRepository {
   async getOrder(_actor: OrderActor, orderId: string) { return this.orders.get(orderId) ?? null; }
   async getTracking() { return null; }
   async listActiveOrders() { return [...this.orders.values()]; }
+  async listPendingCashierOrders() { return []; }
   async recordPayment(input: PersistPaymentInput) {
     const order = { ...input.order, status: "paid" as const, paymentStatus: "captured" as const, version: input.order.version + 1 };
     this.orders.set(order.id, order);

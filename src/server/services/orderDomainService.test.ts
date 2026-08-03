@@ -23,6 +23,14 @@ const KITCHEN: OrderActor = {
   actorType: "staff", actorId: "chef-a", restaurantId: "restaurant-a",
   branchId: "branch-a", deviceId: null, role: "kitchen", deviceType: null,
 };
+const CASHIER: OrderActor = {
+  actorType: "staff", actorId: "cashier-a", restaurantId: "restaurant-a",
+  branchId: "branch-a", deviceId: null, role: "cashier", deviceType: null,
+};
+const CASHIER_TERMINAL: OrderActor = {
+  actorType: "device", actorId: "cashier-terminal-a", restaurantId: "restaurant-a",
+  branchId: "branch-a", deviceId: "cashier-terminal-a", role: "device", deviceType: "cashier_terminal",
+};
 const CREATE_KEY = "11111111-1111-4111-8111-111111111111";
 const PAYMENT_KEY = "22222222-2222-4222-8222-222222222222";
 
@@ -132,6 +140,85 @@ test("tenant-scoped lookup cannot return an order from another branch", async ()
   await assert.rejects(service.get(other, created.order.id), failure("order_not_found"));
 });
 
+test("Pay at Cashier remains awaiting payment until same-branch cashier captures and submits", async () => {
+  const repository = new MemoryOrderRepository();
+  const service = new OrderDomainService(repository, deviceIdentity());
+  const created = await service.create(DEVICE, { ...request(["modifier-cheese"]), idempotencyKey: CREATE_KEY });
+  const deferred = await service.pay(DEVICE, created.order.id, {
+    idempotencyKey: PAYMENT_KEY,
+    method: "pay_at_cashier",
+  });
+  assert.equal(deferred.order.status, "awaiting_payment");
+  assert.equal(deferred.order.paymentStatus, "pending");
+  assert.equal(deferred.order.paymentMethod, "pay_at_cashier");
+  await assert.rejects(service.submit(DEVICE, deferred.order.id, deferred.order.version), failure("invalid_order_transition"));
+
+  assert.equal((await service.pendingCashierOrders(CASHIER)).length, 1);
+  assert.equal((await service.pendingCashierOrders({ ...CASHIER, branchId: "branch-b" })).length, 0);
+  await assert.rejects(service.pendingCashierOrders(DEVICE), failure("unauthorized"));
+
+  const cashRequest = {
+    idempotencyKey: "33333333-3333-4333-8333-333333333333",
+    method: "cash" as const,
+    amountReceived: "20.00",
+  };
+  const paid = await service.pay(CASHIER, deferred.order.id, cashRequest);
+  const duplicate = await service.pay(CASHIER, deferred.order.id, cashRequest);
+  assert.equal(paid.order.status, "paid");
+  assert.equal(paid.paymentStatus, "captured");
+  assert.equal(paid.change, "5.00");
+  assert.equal(duplicate.paymentId, paid.paymentId);
+  assert.equal(repository.paymentCount, 2, "one pending intent and one captured payment row");
+  const submitted = await service.submit(CASHIER, paid.order.id, paid.order.version);
+  assert.equal(submitted.status, "submitted");
+  assert.equal((await service.active(KITCHEN, "kitchen")).some(order => order.id === submitted.id), true);
+});
+
+test("cashier terminal can capture deferred card payment and kiosk card flow stays valid", async () => {
+  const repository = new MemoryOrderRepository();
+  const service = new OrderDomainService(repository, deviceIdentity());
+  const deferredCreated = await service.create(DEVICE, { ...request(["modifier-cheese"]), idempotencyKey: CREATE_KEY });
+  const deferred = await service.pay(DEVICE, deferredCreated.order.id, { idempotencyKey: PAYMENT_KEY, method: "pay_at_cashier" });
+  const paidAtCashier = await service.pay(CASHIER_TERMINAL, deferred.order.id, {
+    idempotencyKey: "44444444-4444-4444-8444-444444444444",
+    method: "card_terminal",
+    externalReference: "terminal-cashier-1",
+  });
+  assert.equal(paidAtCashier.order.status, "paid");
+  assert.equal((await service.submit(CASHIER_TERMINAL, paidAtCashier.order.id, paidAtCashier.order.version)).status, "submitted");
+
+  const kioskCreated = await service.create(DEVICE, {
+    ...request(["modifier-cheese"]),
+    idempotencyKey: "55555555-5555-4555-8555-555555555555",
+  });
+  const kioskCard = await service.pay(DEVICE, kioskCreated.order.id, {
+    idempotencyKey: "66666666-6666-4666-8666-666666666666",
+    method: "card_terminal",
+    externalReference: "terminal-kiosk-1",
+  });
+  assert.equal(kioskCard.order.status, "paid");
+});
+
+test("failed or cancelled deferred orders cannot be sent to production", async () => {
+  const repository = new MemoryOrderRepository();
+  const service = new OrderDomainService(repository, deviceIdentity());
+  const created = await service.create(DEVICE, { ...request(["modifier-cheese"]), idempotencyKey: CREATE_KEY });
+  const deferred = await service.pay(DEVICE, created.order.id, { idempotencyKey: PAYMENT_KEY, method: "pay_at_cashier" });
+  await assert.rejects(service.pay(CASHIER, deferred.order.id, {
+    idempotencyKey: "77777777-7777-4777-8777-777777777777",
+    method: "cash",
+    amountReceived: "1.00",
+  }), failure("payment_failed"));
+  assert.equal((await service.get(DEVICE, deferred.order.id)).status, "awaiting_payment");
+  const cancelled = await service.cancel(CASHIER, deferred.order.id, deferred.order.version, "Customer left");
+  assert.equal(cancelled.status, "cancelled");
+  await assert.rejects(service.pay(CASHIER, cancelled.id, {
+    idempotencyKey: "88888888-8888-4888-8888-888888888888",
+    method: "cash",
+    amountReceived: "20.00",
+  }), failure("invalid_order_transition"));
+});
+
 class MemoryOrderRepository implements OrderRepository {
   readonly orders = new Map<string, ProductionOrder>();
   readonly idempotency = new Map<string, { fingerprint: string; orderId: string }>();
@@ -172,7 +259,17 @@ class MemoryOrderRepository implements OrderRepository {
     return order && actor.restaurantId === "restaurant-a" && actor.branchId === "branch-a" ? order : null;
   }
   async getTracking() { return null; }
-  async listActiveOrders() { return [...this.orders.values()]; }
+  async listActiveOrders(_actor: OrderActor, audience: "kitchen" | "cashier" | "display") {
+    return [...this.orders.values()].filter(order => audience !== "kitchen"
+      || ["submitted", "accepted", "preparing", "ready", "completed"].includes(order.status));
+  }
+  async listPendingCashierOrders(actor: OrderActor) {
+    if (actor.restaurantId !== "restaurant-a" || actor.branchId !== "branch-a") return [];
+    return [...this.orders.values()].filter(order => order.source === "kiosk"
+      && order.status === "awaiting_payment"
+      && order.paymentMethod === "pay_at_cashier"
+      && order.cancelledAt === null);
+  }
   async recordPayment(input: PersistPaymentInput) {
     const key = `${input.order.id}:${input.idempotencyKey}`;
     const existing = this.payments.get(key);

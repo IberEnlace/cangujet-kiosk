@@ -5,7 +5,10 @@ import type {
   OrderPaymentResult,
   OrderQuote,
   OrderQuoteRequest,
+  QrPaymentCreateRequest,
+  QrPaymentSession,
   OrderTracking,
+  OrderStatusDisplayOrder,
   OrderTransitionRequest,
   ProductionOrder,
 } from "../../../shared/orders";
@@ -13,6 +16,11 @@ import { DEVICE_ACCESS_TOKEN_STORAGE_KEY } from "../device/DeviceConfigurationSe
 import { getStaffAccessToken } from "../supabase/authService";
 
 export type OrderAuthentication = "device" | "staff" | "none";
+export type OrderRequestContext = {
+  /** Explicit per-request workflow correlation. Passing a context prevents
+   * fallback to the mutable customer workflow stored by OrderContext. */
+  workflowAttemptId?: string | null;
+};
 export type OrderServiceOptions = {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
@@ -27,6 +35,7 @@ export class OrderClientError extends Error {
     public readonly itemIndex?: number,
     public readonly productId?: string,
     public readonly details?: Record<string, unknown>,
+    public readonly existingOrderId?: string,
   ) {
     super(message);
     this.name = "OrderClientError";
@@ -53,8 +62,12 @@ export class OrderService {
     return this.request<OrderQuote>("/orders/quote", { method: "POST", body: request }, authentication);
   }
 
-  create(request: OrderCreateRequest, authentication: OrderAuthentication = "device") {
-    return this.request<ProductionOrder>("/orders", { method: "POST", body: request }, authentication);
+  create(
+    request: OrderCreateRequest,
+    authentication: OrderAuthentication = "device",
+    context?: OrderRequestContext,
+  ) {
+    return this.request<ProductionOrder>("/orders", { method: "POST", body: request }, authentication, context);
   }
 
   get(orderId: string, authentication: OrderAuthentication = "device") {
@@ -65,27 +78,71 @@ export class OrderService {
     return this.request<ProductionOrder[]>("/orders/active", {}, authentication);
   }
 
-  listKitchen() {
-    return this.request<ProductionOrder[]>("/kitchen/orders", {}, "staff");
+  listPendingCashierOrders(authentication: OrderAuthentication = "staff") {
+    return this.request<ProductionOrder[]>("/cashier/pending-orders", {}, authentication, {
+      workflowAttemptId: null,
+    });
+  }
+
+  listKitchen(authentication: OrderAuthentication = "staff") {
+    return this.request<ProductionOrder[]>("/kitchen/orders", {}, authentication);
   }
 
   listDisplay() {
-    return this.request<ProductionOrder[]>("/orders/display", {}, "device");
+    return this.request<OrderStatusDisplayOrder[]>("/orders/display", {}, "device", {
+      workflowAttemptId: null,
+    });
   }
 
-  pay(orderId: string, request: OrderPaymentRequest, authentication: OrderAuthentication = "device") {
+  pay(
+    orderId: string,
+    request: OrderPaymentRequest,
+    authentication: OrderAuthentication = "device",
+    context?: OrderRequestContext,
+  ) {
     return this.request<OrderPaymentResult & { duplicate?: boolean }>(
       `/orders/${encodeURIComponent(orderId)}/payments`,
       { method: "POST", body: request },
       authentication,
+      context,
     );
   }
 
-  submit(orderId: string, expectedVersion: number, authentication: OrderAuthentication = "device") {
+  createQrPayment(orderId: string, request: QrPaymentCreateRequest) {
+    return this.request<QrPaymentSession>(
+      `/orders/${encodeURIComponent(orderId)}/payments/qr`,
+      { method: "POST", body: request },
+      "device",
+    );
+  }
+
+  getQrPayment(orderId: string, sessionId: string) {
+    return this.request<QrPaymentSession>(
+      `/orders/${encodeURIComponent(orderId)}/payments/qr/${encodeURIComponent(sessionId)}`,
+      {},
+      "device",
+    );
+  }
+
+  cancelQrPayment(orderId: string, sessionId: string) {
+    return this.request<QrPaymentSession>(
+      `/orders/${encodeURIComponent(orderId)}/payments/qr/${encodeURIComponent(sessionId)}/cancel`,
+      { method: "POST" },
+      "device",
+    );
+  }
+
+  submit(
+    orderId: string,
+    expectedVersion: number,
+    authentication: OrderAuthentication = "device",
+    context?: OrderRequestContext,
+  ) {
     return this.request<ProductionOrder>(
       `/orders/${encodeURIComponent(orderId)}/submit`,
       { method: "POST", body: { expectedVersion } },
       authentication,
+      context,
     );
   }
 
@@ -117,6 +174,7 @@ export class OrderService {
     path: string,
     options: { method?: string; body?: unknown },
     authentication: OrderAuthentication,
+    context?: OrderRequestContext,
   ): Promise<T> {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       throw new OrderClientError("offline", "Ordering requires an internet connection. Your cart is safe.", 0);
@@ -128,16 +186,20 @@ export class OrderService {
     const controller = new AbortController();
     const timer = globalThis.setTimeout(() => controller.abort(), this.timeoutMs);
     const requestId = crypto.randomUUID();
+    const workflowAttemptId = context === undefined
+      ? this.workflowAttemptId
+      : context.workflowAttemptId ?? null;
     try {
       const fetchImpl = this.fetchImpl;
       const response = await fetchImpl(`/api/v1${path}`, {
         method: options.method ?? "GET",
         credentials: "include",
         signal: controller.signal,
+        cache: "no-store",
         headers: {
           accept: "application/json",
           "x-request-id": requestId,
-          ...(this.workflowAttemptId ? { "x-workflow-attempt-id": this.workflowAttemptId } : {}),
+          ...(workflowAttemptId ? { "x-workflow-attempt-id": workflowAttemptId } : {}),
           ...(options.body === undefined ? {} : { "content-type": "application/json" }),
           ...(token ? { authorization: `Bearer ${token}` } : {}),
         },
@@ -145,6 +207,14 @@ export class OrderService {
       });
       const text = await response.text();
       const body = parseBody(text);
+      if (response.status === 304) {
+        throw new OrderClientError(
+          "server_error",
+          "The order service returned a stale cached response. Please retry.",
+          304,
+          requestId,
+        );
+      }
       if (!response.ok) throw toClientError(response.status, response.headers.get("x-request-id") ?? requestId, body);
       if (body === null) throw new OrderClientError("server_error", "The order service returned an empty response.", response.status, requestId);
       return body as T;
@@ -207,6 +277,7 @@ function toClientError(status: number, requestId: string, body: unknown) {
       body.itemIndex,
       body.productId,
       body.details,
+      body.existingOrderId,
     );
   }
   return new OrderClientError("server_error", `The order service rejected the request (${status}).`, status, requestId);

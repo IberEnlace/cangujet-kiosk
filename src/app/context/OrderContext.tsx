@@ -4,8 +4,11 @@ import { useCart } from "./CartContext";
 import { useLanguage } from "./LanguageContext";
 import { useBootstrap } from "./BootstrapContext";
 import { OrderClientError, orderService } from "../services/orders/OrderService";
+import { executeWithIdempotencyRecovery } from "../services/orders/idempotencyConflictRecovery";
 import { paymentAdapters } from "../services/orders/PaymentService";
 import { buildOrderQuoteRequest } from "../services/orders/cartModifierPipeline";
+
+type CapturablePaymentMethod = Exclude<ProductionPaymentMethod, "qr">;
 
 const PENDING_ORDER_KEY = "morrow:pending-production-order";
 
@@ -30,7 +33,7 @@ type OrderContextValue = {
   error: OrderClientError | null;
   quoteCart: () => Promise<OrderQuote>;
   createOrder: () => Promise<ProductionOrder>;
-  capturePayment: (method: ProductionPaymentMethod, externalReference?: string) => Promise<ProductionOrder>;
+  capturePayment: (method: CapturablePaymentMethod, externalReference?: string) => Promise<ProductionOrder>;
   submitOrder: () => Promise<ProductionOrder>;
   clearOrderSession: () => void;
 };
@@ -104,7 +107,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     return result;
   }), [request, run]);
 
-  const createOrder = useCallback(() => run(async () => {
+  const createOrderOperation = useCallback(async () => {
     const restored = restorePending();
     // Fast-path: already have a committed order for this exact cart state.
     if (restored.order && restored.requestSignature === requestSignature) return restored.order;
@@ -116,78 +119,96 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       setPending(state);
     }
 
-    try {
-      const createKey = state.createKey;
-      console.info("[ORDER CREATE ATTEMPT]", {
-        createKey,
-        cartSignature: requestSignature,
-        restoredPending: restored,
-        requestPayload: request,
-      });
-      const order = await orderService.create({ ...request, idempotencyKey: createKey, source: "kiosk" });
-      const next: PendingOrderState = { ...state, requestSignature, order };
-      persistPending(next);
-      setPending(next);
-      setQuote(order);
-      cart.recordCreatedOrder({
-        id: order.id,
-        number: order.orderNumber,
-        total: Number(order.total),
-        trackingToken: order.customerReference,
-      });
-      return order;
-    } catch (caught) {
-      // idempotency_conflict means the server already has a record for this key
-      // with a DIFFERENT payload fingerprint. The only safe recovery is to
-      // generate a completely fresh workflow attempt so the next retry uses an
-      // uncontested key. Re-throw so the UI can surface a recoverable message.
-      if (
-        caught instanceof OrderClientError
-        && caught.code === "idempotency_conflict"
-        && !state.order
-      ) {
-        const fresh = newPending(requestSignature);
-        persistPending(fresh);
-        setPending(fresh);
-        throw new OrderClientError(
-          "idempotency_conflict",
-          "A previous attempt conflicted. Please press the payment button again to retry with a new attempt.",
-          409,
-          caught.requestId,
-        );
-      }
-      throw caught;
-    }
-  }), [cart, request, requestSignature, run]);
+    let rotatedState: PendingOrderState | null = null;
+    const result = await executeWithIdempotencyRecovery({
+      initialKey: state.createKey,
+      execute: key => orderService.create({ ...request, idempotencyKey: key, source: "kiosk" }),
+      createKey: () => {
+        rotatedState = newPending(requestSignature);
+        return rotatedState.createKey;
+      },
+      onKeyRotated: () => {
+        if (!rotatedState) return;
+        state = rotatedState;
+        persistPending(state);
+        setPending(state);
+        // The retry starts immediately; do not wait for React's effect before
+        // attaching the new workflow correlation ID to the outbound request.
+        orderService.setWorkflowAttemptId(state.workflowAttemptId);
+      },
+      repeatedConflictMessage: "The order still conflicts after a safe retry. Refresh the cart and try again.",
+    });
 
-  const capturePayment = useCallback((method: ProductionPaymentMethod, externalReference?: string) => run(async () => {
-    const restored = restorePending();
-    const order = restored.order ?? pending.order ?? await createOrder();
+    const next: PendingOrderState = {
+      ...state,
+      createKey: result.key,
+      requestSignature,
+      order: result.value,
+    };
+    persistPending(next);
+    setPending(next);
+    setQuote(result.value);
+    cart.recordCreatedOrder({
+      id: result.value.id,
+      number: result.value.orderNumber,
+      total: Number(result.value.total),
+      trackingToken: result.value.customerReference,
+    });
+    return result.value;
+  }, [cart, request, requestSignature]);
+
+  const createOrder = useCallback(
+    () => run(createOrderOperation),
+    [createOrderOperation, run],
+  );
+
+  const capturePayment = useCallback((method: CapturablePaymentMethod, externalReference?: string) => run(async () => {
+    let state = restorePending();
+    const order = state.order ?? pending.order ?? await createOrderOperation();
+    state = restorePending();
+
+    // A previous response may have been lost after the server committed the
+    // payment. Never send a second terminal charge for an already-paid order.
+    if (hasCommittedPayment(order)) return order;
+
     const adapter = method === "card_terminal"
       ? paymentAdapters.cardTerminal
       : method === "pay_at_cashier"
         ? paymentAdapters.payAtCashier
         : paymentAdapters.cash;
-    try {
-      const result = await adapter.capture({
-        order,
-        idempotencyKey: (restored.order ? restored : restorePending()).paymentKey,
-        externalReference,
-        authentication: "device",
-      });
-      const next: PendingOrderState = { ...restored, order: result.order };
-      persistPending(next);
-      setPending(next);
-      return result.order;
-    } catch (caught) {
-      if (caught instanceof OrderClientError && caught.code === "idempotency_conflict") {
-        const nextState = { ...restored, paymentKey: crypto.randomUUID() };
-        persistPending(nextState);
-        setPending(nextState);
-      }
-      throw caught;
-    }
-  }), [createOrder, pending, run]);
+
+    const result = await executeWithIdempotencyRecovery({
+      initialKey: state.paymentKey,
+      execute: async key => {
+        const payment = await adapter.capture({
+          order,
+          idempotencyKey: key,
+          externalReference,
+          authentication: "device",
+        });
+        return payment.order;
+      },
+      reconcile: async () => {
+        const current = await orderService.get(order.id);
+        return hasCommittedPayment(current) ? current : undefined;
+      },
+      onKeyRotated: key => {
+        state = { ...state, paymentKey: key };
+        persistPending(state);
+        setPending(state);
+      },
+      repeatedConflictMessage: "Payment state still conflicts after reconciliation. Ask staff to verify the order before charging again.",
+    });
+
+    const next: PendingOrderState = {
+      ...state,
+      paymentKey: result.key,
+      order: result.value,
+    };
+    persistPending(next);
+    setPending(next);
+    return result.value;
+  }), [createOrderOperation, pending, run]);
 
   const submitOrder = useCallback(() => run(async () => {
     const restored = restorePending();
@@ -283,4 +304,10 @@ function newPending(requestSignature: string): PendingOrderState {
     requestSignature,
     order: null,
   };
+}
+
+function hasCommittedPayment(order: ProductionOrder) {
+  return order.status === "paid"
+    || order.status === "submitted"
+    || order.paymentStatus === "captured";
 }

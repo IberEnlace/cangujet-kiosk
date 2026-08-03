@@ -9,12 +9,14 @@ const seed = readFileSync(new URL("../../../../scripts/supabase-menu.mjs", impor
 
 test("cashier completion calls the production API before local success", () => {
   const handler = cashier.match(/const completeSale=async\(\)=>\{[\s\S]*?\n  \};/)?.[0] ?? "";
-  assert.match(handler, /await orderService\.create\(\{/);
-  assert.match(handler, /await orderService\.pay/);
-  assert.match(handler, /await orderService\.submit/);
-  assert.match(handler, /source:"cashier"/);
+  assert.match(handler, /buildCashierCreatePayload/);
+  assert.match(handler, /resolveCashierCreateAttempt/);
+  assert.match(handler, /await cashierOrderService\.create\(\{/);
+  assert.match(handler, /await cashierOrderService\.pay/);
+  assert.match(handler, /await cashierOrderService\.submit/);
+  assert.match(handler, /workflowAttemptId:attemptForRequest\.workflowAttemptId/);
   assert.doesNotMatch(handler, /branchId|restaurantId/);
-  assert.ok(handler.indexOf("await orderService.create") < handler.indexOf("setOrderItems([])"));
+  assert.ok(handler.indexOf("await cashierOrderService.create") < handler.indexOf("setOrderItems([])"));
 });
 
 test("cashier keeps the cart intact when secure creation fails", () => {
@@ -28,6 +30,18 @@ test("cashier sends database customization IDs to the server-owned pricing servi
   assert.match(cashier, /customizationOptionIds=chosenOptions\.map\(option=>option\.databaseId\?\?option\.id\)/);
   assert.match(cashier, /modifierIds:item\.customizationOptionIds/);
   assert.match(service, /\/orders/);
+});
+
+test("cashier clear and success paths replace the complete request attempt", () => {
+  assert.match(cashier, /const resetCashierAttempt=\(\)=>/);
+  assert.match(cashier, /const clearCurrentOrder=\(\)=>\{setOrderItems\(\[\]\);setReceived\(""\);setCashOpen\(false\);resetCashierAttempt\(\)/);
+  const handler = cashier.match(/const completeSale=async\(\)=>\{[\s\S]*?\n  \};/)?.[0] ?? "";
+  assert.match(handler, /setReceived\(""\);resetCashierAttempt\(\)/);
+});
+
+test("cashier uses a scoped order client instead of the customer singleton workflow", () => {
+  assert.match(cashier, /const cashierOrderService = new OrderService\(\)/);
+  assert.doesNotMatch(cashier, /import \{ orderService \}/);
 });
 
 test("order client has no fake local success path", () => {

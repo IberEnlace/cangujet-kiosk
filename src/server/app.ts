@@ -3,14 +3,23 @@ import { noriRouter } from "./routes/noriRoutes";
 import { menuRouter } from "./routes/menuRoutes";
 import { deviceRouter } from "./routes/deviceRoutes";
 import { orderRouter } from "./routes/orderRoutes";
+import { paymentWebhookRouter, qrPaymentRouter } from "./routes/qrPaymentRoutes";
 import type { DeviceApiError } from "../shared/deviceBootstrap";
 import type { NoriChatError } from "./types/noriChat";
 
 export const serverApp = express();
 serverApp.disable("x-powered-by");
-serverApp.use(express.json({ limit: "7mb" }));
+serverApp.disable("etag");
+serverApp.use(express.json({
+  limit: "7mb",
+  verify: (request, _response, buffer) => {
+    if (request.url?.split("?", 1)[0] === "/webhooks/payment") (request as Request & { rawBody?: Buffer }).rawBody = Buffer.from(buffer);
+  },
+}));
+serverApp.use(paymentWebhookRouter);
 serverApp.use("/api/v1", deviceRouter);
 serverApp.use("/api/v1", orderRouter);
+serverApp.use("/api/v1", qrPaymentRouter);
 serverApp.use("/api/nori", noriRouter);
 serverApp.use("/api", menuRouter);
 serverApp.get("/api/health", (_request, response) => response.json({ status: "ok" }));

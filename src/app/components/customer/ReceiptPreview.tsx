@@ -3,7 +3,7 @@ import type { SupportedLanguage } from "../../config/languages";
 import { LANGUAGE_CONFIG } from "../../config/languages";
 import { useBranch, useRestaurant } from "../../context/BootstrapContext";
 
-type Props = { orderNumber: number; date: Date; orderType: OrderType; itemCount: number; total: number; paymentMethod: PaymentMethod; language: SupportedLanguage };
+type Props = { orderNumber: string | number; date: Date; orderType: OrderType; itemCount: number; total: number; paymentMethod: PaymentMethod; language: SupportedLanguage };
 
 export default function ReceiptPreview({ orderNumber, date, orderType, itemCount, total, paymentMethod, language }: Props) {
   const branch = useBranch();

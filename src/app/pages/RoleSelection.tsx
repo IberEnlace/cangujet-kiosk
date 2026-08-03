@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
 import { motion, useReducedMotion } from "motion/react";
-import { ArrowRight, BarChart3, ChefHat, Monitor, ReceiptText, TabletSmartphone, type LucideIcon } from "lucide-react";
+import { ArrowRight, BarChart3, ChefHat, Cloud, Cpu, CreditCard, Monitor, Printer, ReceiptText, TabletSmartphone, type LucideIcon } from "lucide-react";
 import type { DeviceMode } from "../auth/roleConfig";
 import MorrowLogo from "../components/branding/MorrowLogo";
 import "./RoleSelection.css";
@@ -67,20 +67,14 @@ function RestaurantBackground({ reducedMotion }: { reducedMotion: boolean }) {
       </g>}
     </svg>
     <div className="workspace-perspective-grid" />
-    <svg className="workspace-contours" viewBox="0 0 320 240"><path d="M-5 215C55 155 95 235 153 175S246 120 329 167M-12 185c69-73 111 14 165-44s116-64 180-9M-20 150c76-75 126-5 174-48s116-65 183-17M-18 112c73-65 128-4 176-43s111-54 170-28" /></svg>
+    <div className="workspace-tech-glyphs">
+      <span className="is-pos"><TabletSmartphone /></span><span className="is-kds"><Monitor /></span>
+      <span className="is-printer"><Printer /></span><span className="is-payment"><CreditCard /></span>
+      <span className="is-cloud"><Cloud /></span><span className="is-ai"><Cpu /></span>
+    </div>
     <div className="workspace-particles">{AMBIENT_PARTICLES.map(([left, top, size, duration, delay], index) => <i key={`${left}-${top}`} className={index === 3 || index === 8 || index === 12 ? "is-lime" : ""} style={{ left: `${left}%`, top: `${top}%`, width: size, height: size, animationDuration: `${duration}s`, animationDelay: `-${delay}s` }} />)}</div>
-    <div className="workspace-focus-halo" /><div className="workspace-vignette" />
+    <div className="workspace-focus-halo" /><div className="workspace-spotlight" /><div className="workspace-vignette" />
   </div>;
-}
-
-function WorkspaceNetwork({ reducedMotion }: { reducedMotion: boolean }) {
-  return <svg className="workspace-network" viewBox="0 0 1000 280" preserveAspectRatio="none" aria-hidden="true">
-    <defs><filter id="pulse-glow"><feGaussianBlur stdDeviation="3" result="blur" /><feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge></filter></defs>
-    <path id="workflow-route" d="M100 140 C240 38 360 242 500 140 S690 44 900 140 S510 236 300 140" />
-    <path className="workspace-network__trace" d="M100 140 C240 38 360 242 500 140 S690 44 900 140 S510 236 300 140" />
-    {[100, 300, 500, 700, 900].map(x => <circle key={x} cx={x} cy="140" r="3" className="workspace-network__node" />)}
-    {!reducedMotion && <circle r="4" className="workspace-network__pulse" filter="url(#pulse-glow)"><animateMotion dur="10s" repeatCount="indefinite"><mpath href="#workflow-route" /></animateMotion></circle>}
-  </svg>;
 }
 
 function RoleMicroAnimation({ role }: { role: SelectableMode }) {
@@ -91,8 +85,8 @@ function RoleMicroAnimation({ role }: { role: SelectableMode }) {
   return <span className="role-micro role-micro--screen"><i /></span>;
 }
 
-function WorkspaceCard({ workspace, selected, dimmed, reducedMotion, onChoose }: {
-  workspace: Workspace; selected: boolean; dimmed: boolean; reducedMotion: boolean; onChoose: (workspace: Workspace) => void;
+function WorkspaceCard({ workspace, selected, dimmed, softDimmed, reducedMotion, onChoose, onActiveChange }: {
+  workspace: Workspace; selected: boolean; dimmed: boolean; softDimmed: boolean; reducedMotion: boolean; onChoose: (workspace: Workspace) => void; onActiveChange: (active: boolean) => void;
 }) {
   const Icon = workspace.icon;
   const moveLight = (event: PointerEvent<HTMLButtonElement>) => {
@@ -103,11 +97,11 @@ function WorkspaceCard({ workspace, selected, dimmed, reducedMotion, onChoose }:
   };
   const style = { "--accent": workspace.accent, "--accent-rgb": workspace.accentRgb } as CSSProperties;
   return <motion.button
-    type="button" style={style} onPointerMove={moveLight} onClick={() => onChoose(workspace)}
+    type="button" style={style} onPointerMove={moveLight} onPointerEnter={() => onActiveChange(true)} onPointerLeave={() => onActiveChange(false)} onFocus={() => onActiveChange(true)} onBlur={() => onActiveChange(false)} onClick={() => onChoose(workspace)}
     aria-label={`Open ${workspace.title} workspace`} aria-busy={selected} disabled={dimmed || selected}
-    initial={reducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: dimmed ? .46 : 1, y: 0 }}
+    initial={false} animate={{ opacity: dimmed ? .34 : softDimmed ? .62 : 1 }}
     transition={{ duration: reducedMotion ? .1 : .32, ease }}
-    className={`workspace-card group ${selected ? "is-selected" : ""} ${dimmed ? "is-dimmed" : ""}`}
+    className={`workspace-card group ${selected ? "is-selected" : ""} ${dimmed ? "is-dimmed" : ""} ${softDimmed ? "is-neighbor-dimmed" : ""}`}
   >
     <span className="workspace-card__light" aria-hidden="true" />
     <span className="workspace-card__topline" aria-hidden="true" />
@@ -116,7 +110,7 @@ function WorkspaceCard({ workspace, selected, dimmed, reducedMotion, onChoose }:
       <span className="workspace-card__title">{workspace.title}</span>
       <span className="workspace-card__description">{workspace.description}</span>
     </span>
-    <span className="workspace-card__action">Open workspace <ArrowRight size={15} aria-hidden="true" /></span>
+    <span className="workspace-card__action">{selected ? "Opening Workspace…" : "Open workspace"} <ArrowRight size={15} aria-hidden="true" /></span>
     {selected && <span className="workspace-card__loading" aria-hidden="true"><i /></span>}
   </motion.button>;
 }
@@ -125,49 +119,65 @@ export default function RoleSelection({ onSelect }: Props) {
   const prefersReducedMotion = useReducedMotion();
   const reducedMotion = Boolean(prefersReducedMotion);
   const [selected, setSelected] = useState<SelectableMode | null>(null);
+  const [hovered, setHovered] = useState<SelectableMode | null>(null);
   const navigationTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => { if (navigationTimer.current) clearTimeout(navigationTimer.current); }, []);
+  const environmentFrame = useRef<number | null>(null);
+  const latestPointer = useRef({ x: 0, y: 0 });
+  useEffect(() => () => {
+    if (navigationTimer.current) clearTimeout(navigationTimer.current);
+    if (environmentFrame.current !== null) cancelAnimationFrame(environmentFrame.current);
+  }, []);
 
   const choose = (workspace: Workspace) => {
     if (selected) return;
     setSelected(workspace.id);
-    navigationTimer.current = setTimeout(() => onSelect(workspace.id, workspace.defaultRemember), reducedMotion ? 0 : 220);
+    setHovered(workspace.id);
+    navigationTimer.current = setTimeout(() => onSelect(workspace.id, workspace.defaultRemember), reducedMotion ? 0 : 700);
   };
   const moveEnvironment = (event: PointerEvent<HTMLElement>) => {
     if (reducedMotion || event.pointerType === "touch") return;
-    const x = event.clientX / window.innerWidth - .5;
-    const y = event.clientY / window.innerHeight - .5;
-    event.currentTarget.style.setProperty("--environment-x", x.toFixed(3));
-    event.currentTarget.style.setProperty("--environment-y", y.toFixed(3));
+    latestPointer.current = { x: event.clientX, y: event.clientY };
+    if (environmentFrame.current !== null) return;
+    const target = event.currentTarget;
+    environmentFrame.current = requestAnimationFrame(() => {
+      const pointer = latestPointer.current;
+      target.style.setProperty("--environment-x", (pointer.x / window.innerWidth - .5).toFixed(3));
+      target.style.setProperty("--environment-y", (pointer.y / window.innerHeight - .5).toFixed(3));
+      target.style.setProperty("--spotlight-x", `${pointer.x}px`);
+      target.style.setProperty("--spotlight-y", `${pointer.y}px`);
+      environmentFrame.current = null;
+    });
   };
   const enter = (delay: number, y = 0) => ({
     initial: reducedMotion ? false as const : { opacity: 0, y }, animate: { opacity: 1, y: 0 },
     transition: { duration: reducedMotion ? .1 : .38, delay: reducedMotion ? 0 : delay, ease },
   });
 
-  return <main className="workspace-page" onPointerMove={moveEnvironment}>
+  return <main className={`workspace-page ${selected ? "is-opening" : ""}`} onPointerMove={moveEnvironment}>
     <RestaurantBackground reducedMotion={reducedMotion} />
+    <div className="workspace-opening-shade" aria-hidden="true" />
     <div className="workspace-shell">
-      <motion.header {...enter(0)} className="workspace-header">
-        <MorrowLogo variant="full" priority className="workspace-logo" />
-        <div className="workspace-status"><i />Restaurant Operating Platform</div>
+      <motion.header className="workspace-header">
+        <motion.div {...enter(0)}><MorrowLogo variant="full" priority className="workspace-logo" /></motion.div>
       </motion.header>
 
       <section className="workspace-main" aria-labelledby="workspace-title">
         <div className="workspace-intro">
-          <motion.p {...enter(.06)} className="workspace-eyebrow">Device setup</motion.p>
-          <motion.h1 {...enter(.12, 12)} id="workspace-title">How will this device be used?</motion.h1>
-          <motion.p {...enter(.2)} className="workspace-subtitle">Choose one workspace. Each role opens a focused application with only the tools it needs.</motion.p>
+          <motion.div {...enter(.08, 5)} className="workspace-status"><i />Platform Ready</motion.div>
+          <motion.p {...enter(.13)} className="workspace-eyebrow">Device setup</motion.p>
+          <motion.h1 initial={reducedMotion ? false : { opacity: 0, y: 14, filter: "blur(7px)" }} animate={{ opacity: 1, y: 0, filter: "blur(0px)" }} transition={{ duration: reducedMotion ? .1 : .52, delay: reducedMotion ? 0 : .18, ease }} id="workspace-title">How will this device be used?</motion.h1>
+          <motion.p {...enter(.26, 4)} className="workspace-subtitle">Choose one workspace. Each role opens a focused application with only the tools it needs.</motion.p>
         </div>
         <div className="workspace-grid-wrap">
-          <WorkspaceNetwork reducedMotion={reducedMotion} />
           <div className="workspace-grid">
-            {WORKSPACES.map((workspace, index) => <motion.div key={workspace.id} className="workspace-card-wrap" initial={reducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .32, delay: reducedMotion ? 0 : .26 + index * .055, ease }}>
-              <WorkspaceCard workspace={workspace} selected={selected === workspace.id} dimmed={selected !== null && selected !== workspace.id} reducedMotion={reducedMotion} onChoose={choose} />
+            {WORKSPACES.map((workspace, index) => <motion.div key={workspace.id} className="workspace-card-wrap" initial={reducedMotion ? false : { opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .38, delay: reducedMotion ? 0 : .42 + index * .08, ease }}>
+              <div className="workspace-card-float" style={{ "--accent-rgb": workspace.accentRgb } as CSSProperties}>
+                <WorkspaceCard workspace={workspace} selected={selected === workspace.id} dimmed={selected !== null && selected !== workspace.id} softDimmed={!selected && hovered !== null && hovered !== workspace.id} reducedMotion={reducedMotion} onChoose={choose} onActiveChange={active => setHovered(current => active ? workspace.id : current === workspace.id ? null : current)} />
+              </div>
             </motion.div>)}
           </div>
         </div>
-        <motion.div {...enter(.58)} className="workspace-platform"><span><i /><i /><i /></span>One platform. Every restaurant workflow connected.</motion.div>
+        <motion.div {...enter(.9)} className="workspace-platform" role="status" aria-live="polite" aria-atomic="true"><span><i /><i /><i /></span>{selected ? "Opening Workspace…" : "One platform. Every restaurant workflow connected."}</motion.div>
       </section>
     </div>
   </main>;

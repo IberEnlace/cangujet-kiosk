@@ -100,26 +100,40 @@ export class OrderDomainService {
     assertIdempotencyKey(request.idempotencyKey);
     const source = actor.role === "cashier" ? "cashier" : request.source === "nori" ? "nori" : "kiosk";
     const fingerprint = fingerprintOrderCreatePayload(request, source);
+    let existingOrderId: string | null = null;
     let existingFingerprint: string | null = null;
     try {
       const existing = await this.repository.findExistingOrderForIdempotency?.(actor, source, request.idempotencyKey);
-      if (existing) existingFingerprint = existing.request_fingerprint;
+      if (existing) {
+        existingOrderId = existing.id;
+        existingFingerprint = existing.request_fingerprint;
+      }
     } catch {
-      // Ignore lookup failure for logging
+      // The atomic database RPC remains authoritative if this optional lookup fails.
     }
 
-    console.info("order_create_idempotency_debug", {
+    console.info("order_create_idempotency_check", {
       idempotencyKey: request.idempotencyKey,
-      normalizedPayload: {
-        source,
-        serviceMode: request.serviceMode,
-        language: request.language,
-        notes: request.notes ?? null,
-        items: request.items,
-      },
       requestFingerprint: fingerprint,
       existingFingerprint,
+      existingOrderId,
+      conflict: existingFingerprint !== null && existingFingerprint !== fingerprint,
     });
+
+    if (existingFingerprint !== null && existingFingerprint !== fingerprint) {
+      throw new OrderDomainFailure(
+        "idempotency_conflict",
+        409,
+        "This order attempt key belongs to a different cart. Retry with a fresh attempt key.",
+        undefined,
+        undefined,
+        {
+          existingOrderId: existingOrderId ?? undefined,
+          conflictReason: "fingerprint_mismatch",
+          retryable: true,
+        },
+      );
+    }
 
     const quote = await this.quote(actor, request);
     if (actor.role === "kitchen") throw new OrderDomainFailure("unauthorized", 403, "Kitchen users cannot create orders.");
@@ -166,11 +180,31 @@ export class OrderDomainService {
     return this.repository.listActiveOrders(actor, audience);
   }
 
+  async pendingCashierOrders(actor: OrderActor) {
+    if (!isCashierPaymentActor(actor)) {
+      throw new OrderDomainFailure("unauthorized", 403, "Cashier access is required.");
+    }
+    return this.repository.listPendingCashierOrders(actor);
+  }
+
   async display(actor: OrderActor) {
-    if (actor.role !== "admin" && !(actor.role === "device" && actor.deviceType === "order_display")) {
+    // The selected UI mode is not part of the immutable device credential. Any
+    // authenticated branch device may render this deliberately small projection;
+    // repository scoping still binds the read to the token's restaurant/branch.
+    if (actor.role !== "admin" && actor.role !== "device") {
       throw new OrderDomainFailure("unauthorized", 403, "Order display access is required.");
     }
-    return this.repository.listActiveOrders(actor, "display");
+    const orders = await this.repository.listActiveOrders(actor, "display");
+    return orders
+      .filter((order): order is ProductionOrder & { status: "preparing" | "ready" | "completed" } =>
+        order.status === "preparing" || order.status === "ready" || order.status === "completed")
+      .map(order => ({
+        orderNumber: order.orderNumber,
+        status: order.status,
+        createdAt: order.createdAt,
+        readyAt: order.readyAt,
+        completedAt: order.completedAt,
+      }));
   }
 
   async pay(actor: OrderActor, orderId: string, request: OrderPaymentRequest): Promise<OrderPaymentResult & { duplicate: boolean }> {
@@ -178,12 +212,24 @@ export class OrderDomainService {
     if (!["cash", "pay_at_cashier", "card_terminal"].includes(request.method)) {
       throw new OrderDomainFailure("invalid_order_request", 400, "A supported payment method is required.");
     }
-    const order = await this.get(actor, orderId);
+    const order = await this.repository.getOrder(actor, orderId);
+    if (!order) throw new OrderDomainFailure("order_not_found", 404, "Order not found.");
     if (!["awaiting_payment", "payment_failed", "paid"].includes(order.status)) {
       throw new OrderDomainFailure("invalid_order_transition", 409, "This order is not awaiting payment.");
     }
-    if (actor.role === "kitchen") throw new OrderDomainFailure("unauthorized", 403, "Kitchen users cannot collect payments.");
-    if (request.method === "cash" && actor.role !== "cashier") {
+    if (actor.role === "kitchen" || (actor.role === "device" && actor.deviceType === "kitchen_display")) {
+      throw new OrderDomainFailure("unauthorized", 403, "Kitchen users cannot collect payments.");
+    }
+    if (request.method === "pay_at_cashier") {
+      if (!(actor.role === "device" && actor.deviceType === "kiosk")) {
+        throw new OrderDomainFailure("unauthorized", 403, "Only the ordering kiosk can defer payment to the cashier.");
+      }
+    } else if (order.paymentMethod === "pay_at_cashier" && !isCashierPaymentActor(actor)) {
+      throw new OrderDomainFailure("unauthorized", 403, "A cashier must collect this deferred payment.");
+    } else if (order.status !== "paid" && order.source === "kiosk" && isCashierPaymentActor(actor) && order.paymentMethod !== "pay_at_cashier") {
+      throw new OrderDomainFailure("invalid_order_request", 409, "This kiosk order was not created for Pay at Cashier.");
+    }
+    if (request.method === "cash" && !isCashierPaymentActor(actor)) {
       throw new OrderDomainFailure("unauthorized", 403, "Cash payments must be recorded by a cashier.");
     }
     const amountReceived = request.amountReceived == null ? null : normalizeMoney(request.amountReceived);
@@ -208,7 +254,8 @@ export class OrderDomainService {
   }
 
   async submit(actor: OrderActor, orderId: string, expectedVersion: number) {
-    const order = await this.get(actor, orderId);
+    const order = await this.repository.getOrder(actor, orderId);
+    if (!order) throw new OrderDomainFailure("order_not_found", 404, "Order not found.");
     if (order.status === "submitted") {
       return order;
     }
@@ -408,8 +455,9 @@ function validateSelections(
 
 function enforceTransitionRole(actor: OrderActor, order: ProductionOrder, next: ProductionOrderStatus) {
   if (actor.role === "device") {
-    requireOrderingActor(actor);
-    const allowed = next === "submitted" || next === "cancelled";
+    const canSubmit = next === "submitted" && (actor.deviceType === "kiosk" || actor.deviceType === "cashier_terminal");
+    const canCancel = next === "cancelled" && actor.deviceType === "kiosk";
+    const allowed = canSubmit || canCancel;
     if (!allowed || (next === "cancelled" && !["draft", "awaiting_payment", "paid", "submitted"].includes(order.status))) {
       throw new OrderDomainFailure("unauthorized", 403, "The device cannot perform this transition.");
     }
@@ -426,6 +474,12 @@ function requireOrderingActor(actor: OrderActor) {
   if (actor.role === "device" && actor.deviceType !== "kiosk") {
     throw new OrderDomainFailure("unauthorized", 403, "This device is not authorized to place orders.");
   }
+}
+
+function isCashierPaymentActor(actor: OrderActor) {
+  return actor.role === "cashier"
+    || actor.role === "admin"
+    || (actor.role === "device" && actor.deviceType === "cashier_terminal");
 }
 
 function assertIdempotencyKey(value: string) {

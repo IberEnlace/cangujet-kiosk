@@ -124,7 +124,7 @@ exception when unique_violation then
     if v_existing.request_fingerprint = p_request_fingerprint then
       return jsonb_build_object('order', public.production_order_json(v_existing.id), 'duplicate', true);
     end if;
-    raise exception 'idempotency_conflict';
+    raise;
   end if;
   raise;
 end;

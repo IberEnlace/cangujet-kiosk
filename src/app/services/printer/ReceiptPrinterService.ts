@@ -3,7 +3,7 @@ import type { OrderType, PaymentMethod } from "../../context/CartContext";
 export type ReceiptPrintStatus = "printing" | "printed" | "printer_error";
 
 export type ReceiptData = {
-  orderNumber: number;
+  orderNumber: string | number;
   date: Date;
   orderType: OrderType;
   itemCount: number;

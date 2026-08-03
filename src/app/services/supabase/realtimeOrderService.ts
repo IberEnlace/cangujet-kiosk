@@ -26,6 +26,36 @@ export function subscribeToPublicBoardSignal(onSignal: () => void, onStatus: (st
   return { unsubscribe: async () => { await client.removeChannel(channel); onStatus("disconnected"); } };
 }
 
+export function subscribeToOrderDisplaySignal(input: { branchId: string; onSignal: () => void; onStatus: (status: RealtimeConnectionStatus) => void }): RealtimeSubscription {
+  const client = supabase;
+  if (!client) { input.onStatus("disconnected"); return { unsubscribe: async () => undefined }; }
+  input.onStatus("connecting");
+  const channel = client.channel(`order-display:${input.branchId}`)
+    .on("postgres_changes", {
+      event: "UPDATE",
+      schema: "public",
+      table: "order_display_refresh_signals",
+      filter: `branch_id=eq.${input.branchId}`,
+    }, input.onSignal);
+  subscribe(channel, input.onSignal, input.onStatus);
+  return { unsubscribe: async () => { await client.removeChannel(channel); input.onStatus("disconnected"); } };
+}
+
+export function subscribeToQrPaymentSignal(input: { paymentSessionId: string; onSignal: () => void; onStatus: (status: RealtimeConnectionStatus) => void }): RealtimeSubscription {
+  const client = supabase;
+  if (!client) { input.onStatus("disconnected"); return { unsubscribe: async () => undefined }; }
+  input.onStatus("connecting");
+  const channel = client.channel(`qr-payment:${input.paymentSessionId}`)
+    .on("postgres_changes", {
+      event: "UPDATE",
+      schema: "public",
+      table: "qr_payment_refresh_signals",
+      filter: `payment_session_id=eq.${input.paymentSessionId}`,
+    }, input.onSignal);
+  subscribe(channel, input.onSignal, input.onStatus);
+  return { unsubscribe: async () => { await client.removeChannel(channel); input.onStatus("disconnected"); } };
+}
+
 function subscribe(channel: RealtimeChannel, refetch: () => void, update: (status: RealtimeConnectionStatus) => void) {
   let connected = false;
   channel.subscribe(status => {

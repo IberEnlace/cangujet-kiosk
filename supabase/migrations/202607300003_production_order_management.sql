@@ -692,7 +692,7 @@ create or replace function public.list_production_orders(
         or (o.status = 'completed' and o.completed_at >= now() - interval '24 hours')
       ))
       or (p_audience = 'display' and (
-        o.status in ('submitted', 'accepted', 'preparing', 'ready')
+        o.status in ('preparing', 'ready')
         or (o.status = 'completed' and o.completed_at >= now() - interval '5 minutes')
       ))
       or (p_audience = 'cashier' and o.created_at >= now() - interval '72 hours')

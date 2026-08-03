@@ -29,7 +29,7 @@ export type DbPaymentStatus = Database["public"]["Enums"]["payment_status"];
 export type OrderRow = { id: string; restaurant_id: string; branch_id: string; device_id: string | null; order_number: string; service_mode: "dine_in" | "take_away"; status: DbOrderStatus; payment_status: DbPaymentStatus; subtotal: number; tax_total: number; discount_total: number; total: number; currency: string; notes: string | null; language: string; customer_reference: string; source: "kiosk" | "cashier" | "nori"; created_by: string | null; created_at: string; updated_at: string; placed_at: string | null; accepted_at: string | null; preparing_at: string | null; ready_at: string | null; completed_at: string | null; cancelled_at: string | null; idempotency_key: string | null; version: number; business_date: string; request_fingerprint: string | null; menu_id: string | null; menu_version: number | null };
 export type OrderItemRow = { id: string; order_id: string; product_id: string | null; product_name_snapshot: string; unit_price: number; quantity: number; line_subtotal: number; tax_total: number; line_total: number; customizations: Json; notes: string | null; status: string; sort_order: number; tax_rate: number; allergens: string[]; created_at: string; updated_at: string };
 export type OrderItemModifierRow = { id: string; order_item_id: string; modifier_group_id: string | null; modifier_id: string | null; group_name_snapshot: string; modifier_name_snapshot: string; quantity: number; unit_price: number; total: number; created_at: string };
-export type OrderPaymentRow = { id: string; order_id: string; provider: string; method: Database["public"]["Enums"]["order_payment_method"]; status: Database["public"]["Enums"]["order_payment_lifecycle_status"]; amount: number; amount_received: number | null; change: number; currency: string; external_reference: string | null; idempotency_key: string; request_fingerprint: string; failure_code: string | null; failure_message: string | null; authorized_at: string | null; captured_at: string | null; failed_at: string | null; refunded_at: string | null; created_at: string; updated_at: string };
+export type OrderPaymentRow = { id: string; order_id: string; provider: string; method: Database["public"]["Enums"]["order_payment_method"]; status: Database["public"]["Enums"]["order_payment_lifecycle_status"]; amount: number; amount_received: number | null; change: number; currency: string; external_reference: string | null; idempotency_key: string; request_fingerprint: string; failure_code: string | null; failure_message: string | null; authorized_at: string | null; captured_at: string | null; failed_at: string | null; refunded_at: string | null; payment_session_id: string | null; provider_session_id: string | null; provider_transaction_id: string | null; provider_status: string | null; provider_payload: Json; provider_event_ids: string[]; expires_at: string | null; paid_at: string | null; created_at: string; updated_at: string };
 export type OrderStatusEventRow = { id: number; order_id: string; from_status: DbOrderStatus | null; to_status: DbOrderStatus; actor_type: Database["public"]["Enums"]["order_actor_type"]; actor_id: string | null; reason: string | null; metadata: Json; created_at: string };
 export type PublicBoardRow = { order_number: string; public_status: "preparing" | "ready" | "completed"; created_at: string; ready_at: string | null };
 export type NotificationSettingsRow = { id: string; branch_id: string; primary_email: string; secondary_email: string | null; daily_report_time: string; daily_sales_report: boolean; weekly_sales_summary: boolean; order_failure_alerts: boolean; payment_failure_alerts: boolean; kiosk_offline_alerts: boolean; kitchen_offline_alerts: boolean; device_sync_failure_alerts: boolean; created_at: string; updated_at: string };
@@ -69,6 +69,7 @@ export interface Database {
       order_item_modifiers: Table<OrderItemModifierRow>;
       order_payments: Table<OrderPaymentRow>;
       order_status_events: Table<OrderStatusEventRow>;
+      qr_payment_refresh_signals: Table<{ payment_session_id: string; changed_at: string }>;
       order_counters: Table<{ branch_id: string; business_date: string; current_value: number }>;
       notification_settings: Table<NotificationSettingsRow>;
       notification_delivery_logs: Table<NotificationDeliveryLogRow>;
@@ -92,7 +93,7 @@ export interface Database {
       order_status: "pending" | "confirmed" | "preparing" | "ready" | "completed" | "cancelled";
       order_lifecycle_status: "draft" | "awaiting_payment" | "paid" | "submitted" | "accepted" | "preparing" | "ready" | "completed" | "cancelled" | "payment_failed" | "rejected";
       order_payment_lifecycle_status: "pending" | "authorized" | "captured" | "failed" | "refunded" | "cancelled";
-      order_payment_method: "cash" | "pay_at_cashier" | "card_terminal";
+      order_payment_method: "cash" | "pay_at_cashier" | "card_terminal" | "qr";
       order_actor_type: "device" | "cashier" | "kitchen" | "admin" | "system";
       payment_status: "unpaid" | "pending" | "paid" | "failed" | "refunded";
       order_source: "kiosk" | "cashier" | "nori";

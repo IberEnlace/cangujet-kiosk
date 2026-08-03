@@ -1,8 +1,8 @@
 import { useEffect, useRef } from "react";
 
-interface UseKioskIdleResetOptions { timeoutMs: number; enabled?: boolean; onIdle: () => void; }
+interface UseKioskIdleResetOptions { timeoutMs: number; enabled?: boolean; resetKey?: string; onIdle: () => void; }
 
-export function useKioskIdleReset({ timeoutMs, enabled = true, onIdle }: UseKioskIdleResetOptions) {
+export function useKioskIdleReset({ timeoutMs, enabled = true, resetKey = "", onIdle }: UseKioskIdleResetOptions) {
   const onIdleRef = useRef(onIdle);
   useEffect(() => { onIdleRef.current = onIdle; }, [onIdle]);
   useEffect(() => {
@@ -18,5 +18,5 @@ export function useKioskIdleReset({ timeoutMs, enabled = true, onIdle }: UseKios
       window.clearTimeout(timer);
       events.forEach(event => window.removeEventListener(event, reset));
     };
-  }, [enabled, timeoutMs]);
+  }, [enabled, resetKey, timeoutMs]);
 }

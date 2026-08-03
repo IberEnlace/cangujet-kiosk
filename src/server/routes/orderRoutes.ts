@@ -23,6 +23,10 @@ export function createOrderRouter(
   serviceFactory: () => OrderDomainService = createOrderServiceFromEnvironment,
 ) {
   const router = Router();
+  router.use((_request, response, next) => {
+    try { response.app?.disable?.("etag"); } catch { /* noop */ }
+    next();
+  });
   let service: OrderDomainService | null = null;
   const resolve = () => service ??= serviceFactory();
 
@@ -77,9 +81,19 @@ export function createOrderRouter(
     response.json(await resolve().active(actor, "cashier"));
   }));
 
+  router.get("/cashier/pending-orders", asyncRoute(async (request, response) => {
+    const actor = await resolve().authenticate(readBearerToken(request));
+    response.setHeader("Cache-Control", "no-store");
+    response.json(await resolve().pendingCashierOrders(actor));
+  }));
+
   router.get("/orders/display", asyncRoute(async (request, response) => {
     const actor = await resolve().authenticate(readBearerToken(request));
-    response.json(await resolve().display(actor));
+    const orders = await resolve().display(actor);
+    response.setHeader("Cache-Control", "no-store, no-cache, must-revalidate");
+    response.setHeader("Pragma", "no-cache");
+    response.removeHeader("ETag");
+    response.json(orders);
   }));
 
   router.get("/kitchen/orders", asyncRoute(async (request, response, requestId) => {
@@ -88,11 +102,24 @@ export function createOrderRouter(
     diagnostic("kitchen_reconciliation", requestId, actor, undefined, "ok");
     response.setHeader(
       "Cache-Control",
-      "no-store, no-cache, must-revalidate",
+      "no-store, no-cache, must-revalidate, proxy-revalidate",
     );
     response.setHeader("Pragma", "no-cache");
     response.setHeader("Expires", "0");
+    response.setHeader("Surrogate-Control", "no-store");
     response.removeHeader("ETag");
+    response.setHeader("Last-Modified", new Date().toUTCString());
+
+    console.info("kitchen_orders_response", {
+      restaurantId: actor.restaurantId,
+      branchId: actor.branchId,
+      orderCount: orders.length,
+      firstOrderId: orders[0]?.id ?? null,
+      firstOrderStatus: orders[0]?.status ?? null,
+      firstOrderPaymentStatus: orders[0]?.paymentStatus ?? null,
+      actorRole: actor.role,
+      actorDeviceType: actor.deviceType ?? null,
+    });
 
     response.status(200).json(orders);
   }));
@@ -222,9 +249,20 @@ function asyncRoute(
           error,
         );
       if (failure.status >= 500) logInternalOrderError(requestId, request, failure);
-      if (failure.code === "invalid_order_transition" || failure.code === "order_conflict") {
+      if (
+        failure.code === "invalid_order_transition"
+        || failure.code === "order_conflict"
+        || failure.code === "idempotency_conflict"
+      ) {
         const actor = safeActor(request);
-        diagnostic("transition_rejected", requestId, actor, routeParam(request.params.orderId), failure.code);
+        diagnostic(
+          failure.code === "idempotency_conflict" ? "idempotency_conflict" : "transition_rejected",
+          requestId,
+          actor,
+          routeParam(request.params.orderId),
+          failure.code,
+          failure.details,
+        );
       }
       // Guard against writing to a socket that was already closed (e.g., Vite
       // proxy ECONNRESET). Without this check, calling response.json() on a

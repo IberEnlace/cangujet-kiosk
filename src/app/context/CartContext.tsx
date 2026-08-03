@@ -57,13 +57,14 @@ export type PaymentMethod =
   | "split" | "gift-card" | "wallet";
 
 export type OrderStatus =
-  | "idle" | "received" | "preparing" | "cooking" | "ready" | "completed";
+  | "idle" | "awaiting_payment" | "received" | "preparing" | "cooking" | "ready" | "completed";
 export type PaymentStatus = "pending" | "paid";
 export type PreparationStation = "kitchen" | "grill" | "drinks" | "dessert" | "no_preparation";
 
 export type KitchenOrder = {
   id: string;
   number: number;
+  orderNumber?: string;
   databaseStatus?: import("../../shared/orders").ProductionOrderStatus;
   items: { name: string; qty: number; notes?: string; station?: PreparationStation; customizations?: string[]; allergenWarnings?: string[] }[];
   status: OrderStatus;
@@ -74,8 +75,10 @@ export type KitchenOrder = {
   estimatedMinutes: number;
   type: OrderType;
   customer?: string;
+  notes?: string;
   source?: import("../../shared/orders").ProductionOrderSource;
   paymentStatus?: import("../../shared/orders").ProductionPaymentStatus | null;
+  paymentMethod?: import("../../shared/orders").ProductionPaymentMethod | null;
 };
 
 export type UserProfile = {
@@ -171,7 +174,7 @@ type CartContextType = {
   orderLifecycle: NoriOrderLifecycleState;
   transitionOrderLifecycle: (event: NoriOrderLifecycleEvent) => void;
   recordCreatedOrder: (order: { id: string; number: string; total: number; trackingToken?: string }) => void;
-  placeOrder: (created?: { id: string; number: string; total: number }) => void;
+  placeOrder: (created?: { id: string; number: string; total: number }, status?: OrderStatus) => void;
 
   // User
   user: UserProfile;
@@ -259,7 +262,8 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(() =>
     recoveredOrder?.paymentMethod === "card_terminal" ? "credit"
       : recoveredOrder?.paymentMethod === "pay_at_cashier" ? "cashier"
-        : recoveredOrder?.paymentMethod === "cash" ? "cash" : null);
+        : recoveredOrder?.paymentMethod === "cash" ? "cash"
+          : recoveredOrder?.paymentMethod === "qr" ? "qr" : null);
   const [orderStatus, setOrderStatus] = useState<OrderStatus>("idle");
   const [createdOrderTotal, setCreatedOrderTotal] = useState<number | null>(() => recoveredOrder ? Number(recoveredOrder.total) : null);
   const [currentTrackingToken, setCurrentTrackingToken] = useState(() => recoveredOrder?.customerReference ?? "");
@@ -412,13 +416,13 @@ export function CartProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const placeOrder = useCallback((created?: { id: string; number: string; total: number }) => {
+  const placeOrder = useCallback((created?: { id: string; number: string; total: number }, status: OrderStatus = "received") => {
     const effectiveId = created?.id || currentOrderId;
     const effectiveNumber = Number((created?.number || currentOrderNumber).match(/(\d+)$/)?.[1]);
     if (!effectiveId || !Number.isFinite(effectiveNumber)) return;
     if (created) setCreatedOrderTotal(created.total);
     setQueueNumber(effectiveNumber); setCurrentOrderId(effectiveId);
-    setOrderStatus("received");
+    setOrderStatus(status);
     setConfirmedOrderItems(items.map(item => ({ ...item })));
     setItems([]);
     setSavedItems([]);

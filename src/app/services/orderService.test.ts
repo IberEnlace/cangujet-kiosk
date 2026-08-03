@@ -2,6 +2,12 @@ import assert from "node:assert/strict";
 import test, { afterEach, beforeEach } from "node:test";
 import { DEVICE_ACCESS_TOKEN_STORAGE_KEY } from "./device/DeviceConfigurationService";
 import { OrderClientError, OrderService } from "./orders/OrderService";
+import {
+  buildCashierCreatePayload,
+  cashierCreateSignature,
+  newCashierAttempt,
+  resolveCashierCreateAttempt,
+} from "./orders/cashierAttempt";
 
 class MemoryStorage {
   private readonly values = new Map<string, string>();
@@ -92,6 +98,135 @@ test("valid required selections receive a 200 quote and 422 metadata identifies 
       && error.details?.modifierGroupId === "group-bun");
 });
 
+test("HTTP 409 preserves conflict metadata needed for safe client recovery", async () => {
+  const service = new OrderService({
+    fetchImpl: async () => jsonResponse({
+      code: "idempotency_conflict",
+      message: "This attempt key belongs to another cart.",
+      requestId: "request-409",
+      existingOrderId: "order-existing",
+      details: {
+        existingOrderId: "order-existing",
+        conflictReason: "fingerprint_mismatch",
+        retryable: true,
+      },
+    }, 409),
+  });
+
+  await assert.rejects(service.create({
+    ...request(),
+    idempotencyKey: "11111111-1111-4111-8111-111111111111",
+  }), (error: unknown) => error instanceof OrderClientError
+    && error.code === "idempotency_conflict"
+    && error.status === 409
+    && error.requestId === "request-409"
+    && error.existingOrderId === "order-existing"
+    && error.details?.retryable === true);
+});
+
+test("cashier request context overrides the customer workflow stored on OrderService", async () => {
+  const workflowHeaders: Array<string | null> = [];
+  const service = new OrderService({
+    fetchImpl: async (_input, init) => {
+      workflowHeaders.push(new Headers(init?.headers).get("x-workflow-attempt-id"));
+      return jsonResponse(productionOrder("order-1"), 201);
+    },
+  });
+  service.setWorkflowAttemptId("customer-workflow");
+  const createRequest = {
+    ...request(),
+    idempotencyKey: "11111111-1111-4111-8111-111111111111",
+  };
+
+  await service.create(createRequest, "device", { workflowAttemptId: "cashier-workflow" });
+  await service.create(createRequest, "device", { workflowAttemptId: null });
+
+  assert.deepEqual(workflowHeaders, ["cashier-workflow", null]);
+});
+
+test("cashier network sequence returns 201, duplicate 200, then changed-cart 201 without stale-key 409", async () => {
+  const keyOwners = new Map<string, { signature: string; orderId: string }>();
+  const network: Array<{ key: string; signature: string; status: number; workflow: string | null }> = [];
+  const service = new OrderService({
+    fetchImpl: async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      const key = String(body.idempotencyKey);
+      const { idempotencyKey: _ignored, ...payload } = body;
+      const signature = cashierCreateSignature(payload as ReturnType<typeof buildCashierCreatePayload>);
+      const existing = keyOwners.get(key);
+      const workflow = new Headers(init?.headers).get("x-workflow-attempt-id");
+      if (existing && existing.signature !== signature) {
+        network.push({ key, signature, status: 409, workflow });
+        return jsonResponse({
+          code: "idempotency_conflict",
+          message: "stale key",
+          requestId: "request-409",
+        }, 409);
+      }
+      if (existing) {
+        network.push({ key, signature, status: 200, workflow });
+        return jsonResponse(productionOrder(existing.orderId), 200);
+      }
+      const orderId = `order-${keyOwners.size + 1}`;
+      keyOwners.set(key, { signature, orderId });
+      network.push({ key, signature, status: 201, workflow });
+      return jsonResponse(productionOrder(orderId), 201);
+    },
+  });
+  service.setWorkflowAttemptId("customer-workflow-must-not-leak");
+
+  const firstPayload = buildCashierCreatePayload({
+    items: [{ productId: "product-a", quantity: 1, modifierIds: [] }],
+    serviceMode: "dine_in",
+    language: "en",
+    notes: null,
+  });
+  const secondPayload = buildCashierCreatePayload({
+    items: [{ productId: "product-a", quantity: 2, modifierIds: [] }],
+    serviceMode: "dine_in",
+    language: "en",
+    notes: null,
+  });
+  let attempt = resolveCashierCreateAttempt(
+    newCashierAttempt(sequenceIds("K1", "P1", "W1")),
+    cashierCreateSignature(firstPayload),
+  );
+
+  const first = await service.create(
+    { ...firstPayload, idempotencyKey: attempt.createKey },
+    "device",
+    { workflowAttemptId: attempt.workflowAttemptId },
+  );
+  const duplicate = await service.create(
+    { ...firstPayload, idempotencyKey: attempt.createKey },
+    "device",
+    { workflowAttemptId: attempt.workflowAttemptId },
+  );
+  attempt = resolveCashierCreateAttempt(
+    attempt,
+    cashierCreateSignature(secondPayload),
+    sequenceIds("K2", "P2", "W2"),
+  );
+  const changed = await service.create(
+    { ...secondPayload, idempotencyKey: attempt.createKey },
+    "device",
+    { workflowAttemptId: attempt.workflowAttemptId },
+  );
+
+  assert.equal(first.id, duplicate.id);
+  assert.notEqual(changed.id, first.id);
+  assert.deepEqual(network.map(entry => ({
+    key: entry.key,
+    status: entry.status,
+    workflow: entry.workflow,
+  })), [
+    { key: "K1", status: 201, workflow: "W1" },
+    { key: "K1", status: 200, workflow: "W1" },
+    { key: "K2", status: 201, workflow: "W2" },
+  ]);
+  assert.ok(network.every(entry => entry.status !== 409));
+});
+
 test("malformed and empty successful responses are server errors", async () => {
   const malformed = new OrderService({ fetchImpl: async () => new Response("{bad", { status: 200 }) });
   await assert.rejects(malformed.quote(request()), (error: unknown) =>
@@ -118,6 +253,38 @@ function quote() {
   return {
     menuId: "m1", menuVersion: 1, currency: "EUR", subtotal: "10.00", taxTotal: "0.80",
     discountTotal: "0.00", total: "10.80", serviceMode: "dine_in", language: "en", items: [],
+  };
+}
+
+function productionOrder(id: string) {
+  return {
+    ...quote(),
+    id,
+    orderNumber: id === "order-1" ? "A101" : "A102",
+    status: "awaiting_payment",
+    paymentStatus: null,
+    paymentMethod: null,
+    source: "cashier",
+    customerReference: "a".repeat(48),
+    version: 1,
+    notes: null,
+    placedAt: null,
+    acceptedAt: null,
+    preparingAt: null,
+    readyAt: null,
+    completedAt: null,
+    cancelledAt: null,
+    createdAt: "2026-08-03T10:00:00.000Z",
+    updatedAt: "2026-08-03T10:00:00.000Z",
+  };
+}
+
+function sequenceIds(...values: string[]) {
+  let index = 0;
+  return () => {
+    const value = values[index++];
+    if (value === undefined) throw new Error("Test ID factory exhausted.");
+    return value;
   };
 }
 

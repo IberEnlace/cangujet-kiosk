@@ -19,7 +19,7 @@ export type ProductionPaymentStatus =
   | "refunded"
   | "cancelled";
 
-export type ProductionPaymentMethod = "cash" | "pay_at_cashier" | "card_terminal";
+export type ProductionPaymentMethod = "cash" | "pay_at_cashier" | "card_terminal" | "qr";
 export type ProductionOrderSource = "kiosk" | "cashier" | "nori";
 export type ProductionServiceMode = "dine_in" | "take_away";
 
@@ -95,6 +95,16 @@ export type ProductionOrder = OrderQuote & {
   updatedAt: string;
 };
 
+export type OrderStatusDisplayStatus = Extract<ProductionOrderStatus, "preparing" | "ready" | "completed">;
+
+/** Branch-scoped, customer-safe projection returned to the public order board. */
+export type OrderStatusDisplayOrder = Pick<
+  ProductionOrder,
+  "orderNumber" | "createdAt" | "readyAt" | "completedAt"
+> & {
+  status: OrderStatusDisplayStatus;
+};
+
 export type OrderCreateRequest = OrderQuoteRequest & {
   idempotencyKey: string;
   source?: ProductionOrderSource;
@@ -113,6 +123,43 @@ export type OrderPaymentResult = {
   paymentStatus: ProductionPaymentStatus;
   amount: string;
   change: string;
+};
+
+export type QrPaymentStatus = "pending" | "processing" | "paid" | "expired" | "cancelled" | "failed";
+
+export type QrPaymentSession = {
+  paymentSessionId: string;
+  paymentReference: string;
+  orderId: string;
+  orderNumber: string;
+  status: QrPaymentStatus;
+  qrPayload: string;
+  qrCode: string;
+  amount: string;
+  currency: string;
+  expiresAt: string;
+  providerName: string;
+  duplicate: boolean;
+  order: ProductionOrder;
+};
+
+export type QrPaymentCreateRequest = {
+  idempotencyKey: string;
+  replaceExpired?: boolean;
+};
+
+export type QrPaymentWebhookEvent = {
+  eventId: string;
+  type: "payment.pending" | "payment.processing" | "payment.paid" | "payment.expired" | "payment.cancelled" | "payment.failed";
+  createdAt: string;
+  data: {
+    providerSessionId?: string;
+    paymentReference: string;
+    providerTransactionId?: string;
+    amount: string;
+    currency: string;
+    failureCode?: string;
+  };
 };
 
 export type OrderTransitionRequest = {
@@ -146,6 +193,7 @@ export type OrderErrorCode =
   | "price_changed"
   | "payment_required"
   | "payment_failed"
+  | "payment_expired"
   | "order_not_found"
   | "invalid_order_transition"
   | "order_conflict"
@@ -162,7 +210,7 @@ export type OrderApiError = {
   requestId: string;
   itemIndex?: number;
   productId?: string;
-  /** Returned on idempotency_conflict when the same key+payload was already committed. */
+  /** Existing resource that owns a key reused with a different request payload. */
   existingOrderId?: string;
   details?: Record<string, unknown>;
 };

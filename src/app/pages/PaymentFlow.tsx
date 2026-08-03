@@ -1,12 +1,15 @@
 import { useMemo, useRef, useState } from "react";
 import {
-  CreditCard, QrCode, Users, Check, ArrowLeft, ChevronRight, Loader2,
+  CreditCard, QrCode, Users, ArrowLeft, ChevronRight,
   Shield, Lock, Receipt, RefreshCw
 } from "lucide-react";
 import { useCart, type PaymentMethod } from "../context/CartContext";
 import MorrowLogo from "../components/branding/MorrowLogo";
 import { useBranch, useKiosk } from "../context/BootstrapContext";
 import { useCurrentOrder, useOrderSubmission } from "../context/OrderContext";
+import { savePayAtCashierConfirmation } from "../services/orders/payAtCashierConfirmation";
+import { orderService } from "../services/orders/OrderService";
+import { prepareQrPaymentAttempt, saveQrPaymentSession } from "../services/orders/qrPaymentSession";
 
 type CustomerPaymentMethod = Extract<PaymentMethod, "credit" | "cashier" | "qr">;
 type PaymentColor = "blue" | "yellow" | "violet";
@@ -36,36 +39,32 @@ const iconColorMap: Record<PaymentColor, string> = {
   yellow: "text-yellow-400",
 };
 
-type Screen = "select" | "qr" | "processing";
+type Props = {
+  onNavigate: (route: string) => void;
+  onPayAtCashierConfirmed: () => void;
+  onQrPaymentStarted: () => void;
+};
 
-type Props = { onNavigate: (route: string) => void };
-
-export default function PaymentFlow({ onNavigate }: Props) {
+export default function PaymentFlow({ onNavigate, onPayAtCashierConfirmed, onQrPaymentStarted }: Props) {
   const {
     total, items, orderType, setPaymentMethod, placeOrder,
-    transitionOrderLifecycle, currentOrderId, currentOrderNumber,
+    transitionOrderLifecycle,
   } = useCart();
   const branch = useBranch();
   const kiosk = useKiosk();
   const production = useCurrentOrder();
   const submission = useOrderSubmission();
   const methodMap: Record<CustomerPaymentMethod, "card" | "pay_at_cashier" | "qr"> = { credit: "card", cashier: "pay_at_cashier", qr: "qr" };
-  const availableMethods = METHODS.filter(method => method.id !== "qr" && kiosk?.payments.enabledMethods.includes(methodMap[method.id]));
+  const availableMethods = METHODS.filter(method => kiosk?.payments.enabledMethods.includes(methodMap[method.id]));
   const currency = useMemo(() => new Intl.NumberFormat(undefined, {
     style: "currency",
     currency: branch?.currency ?? "USD",
   }), [branch?.currency]);
-  const [screen, setScreen] = useState<Screen>("select");
   const [submitting, setSubmitting] = useState(false);
   const [orderError, setOrderError] = useState("");
   const [conflictMethod, setConflictMethod] = useState<CustomerPaymentMethod | null>(null);
   /** Ref-backed guard mirrors the inFlightRef inside OrderContext for the outer submitting UI state. */
   const submittingRef = useRef(false);
-
-  // Processing
-  const [processingStep, setProcessingStep] = useState(0);
-
-  const processingSteps = ["Connecting to payment gateway...", "Verifying card details...", "Authorizing payment...", "Confirming order..."];
 
   const handleMethodSelect = async (id: CustomerPaymentMethod) => {
     if (submittingRef.current || production.isBusy || !orderType) return;
@@ -84,21 +83,39 @@ export default function PaymentFlow({ onNavigate }: Props) {
 
     try {
       let created = await submission.createOrder();
-      let finalOrder = created;
       if (id === "cashier") {
-        await submission.capturePayment("pay_at_cashier");
-        finalOrder = await submission.submitOrder();
-        if (finalOrder.status !== "submitted") {
-          throw new Error("Order submission could not be verified.");
+        const deferredOrder = await submission.capturePayment("pay_at_cashier");
+        if (deferredOrder.status !== "awaiting_payment"
+          || deferredOrder.paymentStatus !== "pending"
+          || deferredOrder.paymentMethod !== "pay_at_cashier") {
+          throw new Error("Deferred cashier order was not persisted correctly.");
         }
+        setPaymentMethod("cashier");
+        transitionOrderLifecycle({
+          paymentStatus: "pending",
+          paymentMethod: "pay_at_cashier",
+          orderStatus: "awaiting_payment",
+          orderId: deferredOrder.id,
+          orderNumber: deferredOrder.orderNumber,
+          source: "order_service",
+          updatedAt: new Date().toISOString(),
+        });
+        savePayAtCashierConfirmation(deferredOrder);
+        placeOrder({ id: deferredOrder.id, number: deferredOrder.orderNumber, total: Number(deferredOrder.total) }, "awaiting_payment");
+        // Use the dedicated route callback before resetting the ordinary order
+        // workflow. The callback commits the hash and React route together, so
+        // this transition cannot fall through the generic customer route map.
+        onPayAtCashierConfirmed();
+        submission.clearOrderSession();
+        return;
       }
       setPaymentMethod(id);
       transitionOrderLifecycle({
-        paymentStatus: id === "cashier" ? "completed" : "pending",
+        paymentStatus: "pending",
         paymentMethod: lifecycleMethod,
-        orderStatus: finalOrder.status === "submitted" ? "submitted" : "awaiting_payment",
-        orderId: finalOrder.id,
-        orderNumber: finalOrder.orderNumber,
+        orderStatus: created.status === "submitted" ? "submitted" : "awaiting_payment",
+        orderId: created.id,
+        orderNumber: created.orderNumber,
         source: "order_service",
         updatedAt: new Date().toISOString(),
       });
@@ -109,11 +126,16 @@ export default function PaymentFlow({ onNavigate }: Props) {
       }
 
       if (id === "qr") {
-        setScreen("qr");
+        const attempt = prepareQrPaymentAttempt(created.id);
+        const session = attempt.session ?? await orderService.createQrPayment(created.id, {
+          idempotencyKey: attempt.createKey,
+        });
+        saveQrPaymentSession(session, attempt.createKey);
+        onQrPaymentStarted();
         return;
       }
 
-      placeOrder({ id: finalOrder.id, number: finalOrder.orderNumber, total: Number(finalOrder.total) });
+      placeOrder({ id: created.id, number: created.orderNumber, total: Number(created.total) });
       onNavigate("confirmation");
     } catch (error) {
       const isConflict = error instanceof Error && (error as any).code === "idempotency_conflict";
@@ -133,43 +155,9 @@ export default function PaymentFlow({ onNavigate }: Props) {
     }
   };
 
-  const startProcessing = () => {
-    transitionOrderLifecycle({
-      paymentStatus: "processing",
-      paymentMethod: "qr",
-      orderId: currentOrderId || undefined,
-      orderNumber: currentOrderNumber || undefined,
-      source: "qr_payment",
-      updatedAt: new Date().toISOString(),
-    });
-    setScreen("processing");
-    setProcessingStep(0);
-    let step = 0;
-    const interval = setInterval(() => {
-      step++;
-      setProcessingStep(step);
-      if (step >= processingSteps.length) {
-        clearInterval(interval);
-        setTimeout(() => {
-          transitionOrderLifecycle({
-            paymentStatus: "completed",
-            paymentMethod: "qr",
-            orderId: currentOrderId || undefined,
-            orderNumber: currentOrderNumber || undefined,
-            orderStatus: "paid",
-            completedAt: new Date().toISOString(),
-            source: "qr_payment",
-            updatedAt: new Date().toISOString(),
-          });
-          placeOrder(); onNavigate("confirmation");
-        }, 600);
-      }
-    }, 700);
-  };
-
   // ─── Screens ──────────────────────────────────────────────────────────────
 
-  if (screen === "select") return (
+  return (
     <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
       <header className="sticky top-0 z-40 bg-[#080b08]/90 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center justify-between">
         <button onClick={() => onNavigate("cart")} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors group">
@@ -270,65 +258,4 @@ export default function PaymentFlow({ onNavigate }: Props) {
       </div>
     </div>
   );
-
-  if (screen === "qr") return (
-    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
-      <button onClick={() => {
-        transitionOrderLifecycle({
-          paymentStatus: "cancelled",
-          paymentMethod: "qr",
-          orderId: currentOrderId || undefined,
-          orderNumber: currentOrderNumber || undefined,
-          source: "qr_payment",
-          updatedAt: new Date().toISOString(),
-        });
-        setScreen("select");
-      }} className="absolute top-6 left-6 size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></button>
-      <div className="text-center">
-        <h2 className="text-2xl font-bold">Scan to Pay</h2>
-        <p className="text-white/40 mt-2">QR payment provider is not connected</p>
-      </div>
-      <div className="p-6 bg-white rounded-3xl shadow-2xl shadow-black/50">
-        <div className="size-48 bg-[#0a0a0a] rounded-2xl flex items-center justify-center relative overflow-hidden">
-          <QrCode size={120} className="text-white" />
-          <div className="absolute inset-0 bg-gradient-to-br from-[#d7ff7a]/10 via-transparent to-[#d7ff7a]/5" />
-        </div>
-      </div>
-      <div className="text-center">
-        <p className="text-3xl font-bold text-[#d7ff7a]">{currency.format(total)}</p>
-        <p className="text-white/40 text-sm mt-2">Order #{currentOrderNumber}</p>
-      </div>
-      <button disabled={!import.meta.env.DEV} onClick={startProcessing} className="px-10 py-4 rounded-2xl bg-[#d7ff7a] text-[#17200f] font-bold flex items-center gap-3 hover:bg-[#c8f060] transition-all disabled:cursor-not-allowed disabled:opacity-40">
-        <Check size={18} /> {import.meta.env.DEV ? "Simulate completed payment" : "Unavailable"}
-      </button>
-    </div>
-  );
-
-  if (screen === "processing") return (
-    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col items-center justify-center gap-8">
-      <div className="relative">
-        <div className="size-28 rounded-full border-4 border-white/10 flex items-center justify-center">
-          <div className="absolute inset-0 rounded-full border-4 border-t-[#d7ff7a] animate-spin" />
-          <Lock size={28} className="text-white/40" />
-        </div>
-      </div>
-      <div className="text-center">
-        <h2 className="text-2xl font-bold mb-2">Processing Payment</h2>
-        <p className="text-white/40 text-sm">Please do not close this page</p>
-      </div>
-      <div className="flex flex-col gap-3 w-full max-w-sm">
-        {processingSteps.map((step, i) => (
-          <div key={i} className={`flex items-center gap-3 p-3 rounded-xl transition-all ${processingStep > i ? "bg-[#d7ff7a]/10 border border-[#d7ff7a]/20" : processingStep === i ? "bg-white/5 border border-white/10" : "opacity-30"}`}>
-            <div className={`size-6 rounded-full flex items-center justify-center flex-shrink-0 transition-all ${processingStep > i ? "bg-[#d7ff7a]" : processingStep === i ? "bg-white/20" : "bg-white/5"}`}>
-              {processingStep > i ? <Check size={12} className="text-[#17200f]" /> : processingStep === i ? <Loader2 size={12} className="animate-spin" /> : <span className="text-[10px] text-white/40">{i + 1}</span>}
-            </div>
-            <span className="text-sm">{step}</span>
-          </div>
-        ))}
-      </div>
-      <p className="text-3xl font-bold text-[#d7ff7a]">{currency.format(total)}</p>
-    </div>
-  );
-
-  return null;
 }

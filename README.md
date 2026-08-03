@@ -7,5 +7,11 @@
 
   Run `npm run dev` to start the development server.
 
+  Run `npm run kiosk:chrome` on the kiosk workstation to open production Chrome
+  with silent 80mm receipt printing enabled. See
+  [docs/kiosk-silent-printing.md](docs/kiosk-silent-printing.md).
+
   Supabase foundation and staff authentication: [docs/SUPABASE.md](docs/SUPABASE.md).
+
+  Production QR provider and signed webhook contract: [docs/qr-payment.md](docs/qr-payment.md).
   

@@ -92,6 +92,7 @@ export interface OrderRepository {
   getOrder(actor: OrderActor, orderId: string): Promise<ProductionOrder | null>;
   getTracking(customerReference: string): Promise<OrderTracking | null>;
   listActiveOrders(actor: OrderActor, audience: "kitchen" | "cashier" | "display"): Promise<ProductionOrder[]>;
+  listPendingCashierOrders(actor: OrderActor): Promise<ProductionOrder[]>;
   recordPayment(input: PersistPaymentInput): Promise<OrderPaymentResult & { duplicate: boolean }>;
   transitionOrder(input: {
     actor: OrderActor;
@@ -100,7 +101,7 @@ export interface OrderRepository {
     nextStatus: ProductionOrderStatus;
     reason: string | null;
   }): Promise<ProductionOrder>;
-  findExistingOrderForIdempotency?(actor: OrderActor, source: string, idempotencyKey: string): Promise<{ request_fingerprint: string } | null>;
+  findExistingOrderForIdempotency?(actor: OrderActor, source: string, idempotencyKey: string): Promise<{ id: string; request_fingerprint: string } | null>;
 }
 
 type RpcRow = Record<string, unknown>;
@@ -240,14 +241,17 @@ export class SupabaseOrderRepository implements OrderRepository {
 
   async findExistingOrderForIdempotency(actor: OrderActor, source: string, idempotencyKey: string) {
     try {
-      const res = await (this.client as any)
+      let query = (this.client as any)
         .from("orders")
-        .select("request_fingerprint")
+        .select("id,request_fingerprint")
         .eq("restaurant_id", actor.restaurantId)
         .eq("branch_id", actor.branchId)
         .eq("source", source)
-        .eq("idempotency_key", idempotencyKey)
-        .maybeSingle();
+        .eq("idempotency_key", idempotencyKey);
+      query = actor.deviceId === null
+        ? query.is("device_id", null)
+        : query.eq("device_id", actor.deviceId);
+      const res = await query.maybeSingle();
       return res.data ?? null;
     } catch {
       return null;
@@ -315,6 +319,15 @@ export class SupabaseOrderRepository implements OrderRepository {
     return Array.isArray(value) ? value as ProductionOrder[] : [];
   }
 
+  async listPendingCashierOrders(actor: OrderActor) {
+    const result = await (this.client as any).rpc("list_pending_cashier_orders", {
+      p_restaurant_id: actor.restaurantId,
+      p_branch_id: actor.branchId,
+    });
+    const value = firstRpcValue(result, "Pending cashier payments could not be loaded.", "list_pending_cashier_orders");
+    return Array.isArray(value) ? value as ProductionOrder[] : [];
+  }
+
   async recordPayment(input: PersistPaymentInput) {
     const result = await (this.client as any).rpc("record_production_payment", {
       p_order_id: input.order.id,
@@ -372,7 +385,12 @@ function firstRpcValue(
   if (result.error) throw rpcFailure(rpcName, result.error, fallback);
   if (Array.isArray(result.data)) {
     const row = result.data[0] as RpcRow | undefined;
-    return row && "result" in row ? row.result : row ?? null;
+    // PostgREST returns a JSONB array result as the array itself. Only unwrap
+    // the legacy RETURNS TABLE(result jsonb) envelope; otherwise preserving
+    // the complete array is required for list RPCs.
+    return row && typeof row === "object" && "result" in row
+      ? row.result
+      : result.data;
   }
   return result.data;
 }
