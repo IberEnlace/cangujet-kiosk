@@ -17,13 +17,13 @@ type DeferredCashierClient = {
   pay: (
     orderId: string,
     request: OrderPaymentRequest,
-    authentication: "staff",
+    authentication: "staff" | "device",
     context: OrderRequestContext,
   ) => Promise<OrderPaymentResult & { duplicate?: boolean }>;
   submit: (
     orderId: string,
     expectedVersion: number,
-    authentication: "staff",
+    authentication: "staff" | "device",
     context: OrderRequestContext,
   ) => Promise<ProductionOrder>;
 };
@@ -35,6 +35,7 @@ export async function completeDeferredCashierPayment(input: {
   amountReceived?: string;
   externalReference?: string;
   attempt: CashierAttempt;
+  authentication?: "staff" | "device";
   onAttemptResolved?: (attempt: CashierAttempt) => void;
   onPaymentPersisted?: (payment: OrderPaymentResult & { duplicate?: boolean }) => void;
 }) {
@@ -69,7 +70,7 @@ export async function completeDeferredCashierPayment(input: {
       method: input.method,
       ...(normalizedAmount === null ? {} : { amountReceived: normalizedAmount }),
       ...(input.externalReference ? { externalReference: input.externalReference } : {}),
-    }, "staff", context);
+    }, input.authentication ?? "staff", context);
     paidOrder = payment.order;
     if (paidOrder.status !== "paid" || payment.paymentStatus !== "captured") {
       throw new Error("Payment was not persisted.");
@@ -77,7 +78,7 @@ export async function completeDeferredCashierPayment(input: {
     input.onPaymentPersisted?.(payment);
   }
 
-  const submitted = await input.client.submit(paidOrder.id, paidOrder.version, "staff", context);
+  const submitted = await input.client.submit(paidOrder.id, paidOrder.version, input.authentication ?? "staff", context);
   if (submitted.status !== "submitted") throw new Error("Order was not submitted.");
   return { attempt, payment, paidOrder, submitted, paymentSignature };
 }

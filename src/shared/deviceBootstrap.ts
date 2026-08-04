@@ -112,6 +112,25 @@ export type DeviceRegistrationResponse = {
   bootstrap: DeviceBootstrap;
 };
 
+export type DeviceActivationRequest = {
+  secretKey: string;
+  deviceFingerprint: string;
+  deviceName?: string;
+  appVersion?: string;
+  requestId?: string;
+};
+
+export type DeviceActivationResponse = DeviceRegistrationResponse & {
+  device: {
+    id: string;
+    name: string;
+    deviceType: BootstrapDeviceType;
+    restaurantId: string;
+    branchId: string;
+    status: "active";
+  };
+};
+
 export type DeviceAccessTokenResponse = {
   accessToken: string;
   tokenType: "Bearer";
@@ -131,4 +150,11 @@ export type DeviceMenuResponse = {
   products: Array<Record<string, unknown>>;
   customizationGroups: Array<Record<string, unknown>>;
   customizationOptions: Array<Record<string, unknown>>;
+};
+
+export type DeviceHeartbeatResponse = {
+  ok: true;
+  configurationVersion: number;
+  configurationChanged: boolean;
+  serverTime: string;
 };

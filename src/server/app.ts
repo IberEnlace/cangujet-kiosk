@@ -4,6 +4,7 @@ import { menuRouter } from "./routes/menuRoutes";
 import { deviceRouter } from "./routes/deviceRoutes";
 import { orderRouter } from "./routes/orderRoutes";
 import { paymentWebhookRouter, qrPaymentRouter } from "./routes/qrPaymentRoutes";
+import { deviceManagementRouter } from "./routes/deviceManagementRoutes";
 import type { DeviceApiError } from "../shared/deviceBootstrap";
 import type { NoriChatError } from "./types/noriChat";
 
@@ -18,6 +19,7 @@ serverApp.use(express.json({
 }));
 serverApp.use(paymentWebhookRouter);
 serverApp.use("/api/v1", deviceRouter);
+serverApp.use("/api/v1", deviceManagementRouter);
 serverApp.use("/api/v1", orderRouter);
 serverApp.use("/api/v1", qrPaymentRouter);
 serverApp.use("/api/nori", noriRouter);

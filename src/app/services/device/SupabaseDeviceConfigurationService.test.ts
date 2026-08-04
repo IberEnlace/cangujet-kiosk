@@ -310,8 +310,8 @@ test("clearing setup requests session revocation and removes both storage classe
 
   await service.clearConfiguration();
 
-  assert.equal(calls[0].url, "/api/v1/devices/session");
-  assert.equal(calls[0].init.method, "DELETE");
+  assert.equal(calls[0].url, "/api/v1/device/logout");
+  assert.equal(calls[0].init.method, "POST");
   assert.equal(sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY), null);
   assert.equal(localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY), null);
 });

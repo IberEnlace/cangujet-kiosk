@@ -6,6 +6,8 @@ import type {
   DeviceBootstrap,
   DeviceRegistrationResponse,
 } from "../../../shared/deviceBootstrap";
+import { isDeviceActivationKey } from "../../../shared/deviceKey";
+import { getDeviceInstallationId } from "./deviceInstallation";
 import {
   DeviceConfigurationError,
   type DevicePaymentMethod,
@@ -50,11 +52,17 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
   async configureDevice(secretKey: string, options: DeviceRequestOptions = {}): Promise<KioskDeviceConfig> {
     diagnostic("registration_request_started");
     try {
-      const result = await this.request<DeviceRegistrationResponse>("/api/v1/devices/register", {
+      const activation = isDeviceActivationKey(secretKey);
+      const result = await this.request<DeviceRegistrationResponse>(activation ? "/api/v1/device/activate" : "/api/v1/devices/register", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ secretKey }),
+        body: JSON.stringify(activation ? {
+          secretKey,
+          deviceFingerprint: getDeviceInstallationId(),
+          appVersion: import.meta.env?.VITE_APP_VERSION ?? "web",
+          requestId: crypto.randomUUID(),
+        } : { secretKey }),
         signal: options.signal,
       }, true);
       this.saveAccessToken(result.accessToken);
@@ -110,11 +118,12 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
   }
 
   async clearConfiguration(options: DeviceRequestOptions = {}) {
-    const accessToken = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    let accessToken = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
     try {
+      if (!accessToken) accessToken = await this.refreshAccessToken(options.signal);
       if (accessToken) {
-        await this.request<void>("/api/v1/devices/session", {
-          method: "DELETE",
+        await this.request<void>("/api/v1/device/logout", {
+          method: "POST",
           headers: { authorization: `Bearer ${accessToken}` },
           credentials: "include",
           signal: options.signal,
@@ -124,6 +133,34 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       // Local setup must still be cleared when the server is unreachable.
     } finally {
       this.clearLocalConfiguration();
+    }
+  }
+
+  async heartbeat(configurationVersion: number, options: DeviceRequestOptions = {}) {
+    let accessToken = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    if (!accessToken) accessToken = await this.refreshAccessToken(options.signal);
+    if (!accessToken) return true;
+    try {
+      const result = await this.request<{ configurationChanged: boolean }>("/api/v1/device/heartbeat", {
+        method: "POST",
+        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ configurationVersion, appVersion: import.meta.env?.VITE_APP_VERSION ?? "web", connectionHealth: "online" }),
+        signal: options.signal,
+      }, true);
+      return result.configurationChanged;
+    } catch (error) {
+      if (!(error instanceof DeviceHttpError) || error.status !== 401) throw this.toConfigurationError(error);
+      accessToken = await this.refreshAccessToken(options.signal);
+      if (!accessToken) return true;
+      const result = await this.request<{ configurationChanged: boolean }>("/api/v1/device/heartbeat", {
+        method: "POST",
+        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ configurationVersion, appVersion: import.meta.env?.VITE_APP_VERSION ?? "web", connectionHealth: "online" }),
+        signal: options.signal,
+      }, true);
+      return result.configurationChanged;
     }
   }
 
@@ -264,7 +301,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
   private async request<T>(url: string, init: RequestInit, expectsJson: boolean): Promise<T> {
     const controller = new AbortController();
     let timedOut = false;
-    const isRegistration = url === "/api/v1/devices/register";
+    const isRegistration = url === "/api/v1/devices/register" || url === "/api/v1/device/activate";
     const abortFromCaller = () => controller.abort();
     if (init.signal?.aborted) controller.abort();
     else init.signal?.addEventListener("abort", abortFromCaller, { once: true });
@@ -339,7 +376,11 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
     if (error instanceof DeviceConfigurationError) return error;
     if (!(error instanceof DeviceHttpError)) return new DeviceConfigurationError("configuration_error");
     if (error.code === "device_disabled") return new DeviceConfigurationError("disabled");
+    if (error.code === "device_revoked") return new DeviceConfigurationError("revoked");
     if (error.code === "credential_expired") return new DeviceConfigurationError("expired");
+    if (error.code === "device_key_expired") return new DeviceConfigurationError("expired");
+    if (error.code === "device_key_revoked") return new DeviceConfigurationError("revoked");
+    if (error.code === "device_key_used") return new DeviceConfigurationError("already_used");
     if (error.code === "invalid_device_key") return new DeviceConfigurationError("invalid_key");
     if (error.code === "invalid_setup_request" || error.status === 400) return new DeviceConfigurationError("invalid_request");
     if (error.status === 409) return new DeviceConfigurationError("conflict");

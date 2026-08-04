@@ -11,5 +11,6 @@ export interface DeviceConfigurationService {
   configureDevice(secretKey: string, options?: DeviceRequestOptions): Promise<KioskDeviceConfig>;
   getSavedConfiguration(options?: DeviceRequestOptions): Promise<KioskDeviceConfig | null>;
   clearConfiguration(options?: DeviceRequestOptions): Promise<void>;
+  heartbeat(configurationVersion: number, options?: DeviceRequestOptions): Promise<boolean>;
   isConfigurationValid(config: unknown): config is KioskDeviceConfig;
 }

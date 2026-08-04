@@ -84,7 +84,10 @@ function Application() {
     return () => window.removeEventListener("hashchange", update);
   }, []);
 
-  const guardedRoute = useMemo(() => guardRoute(route, auth.currentRole, auth.isAuthenticated), [route, auth.currentRole, auth.isAuthenticated]);
+  const assignedDeviceType = device.config?.bootstrap.device.type ?? null;
+  const guardedRoute = useMemo(() => deviceCanOpenRoute(assignedDeviceType, route)
+    ? route
+    : guardRoute(route, auth.currentRole, auth.isAuthenticated), [assignedDeviceType, route, auth.currentRole, auth.isAuthenticated]);
   useEffect(() => { if (!auth.isLoading && guardedRoute !== route) navigateTo(guardedRoute); }, [auth.isLoading, guardedRoute, route]);
   useEffect(() => { if (route === ROUTES.categories && !orderType) navigateTo(ROUTES.service); }, [orderType, route]);
 
@@ -132,6 +135,10 @@ function Application() {
     if (device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) navigateTo(ROUTES.deviceSetup);
   }, [device.initializationStatus, route]);
   useEffect(() => {
+    if (device.initializationStatus !== "authenticated" || !assignedDeviceType) return;
+    if (route === ROUTES.selectRole) navigateTo(workspaceForDevice(assignedDeviceType));
+  }, [assignedDeviceType, device.initializationStatus, route]);
+  useEffect(() => {
     if (route === ROUTES.idle) { clearPayAtCashierConfirmation(); clearQrPaymentSession(); }
   }, [route]);
   useEffect(() => {
@@ -154,13 +161,13 @@ function Application() {
     onSetup={() => { void device.clearDeviceConfiguration(); navigateTo(ROUTES.deviceSetup); }}
   />;
   if (auth.isLoading && (route.startsWith("/admin") || route.startsWith("/cashier") || route.startsWith("/kitchen"))) return <DeviceLoadingScreen />;
-  if (device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => { window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle); }} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
+  if (device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
   if (device.initializationStatus === "authenticated" && ["waiting_for_device", "loading_configuration", "loading_menu", "error"].includes(bootstrap.state)) return <ConfigurationLoadingScreen />;
   if ([ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice].includes(route as "/nori" | "/nori/chat" | "/nori/voice") && !bootstrap.kiosk?.ai.enabled) return null;
   if (route === ROUTES.noriVoice && !bootstrap.kiosk?.ai.voiceEnabled) return null;
   if (guardedRoute !== route) return null;
   if (route === ROUTES.selectRole) return <RoleSelection onSelect={(mode, remember) => { auth.selectDeviceMode(mode, remember); navigateTo(isStaffRole(mode) ? getLoginRouteForRole(mode) : getHomeRouteForRole(mode)); }} />;
-  if (route === ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => { window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle); }} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
+  if (route === ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
   if (route === ROUTES.deviceInfo) return <DeviceInfo onBack={() => navigateTo(ROUTES.deviceSetup)} onCleared={() => navigateTo(ROUTES.deviceSetup)} />;
   if (route === ROUTES.idle) return <IdleScreen onStart={startOrder} />;
   if (route === ROUTES.language) return <LanguageSelection onBack={() => navigateTo(ROUTES.idle)} onContinue={() => {
@@ -185,9 +192,9 @@ function Application() {
   const loginRole = (["admin", "cashier", "kitchen"] as StaffRole[]).find(role => route === getLoginRouteForRole(role));
   if (loginRole) return <StaffLogin role={loginRole} {...LOGIN_COPY[loginRole]} onSuccess={() => navigateTo(getHomeRouteForRole(loginRole))} onBack={() => navigateTo(ROUTES.selectRole)} />;
   if (route === ROUTES.admin) { navigateTo(ROUTES.adminDashboard); return null; }
-  const adminSections: Partial<Record<AppRoute, "dashboard" | "menu" | "categories" | "notifications" | "settings">> = {
+  const adminSections: Partial<Record<AppRoute, "dashboard" | "menu" | "categories" | "notifications" | "devices" | "settings">> = {
     [ROUTES.adminDashboard]: "dashboard", [ROUTES.adminMenu]: "menu", [ROUTES.adminCategories]: "categories",
-    [ROUTES.adminNotifications]: "notifications", [ROUTES.adminSettings]: "settings",
+    [ROUTES.adminNotifications]: "notifications", [ROUTES.adminDevices]: "devices", [ROUTES.adminSettings]: "settings",
   };
   const adminSection = adminSections[route];
   if (adminSection) return staffPage("admin", <Dashboard section={adminSection} onNavigate={navigateTo} />);
@@ -203,4 +210,18 @@ export default function App() {
 function mockQrSessionId() {
   const path = window.location.hash.replace(/^#/, "");
   return path.startsWith(`${ROUTES.mockQrPayment}/`) ? decodeURIComponent(path.slice(ROUTES.mockQrPayment.length + 1)) : "";
+}
+
+function workspaceForDevice(type: import("../shared/deviceBootstrap").BootstrapDeviceType): AppRoute {
+  if (type === "cashier_terminal") return ROUTES.cashier;
+  if (type === "kitchen_display") return ROUTES.kitchen;
+  if (type === "order_display") return ROUTES.display;
+  if (type === "admin_terminal") return ROUTES.adminLogin;
+  return ROUTES.idle;
+}
+
+function deviceCanOpenRoute(type: import("../shared/deviceBootstrap").BootstrapDeviceType | null, route: AppRoute) {
+  return (type === "cashier_terminal" && route === ROUTES.cashier)
+    || (type === "kitchen_display" && route === ROUTES.kitchen)
+    || (type === "order_display" && route === ROUTES.display);
 }

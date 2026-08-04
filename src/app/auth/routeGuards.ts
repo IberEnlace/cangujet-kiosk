@@ -7,6 +7,7 @@ const LOGIN_ROLE: Partial<Record<AppRoute, StaffRole>> = {
 const HOME_ROLE: Partial<Record<AppRoute, UserRole>> = {
   [ROUTES.admin]: "admin", [ROUTES.adminDashboard]: "admin", [ROUTES.adminMenu]: "admin", [ROUTES.adminCategories]: "admin",
   [ROUTES.adminNotifications]: "admin", [ROUTES.adminSettings]: "admin",
+  [ROUTES.adminDevices]: "admin",
   [ROUTES.cashier]: "cashier", [ROUTES.kitchen]: "kitchen", [ROUTES.display]: "display",
 };
 

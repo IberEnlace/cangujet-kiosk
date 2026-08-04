@@ -26,6 +26,7 @@ export const ROUTES = {
   adminMenu: "/admin/menu",
   adminCategories: "/admin/categories",
   adminNotifications: "/admin/notifications",
+  adminDevices: "/admin/devices",
   adminSettings: "/admin/settings",
   cashierLogin: "/cashier/login",
   cashier: "/cashier",

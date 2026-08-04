@@ -146,11 +146,11 @@ export class OrderService {
     );
   }
 
-  transition(orderId: string, request: OrderTransitionRequest) {
+  transition(orderId: string, request: OrderTransitionRequest, authentication: OrderAuthentication = "staff") {
     return this.request<ProductionOrder>(
       `/orders/${encodeURIComponent(orderId)}/status`,
       { method: "POST", body: request },
-      "staff",
+      authentication,
     );
   }
 

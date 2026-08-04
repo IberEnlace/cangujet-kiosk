@@ -181,6 +181,15 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
   };
   const fake: DeviceIdentityApplication = {
     async register() { return registration; },
+    async activate() {
+      return {
+        ...registration,
+        device: {
+          id: bootstrap.device.id, name: bootstrap.device.name, deviceType: bootstrap.device.type,
+          restaurantId: bootstrap.restaurant.id, branchId: bootstrap.branch.id, status: "active" as const,
+        },
+      };
+    },
     async refresh(): Promise<DeviceAccessTokenResponse> {
       return { accessToken: "new.header.signature", tokenType: "Bearer", expiresAt: registration.expiresAt };
     },
@@ -205,6 +214,7 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
       };
     },
     async revoke() { return; },
+    async heartbeat() { return { ok: true, configurationVersion: 7, configurationChanged: false, serverTime: NOW.toISOString() }; },
   };
   const app = express();
   app.use(express.json());
@@ -223,6 +233,23 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
     assert.equal(body.bootstrap.configVersion, 7);
     assert.equal(body.refreshToken, undefined);
     assert.match(registered.headers.get("set-cookie") ?? "", /HttpOnly/);
+
+    const activated = await fetch(`http://127.0.0.1:${port}/api/v1/device/activate`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        secretKey: "MORROW-ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
+        deviceFingerprint: "90000000-0000-4000-8000-000000000001",
+        requestId: "91000000-0000-4000-8000-000000000001",
+        appVersion: "test",
+      }),
+    });
+    assert.equal(activated.status, 201);
+    const activationBody = await activated.json() as DeviceRegistrationResponse & { refreshToken?: string; secretKey?: string; device?: { deviceType: string } };
+    assert.equal(activationBody.device?.deviceType, "kiosk");
+    assert.equal(activationBody.refreshToken, undefined);
+    assert.equal(activationBody.secretKey, undefined);
+    assert.match(activated.headers.get("set-cookie") ?? "", /Path=\/api\/v1/);
 
     const invalidRequest = await fetch(`http://127.0.0.1:${port}/api/v1/devices/register`, {
       method: "POST",
@@ -343,6 +370,7 @@ class MemoryDeviceRepository implements DeviceRepository {
     this.credential.public_key_id = this.publicKeyId;
     return publicKeyId === this.publicKeyId ? { credential: this.credential, device: this.device } : null;
   }
+  async activateKey() { return { device: this.device, activationKeyId: "80000000-0000-4000-8000-000000000001", duplicate: false }; }
   async createSession(session: NewDeviceSession) { this.sessions.push(session); }
   async getSession(sessionId: string): Promise<DeviceSessionIdentity | null> {
     const stored = this.sessions.find(session => session.id === sessionId);

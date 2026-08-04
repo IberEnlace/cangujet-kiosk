@@ -4,6 +4,7 @@ import type {
   BranchRow,
   Database,
   DeviceCredentialRow,
+  DeviceActivationKeyRow,
   DeviceRow,
   DeviceSessionRow,
   IdleScreenConfigurationRow,
@@ -16,6 +17,7 @@ import type {
   ThemeRow,
   CategoryRow,
   ProductRow,
+  Json,
   CustomizationGroupRow,
   CustomizationOptionRow,
 } from "../../lib/supabase/database.types";
@@ -27,7 +29,8 @@ export type DeviceCredentialIdentity = {
 
 export type DeviceSessionIdentity = {
   session: DeviceSessionRow;
-  credential: DeviceCredentialRow;
+  credential: DeviceCredentialRow | null;
+  activationKey?: DeviceActivationKeyRow | null;
   device: DeviceRow;
 };
 
@@ -45,10 +48,24 @@ export type DeviceBootstrapData = {
   menu: MenuRow;
 };
 
-export type NewDeviceSession = Pick<
-  DeviceSessionRow,
-  "id" | "device_id" | "credential_id" | "access_token_hash" | "refresh_token_hash" | "expires_at" | "refresh_expires_at"
->;
+export type NewDeviceSession = Pick<DeviceSessionRow,
+  "id" | "device_id" | "credential_id" | "activation_key_id" | "access_token_hash" |
+  "refresh_token_hash" | "expires_at" | "refresh_expires_at">;
+
+export type DeviceActivationInput = {
+  keyHash: string;
+  installationId: string;
+  deviceName: string | null;
+  appVersion: string | null;
+  requestId: string;
+  metadata: Json;
+};
+
+export type DeviceActivationResult = {
+  device: DeviceRow;
+  activationKeyId: string;
+  duplicate: boolean;
+};
 
 export type DeviceMenuData = {
   categories: CategoryRow[];
@@ -65,14 +82,16 @@ export type DeviceMenuScope = {
 
 export interface DeviceRepository {
   findCredential(publicKeyId: string): Promise<DeviceCredentialIdentity | null>;
+  activateKey(input: DeviceActivationInput): Promise<DeviceActivationResult>;
   createSession(session: NewDeviceSession): Promise<void>;
   getSession(sessionId: string): Promise<DeviceSessionIdentity | null>;
   getSessionByRefreshHash(refreshHash: string): Promise<DeviceSessionIdentity | null>;
   updateSessionAccess(sessionId: string, accessTokenHash: string, expiresAt: string): Promise<void>;
   revokeSession(sessionId: string): Promise<void>;
   touchDeviceSession(deviceId: string, sessionId: string): Promise<void>;
+  recordHeartbeat?(deviceId: string, sessionId: string, appVersion: string | null, connectionHealth: "online" | "degraded"): Promise<void>;
   recordRegistration(deviceId: string, credentialId: string): Promise<void>;
-  recordAudit(deviceId: string | null, credentialId: string | null, eventType: string): Promise<void>;
+  recordAudit(deviceId: string | null, credentialId: string | null, eventType: string, activationKeyId?: string | null, requestId?: string | null): Promise<void>;
   loadBootstrap(deviceId: string): Promise<DeviceBootstrapData | null>;
   loadMenuConfiguration(scope: DeviceMenuScope): Promise<DeviceMenuData | null>;
 }
@@ -87,6 +106,24 @@ export class SupabaseDeviceRepository implements DeviceRepository {
     const device = await this.client.from("devices").select("*").eq("id", credential.data.device_id).maybeSingle();
     assertQuery(device.error, "Device lookup failed.");
     return device.data ? { credential: credential.data, device: device.data } : null;
+  }
+
+  async activateKey(input: DeviceActivationInput): Promise<DeviceActivationResult> {
+    const activation = await this.client.rpc("activate_device_key", {
+      p_key_hash: input.keyHash,
+      p_installation_id: input.installationId,
+      p_device_name: input.deviceName,
+      p_app_version: input.appVersion,
+      p_request_id: input.requestId,
+      p_metadata: input.metadata,
+    });
+    if (activation.error) throw activationError(activation.error);
+    const row = activation.data?.[0];
+    if (!row) throw new Error("Device activation did not return a device.");
+    const device = await this.client.from("devices").select("*").eq("id", row.device_id).maybeSingle();
+    assertQuery(device.error, "Activated device lookup failed.");
+    if (!device.data) throw new Error("Activated device was not found.");
+    return { device: device.data, activationKeyId: row.activation_key_id, duplicate: row.duplicate };
   }
 
   async createSession(session: NewDeviceSession) {
@@ -130,6 +167,15 @@ export class SupabaseDeviceRepository implements DeviceRepository {
     assertQuery(device.error ?? session.error, "Device activity could not be recorded.");
   }
 
+  async recordHeartbeat(deviceId: string, sessionId: string, appVersion: string | null, connectionHealth: "online" | "degraded") {
+    const now = new Date().toISOString();
+    const [device, session] = await Promise.all([
+      this.client.from("devices").update({ last_seen_at: now, app_version: appVersion, connection_health: connectionHealth }).eq("id", deviceId),
+      this.client.from("device_sessions").update({ last_seen_at: now }).eq("id", sessionId),
+    ]);
+    assertQuery(device.error ?? session.error, "Device heartbeat could not be recorded.");
+  }
+
   async recordRegistration(deviceId: string, credentialId: string) {
     const now = new Date().toISOString();
     const [credential, device, audit] = await Promise.all([
@@ -145,10 +191,12 @@ export class SupabaseDeviceRepository implements DeviceRepository {
     assertQuery(credential.error ?? device.error ?? audit.error, "Device registration activity could not be recorded.");
   }
 
-  async recordAudit(deviceId: string | null, credentialId: string | null, eventType: string) {
+  async recordAudit(deviceId: string | null, credentialId: string | null, eventType: string, activationKeyId: string | null = null, requestId: string | null = null) {
     const result = await this.client.from("device_audit_events").insert({
       device_id: deviceId,
       credential_id: credentialId,
+      activation_key_id: activationKeyId,
+      request_id: requestId,
       event_type: eventType,
       metadata: {},
     });
@@ -272,12 +320,19 @@ export class SupabaseDeviceRepository implements DeviceRepository {
   }
 
   private async resolveSessionIdentity(session: DeviceSessionRow): Promise<DeviceSessionIdentity | null> {
-    const [credential, device] = await Promise.all([
-      this.client.from("device_credentials").select("*").eq("id", session.credential_id).maybeSingle(),
+    const [credential, activationKey, device] = await Promise.all([
+      session.credential_id
+        ? this.client.from("device_credentials").select("*").eq("id", session.credential_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+      session.activation_key_id
+        ? this.client.from("device_activation_keys").select("*").eq("id", session.activation_key_id).maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
       this.client.from("devices").select("*").eq("id", session.device_id).maybeSingle(),
     ]);
-    assertQuery(credential.error ?? device.error, "Device session identity could not be loaded.");
-    return credential.data && device.data ? { session, credential: credential.data, device: device.data } : null;
+    assertQuery(credential.error ?? activationKey.error ?? device.error, "Device session identity could not be loaded.");
+    return device.data && (credential.data || activationKey.data)
+      ? { session, credential: credential.data, activationKey: activationKey.data, device: device.data }
+      : null;
   }
 }
 
@@ -293,4 +348,12 @@ export function createSupabaseDeviceRepositoryFromEnvironment() {
 
 function assertQuery(error: { message: string } | null, message: string): asserts error is null {
   if (error) throw new Error(`${message} ${error.message}`);
+}
+
+function activationError(error: { message: string }) {
+  const code = ["device_key_invalid", "device_key_revoked", "device_key_expired", "device_key_used", "device_scope_disabled"]
+    .find(candidate => error.message.includes(candidate));
+  const mapped = new Error(code ?? "device_activation_failed");
+  mapped.name = "DeviceActivationRepositoryError";
+  return mapped;
 }

@@ -2,6 +2,7 @@ export const DEVICE_KEY_PREFIX = "mdk";
 export const DEVICE_PUBLIC_KEY_ID_PATTERN = /^[a-f0-9]{24}$/;
 export const DEVICE_SECRET_PATTERN = /^[A-Za-z0-9_-]{43}$/;
 export const DEVICE_SECRET_KEY_PATTERN = /^mdk_([a-f0-9]{24})_([A-Za-z0-9_-]{43})$/;
+export const DEVICE_ACTIVATION_KEY_PATTERN = /^MORROW(?:-[A-Z0-9]{4}){6}$/;
 
 export type DeviceSecretKeyParts = {
   publicKeyId: string;
@@ -22,4 +23,20 @@ export function parseDeviceSecretKeyParts(value: string): DeviceSecretKeyParts |
 
 export function isDeviceSecretKey(value: string) {
   return parseDeviceSecretKeyParts(value) !== null;
+}
+
+export function normalizeDeviceActivationKey(value: string) {
+  const compact = value.trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (!compact.startsWith("MORROW")) return value.trim().toUpperCase();
+  const body = compact.slice(6, 30);
+  if (body.length !== 24) return value.trim().toUpperCase();
+  return `MORROW-${body.match(/.{1,4}/g)?.join("-") ?? body}`;
+}
+
+export function isDeviceActivationKey(value: string) {
+  return DEVICE_ACTIVATION_KEY_PATTERN.test(normalizeDeviceActivationKey(value));
+}
+
+export function isSupportedDeviceProvisioningKey(value: string) {
+  return isDeviceActivationKey(value) || isDeviceSecretKey(value);
 }

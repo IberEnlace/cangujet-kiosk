@@ -4,7 +4,10 @@ import type {
   BootstrapPaymentMethod,
   BootstrapServiceMode,
   DeviceAccessTokenResponse,
+  DeviceActivationRequest,
+  DeviceActivationResponse,
   DeviceBootstrap,
+  DeviceHeartbeatResponse,
   DeviceMenuResponse,
   DeviceRegistrationResponse,
 } from "../../shared/deviceBootstrap";
@@ -20,6 +23,7 @@ import {
   verifyDeviceSecret,
 } from "./deviceCredentialService";
 import { DeviceTokenService, type DeviceTokenClaims } from "./deviceTokenService";
+import { hashDeviceActivationKey } from "./deviceActivationKeyService";
 
 const REFRESH_TOKEN_DAYS = 30;
 const PAYMENT_METHODS = new Set<BootstrapPaymentMethod>(["card", "pay_at_cashier", "qr"]);
@@ -40,6 +44,7 @@ export type DeviceRegistrationResult = DeviceRegistrationResponse & {
   refreshToken: string;
   refreshExpiresAt: string;
 };
+export type DeviceActivationResult = DeviceActivationResponse & { refreshToken: string; refreshExpiresAt: string };
 
 export type AuthorizedDeviceIdentity = {
   deviceId: string;
@@ -50,11 +55,13 @@ export type AuthorizedDeviceIdentity = {
 
 export interface DeviceIdentityApplication {
   register(secretKey: string): Promise<DeviceRegistrationResult>;
+  activate(request: DeviceActivationRequest): Promise<DeviceActivationResult>;
   refresh(refreshToken: string): Promise<DeviceAccessTokenResponse>;
   bootstrap(accessToken: string): Promise<DeviceBootstrap>;
   menu(accessToken: string): Promise<DeviceMenuResponse>;
   authorize(accessToken: string): Promise<AuthorizedDeviceIdentity>;
   revoke(accessToken: string): Promise<void>;
+  heartbeat(accessToken: string, currentConfigurationVersion?: number, appVersion?: string | null, connectionHealth?: "online" | "degraded"): Promise<DeviceHeartbeatResponse>;
 }
 
 export class DeviceIdentityService implements DeviceIdentityApplication {
@@ -63,6 +70,11 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
     private readonly tokens: DeviceTokenService,
     private readonly now: () => Date = () => new Date(),
     private readonly secretVerifier: typeof verifyDeviceSecret = verifyDeviceSecret,
+    private readonly activationKeyHasher: (key: string) => string | null = key => {
+      const pepper = process.env.MORROW_DEVICE_KEY_PEPPER?.trim();
+      if (!pepper) throw new Error("MORROW_DEVICE_KEY_PEPPER is not configured.");
+      return hashDeviceActivationKey(key, pepper);
+    },
   ) {}
 
   async register(secretKey: string): Promise<DeviceRegistrationResult> {
@@ -93,6 +105,7 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
       id: sessionId,
       device_id: device.id,
       credential_id: credential.id,
+      activation_key_id: null,
       access_token_hash: hashOpaqueToken(issued.token),
       refresh_token_hash: hashOpaqueToken(refreshToken),
       expires_at: issued.expiresAt,
@@ -114,6 +127,55 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
     };
   }
 
+  async activate(request: DeviceActivationRequest): Promise<DeviceActivationResult> {
+    const keyHash = this.activationKeyHasher(request.secretKey);
+    if (!keyHash) {
+      await this.safeAudit(null, null, "activation_failed_invalid_key", null, request.requestId ?? null);
+      throw activationFailure("device_key_invalid");
+    }
+    let activated;
+    try {
+      activated = await this.repository.activateKey({
+        keyHash,
+        installationId: request.deviceFingerprint,
+        deviceName: request.deviceName?.trim() || null,
+        appVersion: request.appVersion?.trim() || null,
+        requestId: request.requestId || randomUUID(),
+        metadata: {},
+      });
+    } catch (error) {
+      const code = error instanceof Error ? error.message : "device_activation_failed";
+      await this.safeAudit(null, null, `activation_failed_${safeAuditCode(code)}`, null, request.requestId ?? null);
+      throw activationFailure(code);
+    }
+    assertActiveDevice(activated.device);
+    const bootstrap = await this.loadActiveBootstrap(activated.device.id);
+    const session = await this.issueSession(activated.device, null, activated.activationKeyId);
+    await this.safeAudit(
+      activated.device.id,
+      null,
+      activated.duplicate ? "activation_idempotently_replayed" : "device_activated",
+      activated.activationKeyId,
+      request.requestId ?? null,
+    );
+    return {
+      accessToken: session.accessToken,
+      tokenType: "Bearer",
+      expiresAt: session.expiresAt,
+      refreshToken: session.refreshToken,
+      refreshExpiresAt: session.refreshExpiresAt,
+      bootstrap,
+      device: {
+        id: activated.device.id,
+        name: activated.device.name,
+        deviceType: activated.device.device_type,
+        restaurantId: activated.device.restaurant_id,
+        branchId: activated.device.branch_id,
+        status: "active",
+      },
+    };
+  }
+
   async refresh(refreshToken: string): Promise<DeviceAccessTokenResponse> {
     if (!/^drt_[0-9a-f-]{36}_[A-Za-z0-9_-]{48,128}$/i.test(refreshToken)) {
       throw unauthorizedSession();
@@ -123,6 +185,7 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
     assertActiveDevice(identity.device);
     const issued = this.tokens.issue(toTokenIdentity(identity.device, identity.session.id));
     await this.repository.updateSessionAccess(identity.session.id, hashOpaqueToken(issued.token), issued.expiresAt);
+    await this.safeAudit(identity.device.id, identity.credential?.id ?? null, "session_refreshed", identity.activationKey?.id ?? null);
     return { accessToken: issued.token, tokenType: "Bearer", expiresAt: issued.expiresAt };
   }
 
@@ -169,7 +232,19 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
   async revoke(accessToken: string) {
     const authenticated = await this.authenticate(accessToken);
     await this.repository.revokeSession(authenticated.session.id);
-    await this.safeAudit(authenticated.device.id, authenticated.credential.id, "device_session_revoked");
+    await this.safeAudit(authenticated.device.id, authenticated.credential?.id ?? null, "device_session_revoked", authenticated.activationKey?.id ?? null);
+  }
+
+  async heartbeat(accessToken: string, currentConfigurationVersion = 0, appVersion: string | null = null, connectionHealth: "online" | "degraded" = "online"): Promise<DeviceHeartbeatResponse> {
+    const authenticated = await this.authenticate(accessToken);
+    if (this.repository.recordHeartbeat) await this.repository.recordHeartbeat(authenticated.device.id, authenticated.session.id, appVersion, connectionHealth);
+    else await this.repository.touchDeviceSession(authenticated.device.id, authenticated.session.id);
+    return {
+      ok: true,
+      configurationVersion: Number(authenticated.device.config_version),
+      configurationChanged: Number(authenticated.device.config_version) > currentConfigurationVersion,
+      serverTime: this.now().toISOString(),
+    };
   }
 
   private async authenticate(accessToken: string) {
@@ -192,9 +267,27 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
     return mapBootstrap(data);
   }
 
-  private async safeAudit(deviceId: string, credentialId: string, eventType: string) {
+  private async issueSession(device: DeviceRow, credentialId: string | null, activationKeyId: string | null) {
+    const sessionId = randomUUID();
+    const issued = this.tokens.issue(toTokenIdentity(device, sessionId));
+    const refreshToken = `drt_${sessionId}_${randomBytes(48).toString("base64url")}`;
+    const refreshExpiresAt = new Date(this.now().getTime() + REFRESH_TOKEN_DAYS * 86_400_000).toISOString();
+    await this.repository.createSession({
+      id: sessionId,
+      device_id: device.id,
+      credential_id: credentialId,
+      activation_key_id: activationKeyId,
+      access_token_hash: hashOpaqueToken(issued.token),
+      refresh_token_hash: hashOpaqueToken(refreshToken),
+      expires_at: issued.expiresAt,
+      refresh_expires_at: refreshExpiresAt,
+    });
+    return { accessToken: issued.token, expiresAt: issued.expiresAt, refreshToken, refreshExpiresAt };
+  }
+
+  private async safeAudit(deviceId: string | null, credentialId: string | null, eventType: string, activationKeyId: string | null = null, requestId: string | null = null) {
     try {
-      await this.repository.recordAudit(deviceId, credentialId, eventType);
+      await this.repository.recordAudit(deviceId, credentialId, eventType, activationKeyId, requestId);
     } catch {
       // Authentication outcome must not reveal whether audit storage is available.
     }
@@ -232,9 +325,11 @@ function mapBootstrap(data: DeviceBootstrapData): DeviceBootstrap {
   const voiceSettings = record(data.nori.voice_settings);
   const noriPublicOptions = record(data.nori.public_options);
   const featureFlags = booleanRecord(noriPublicOptions.featureFlags);
+  const deviceConfiguration = record(data.device.configuration);
+  Object.assign(featureFlags, booleanRecord(deviceConfiguration.featureFlags));
   featureFlags.aiAssistant = data.nori.enabled;
   featureFlags.voiceAssistant = data.nori.voice_enabled;
-  const printerConfiguration = record(paymentPublicOptions.printer);
+  const printerConfiguration = { ...record(paymentPublicOptions.printer), ...record(deviceConfiguration.printer) };
   const videos = Array.isArray(data.idle.videos)
     ? data.idle.videos.filter((value): value is string => typeof value === "string")
     : [];
@@ -332,6 +427,9 @@ function mapBootstrap(data: DeviceBootstrapData): DeviceBootstrap {
 }
 
 function assertActiveDevice(device: DeviceRow) {
+  if (device.status === "revoked" || device.revoked_at) {
+    throw new DeviceApiFailure("device_revoked", 403, "This device has been revoked.");
+  }
   if (device.status !== "active") {
     throw new DeviceApiFailure("device_disabled", 403, "This device is disabled.");
   }
@@ -342,8 +440,7 @@ function isSessionRefreshable(identity: DeviceSessionIdentity, now: Date) {
     && Boolean(identity.session.refresh_token_hash)
     && Boolean(identity.session.refresh_expires_at)
     && Date.parse(identity.session.refresh_expires_at!) > now.getTime()
-    && !identity.credential.revoked_at
-    && (!identity.credential.expires_at || Date.parse(identity.credential.expires_at) > now.getTime());
+    && credentialIsUsable(identity.credential, now);
 }
 
 function isSessionUsable(identity: DeviceSessionIdentity, token: string, claims: DeviceTokenClaims, now: Date) {
@@ -354,8 +451,7 @@ function isSessionUsable(identity: DeviceSessionIdentity, token: string, claims:
     && identity.device.restaurant_id === claims.restaurant_id
     && identity.device.branch_id === claims.branch_id
     && identity.device.device_type === claims.device_type
-    && !identity.credential.revoked_at
-    && (!identity.credential.expires_at || Date.parse(identity.credential.expires_at) > now.getTime());
+    && credentialIsUsable(identity.credential, now);
 }
 
 function toTokenIdentity(device: DeviceRow, sessionId: string) {
@@ -393,6 +489,25 @@ function latestTimestamp(values: string[]) {
 
 function invalidKey() {
   return new DeviceApiFailure("invalid_device_key", 401, "The device secret key is invalid.");
+}
+
+function credentialIsUsable(credential: DeviceSessionIdentity["credential"], now: Date) {
+  return !credential || (!credential.revoked_at
+    && (!credential.expires_at || Date.parse(credential.expires_at) > now.getTime()));
+}
+
+function activationFailure(code: string) {
+  if (code.includes("device_key_expired")) return new DeviceApiFailure("device_key_expired", 403, "This device key has expired.");
+  if (code.includes("device_key_revoked")) return new DeviceApiFailure("device_key_revoked", 403, "This device key has been revoked.");
+  if (code.includes("device_key_used")) return new DeviceApiFailure("device_key_used", 409, "This device key has already been used.");
+  if (code.includes("device_scope_disabled")) return new DeviceApiFailure("device_disabled", 403, "This device is disabled.");
+  if (code.includes("device_key_invalid")) return new DeviceApiFailure("invalid_device_key", 401, "This device key is invalid.");
+  return new DeviceApiFailure("device_service_unavailable", 503, "The device service is unavailable.");
+}
+
+function safeAuditCode(code: string) {
+  return ["device_key_invalid", "device_key_expired", "device_key_revoked", "device_key_used", "device_scope_disabled"]
+    .find(candidate => code.includes(candidate)) ?? "service_error";
 }
 
 function unauthorizedSession() {

@@ -34,7 +34,7 @@ test("device setup submission is explicit, validates the shared key grammar, and
   assert.match(setup, /type="submit"/);
   assert.match(setup, /event\.preventDefault\(\)/);
   assert.match(setup, /secretKey\.trim\(\)/);
-  assert.match(setup, /isDeviceSecretKey\(trimmed\)/);
+  assert.match(setup, /isSupportedDeviceProvisioningKey\(trimmed\)/);
   assert.match(setup, /initializationStatus === "registering"/);
   assert.match(setup, /await configureDevice\(trimmed\)/);
   assert.match(setup, /const displayedError = validationError \?/);
@@ -57,7 +57,8 @@ test("clearing setup returns the context to setup-required state", () => {
 
 test("configuration polling starts only when authenticated and cleans up", () => {
   assert.match(context, /initializationStatus !== "authenticated" \|\| !config/);
-  assert.match(context, /window\.clearInterval\(interval\)/);
+  assert.match(context, /window\.clearTimeout\(pollTimer\)/);
+  assert.match(context, /5_000 \* \(2 \*\*/);
   assert.match(context, /document\.removeEventListener\("visibilitychange", visibility\)/);
   assert.match(context, /controller\.abort\(\)/);
   assert.match(context, /configuration_poll_failed/);

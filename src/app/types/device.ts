@@ -2,8 +2,9 @@ import type { SupportedLanguage } from "../config/languages";
 import type { OrderType } from "../context/CartContext";
 import type { DeviceBootstrap } from "../../shared/deviceBootstrap";
 
-export type DeviceStatus = "checking" | "unconfigured" | "connecting" | "configured" | "invalid_request" | "invalid_key" | "network_error" | "timeout" | "disabled" | "expired" | "conflict" | "server_error" | "protocol_error" | "configuration_error";
+export type DeviceStatus = "checking" | "unconfigured" | "connecting" | "configured" | "invalid_request" | "invalid_key" | "network_error" | "timeout" | "disabled" | "expired" | "revoked" | "already_used" | "conflict" | "server_error" | "protocol_error" | "configuration_error";
 export type DeviceInitializationStatus = "initializing" | "registering" | "authenticated" | "setup_required" | "error";
+export type DeviceLifecycleState = "initializing" | "unconfigured" | "activating" | "active" | "token_expired" | "revoked" | "offline" | "failed";
 export type DeviceErrorStatus = Exclude<DeviceStatus, "checking" | "unconfigured" | "connecting" | "configured">;
 export type DevicePaymentMethod = "card" | "pay_at_cashier" | "qr";
 

@@ -55,6 +55,7 @@ export default function CashierDashboard() {
   const liveOrders=useCashierOrders();
   const pendingKiosk=usePendingCashierOrders();
   const { profile }=useAuth();
+  const authentication: "staff"|"device"=profile?"staff":"device";
   const { menu, restaurant, branch, kiosk }=useBootstrap();
   const currency=useMemo(()=>new Intl.NumberFormat(undefined,{style:"currency",currency:branch?.currency??"USD"}),[branch?.currency]);
   const CURRENCY=currency;
@@ -128,7 +129,7 @@ export default function CashierDashboard() {
       storeAttempt(attemptForRequest);
       const requestContext={workflowAttemptId:attemptForRequest.workflowAttemptId};
       if(import.meta.env.DEV)console.info("[MORROW cashier attempt]",{event:"create",createKey:attemptForRequest.createKey,requestSignature,workflowAttemptId:attemptForRequest.workflowAttemptId});
-      const created=await cashierOrderService.create({...createPayload,idempotencyKey:attemptForRequest.createKey},"staff",requestContext);
+      const created=await cashierOrderService.create({...createPayload,idempotencyKey:attemptForRequest.createKey},authentication,requestContext);
 
       const normalizedAmountReceived=amountReceived.toFixed(2);
       const paymentSignature=cashierPaymentSignature({orderId:created.id,method:"cash",amountReceived:normalizedAmountReceived,captured:true,currency:created.currency});
@@ -136,8 +137,8 @@ export default function CashierDashboard() {
       storeAttempt(attemptForPayment);
       const paymentContext={workflowAttemptId:attemptForPayment.workflowAttemptId};
       if(import.meta.env.DEV)console.info("[MORROW cashier attempt]",{event:"payment",createKey:attemptForPayment.createKey,paymentKey:attemptForPayment.paymentKey,requestSignature,paymentSignature,workflowAttemptId:attemptForPayment.workflowAttemptId});
-      const payment=await cashierOrderService.pay(created.id,{idempotencyKey:attemptForPayment.paymentKey,method:"cash",amountReceived:normalizedAmountReceived},"staff",paymentContext);
-      const submitted=await cashierOrderService.submit(created.id,payment.order.version,"staff",paymentContext);
+      const payment=await cashierOrderService.pay(created.id,{idempotencyKey:attemptForPayment.paymentKey,method:"cash",amountReceived:normalizedAmountReceived},authentication,paymentContext);
+      const submitted=await cashierOrderService.submit(created.id,payment.order.version,authentication,paymentContext);
       const now=new Date();const authoritativeSubtotal=Number(submitted.subtotal);const authoritativeTax=Number(submitted.taxTotal);const authoritativeTotal=Number(submitted.total);const authoritativeChange=Number(payment.change);
       const receipt:CashierReceiptData={orderNumber:submitted.orderNumber,date:now.toLocaleString(undefined,{dateStyle:"medium",timeStyle:"short"}),cashierName:profile?.full_name??"Cashier",restaurantName:restaurant?.name??"",branchName:branch?.name??"",registerName:kiosk?.name??"Register",currency:submitted.currency,items:submitted.items.map((item,index)=>({id:`${submitted.id}-${index}`,name:item.productName,quantity:item.quantity,unitPrice:Number(item.unitPrice),lineTotal:Number(item.lineTotal),customizations:item.modifiers.map(value=>value.name)})),subtotal:authoritativeSubtotal,taxRate:authoritativeSubtotal?authoritativeTax/authoritativeSubtotal:0,taxAmount:authoritativeTax,total:authoritativeTotal,paymentMethod:"cash",amountReceived,change:authoritativeChange};
       setCompletedReceipt(receipt);setOrderItems([]);setCashOpen(false);setReceived("");resetCashierAttempt();await liveOrders.refresh();
@@ -159,6 +160,7 @@ export default function CashierDashboard() {
       }
       const initialAttempt=restoreDeferredAttempt(order.id);
       const result=await completeDeferredCashierPayment({
+        authentication,
         client:cashierOrderService,
         order,
         method:pendingMethod,
@@ -179,7 +181,7 @@ export default function CashierDashboard() {
   const cancelWaitingOrder=async(order:ProductionOrder)=>{
     const reason=window.prompt(`Cancel ${order.orderNumber}. Enter a reason:`)?.trim();if(!reason||submitting)return;
     setSubmitting(true);
-    try{await cashierOrderService.cancel(order.id,order.version,reason,"staff");clearDeferredAttempt(order.id);await Promise.all([pendingKiosk.refresh(),liveOrders.refresh()]);toast.success(`${order.orderNumber} cancelled.`);}
+    try{await cashierOrderService.cancel(order.id,order.version,reason,authentication);clearDeferredAttempt(order.id);await Promise.all([pendingKiosk.refresh(),liveOrders.refresh()]);toast.success(`${order.orderNumber} cancelled.`);}
     catch(error){toast.error(error instanceof Error?error.message:"Order could not be cancelled.");}
     finally{setSubmitting(false);}
   };

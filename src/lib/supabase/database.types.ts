@@ -19,11 +19,13 @@ export type IdleScreenConfigurationRow = { branch_id: string; timeout_seconds: n
 export type MenuRow = { id: string; restaurant_id: string; name: string; status: "draft" | "published" | "archived"; version: number; published_at: string | null; created_at: string; updated_at: string };
 export type MenuBranchRow = { menu_id: string; branch_id: string; is_active: boolean; assigned_at: string };
 export type DeviceType = "kiosk" | "cashier_terminal" | "kitchen_display" | "order_display" | "admin_terminal";
-export type DeviceStatus = "pending" | "active" | "disabled" | "retired";
-export type DeviceRow = { id: string; restaurant_id: string; branch_id: string; device_type: DeviceType; name: string; status: DeviceStatus; config_version: number; last_seen_at: string | null; created_at: string; updated_at: string };
+export type DeviceStatus = "pending" | "active" | "disabled" | "retired" | "revoked";
+export type DeviceRow = { id: string; restaurant_id: string; branch_id: string; device_type: DeviceType; name: string; status: DeviceStatus; config_version: number; last_seen_at: string | null; installation_id?: string | null; activated_at?: string | null; revoked_at?: string | null; configuration?: Json; app_version?: string | null; connection_health?: "unknown" | "online" | "degraded" | "offline"; metadata?: Json; created_at: string; updated_at: string };
 export type DeviceCredentialRow = { id: string; device_id: string; public_key_id: string; secret_hash: string; expires_at: string | null; last_used_at: string | null; revoked_at: string | null; created_at: string; updated_at: string };
-export type DeviceSessionRow = { id: string; device_id: string; credential_id: string; access_token_hash: string; refresh_token_hash: string | null; expires_at: string; refresh_expires_at: string | null; last_seen_at: string; revoked_at: string | null; created_at: string };
-export type DeviceAuditEventRow = { id: number; device_id: string | null; credential_id: string | null; event_type: string; metadata: Json; occurred_at: string };
+export type DeviceActivationKeyRow = { id: string; restaurant_id: string; branch_id: string; device_type: DeviceType; device_name: string; key_hash: string; key_hint: string; status: "active" | "used" | "expired" | "revoked"; activation_policy: "one_time" | "reusable"; expires_at: string | null; max_activations: number; activation_count: number; created_by: string | null; created_at: string; updated_at: string; revoked_at: string | null; metadata: Json };
+export type DeviceActivationRow = { id: string; activation_key_id: string; device_id: string; installation_id: string; app_version: string | null; request_id: string | null; metadata: Json; activated_at: string };
+export type DeviceSessionRow = { id: string; device_id: string; credential_id: string | null; activation_key_id?: string | null; access_token_hash: string; refresh_token_hash: string | null; expires_at: string; refresh_expires_at: string | null; last_seen_at: string; revoked_at: string | null; created_at: string };
+export type DeviceAuditEventRow = { id: number; device_id: string | null; credential_id: string | null; activation_key_id: string | null; request_id: string | null; event_type: string; metadata: Json; occurred_at: string };
 export type DbOrderStatus = Database["public"]["Enums"]["order_lifecycle_status"];
 export type DbPaymentStatus = Database["public"]["Enums"]["payment_status"];
 export type OrderRow = { id: string; restaurant_id: string; branch_id: string; device_id: string | null; order_number: string; service_mode: "dine_in" | "take_away"; status: DbOrderStatus; payment_status: DbPaymentStatus; subtotal: number; tax_total: number; discount_total: number; total: number; currency: string; notes: string | null; language: string; customer_reference: string; source: "kiosk" | "cashier" | "nori"; created_by: string | null; created_at: string; updated_at: string; placed_at: string | null; accepted_at: string | null; preparing_at: string | null; ready_at: string | null; completed_at: string | null; cancelled_at: string | null; idempotency_key: string | null; version: number; business_date: string; request_fingerprint: string | null; menu_id: string | null; menu_version: number | null };
@@ -58,6 +60,8 @@ export interface Database {
       menu_branches: Table<MenuBranchRow>;
       devices: Table<DeviceRow>;
       device_credentials: Table<DeviceCredentialRow>;
+      device_activation_keys: Table<DeviceActivationKeyRow>;
+      device_activations: Table<DeviceActivationRow>;
       device_sessions: Table<DeviceSessionRow>;
       device_audit_events: Table<DeviceAuditEventRow>;
       categories: Table<CategoryRow>;
@@ -87,6 +91,7 @@ export interface Database {
       is_restaurant_admin: { Args: { p_restaurant_id: string }; Returns: boolean };
       resolve_active_branch: { Args: { p_code: string }; Returns: Pick<BranchRow, "id" | "name" | "code" | "currency" | "timezone" | "tax_rate">[] };
       production_order_json: { Args: { p_order_id: string }; Returns: Json };
+      activate_device_key: { Args: { p_key_hash: string; p_installation_id: string; p_device_name?: string | null; p_app_version?: string | null; p_request_id?: string | null; p_metadata?: Json }; Returns: Array<{ device_id: string; activation_key_id: string; restaurant_id: string; branch_id: string; device_type: DeviceType; device_name: string; device_status: DeviceStatus; configuration_version: number; duplicate: boolean }> };
     };
     Enums: {
       staff_role: StaffRole;

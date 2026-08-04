@@ -8,12 +8,11 @@ import {
 import {
   ChevronDown,
   ChevronUp,
-  Eye,
-  EyeOff,
   LayoutDashboard,
   Mail,
   Menu as MenuIcon,
   PackageOpen,
+  MonitorSmartphone,
   Pencil,
   Plus,
   Settings as SettingsIcon,
@@ -31,7 +30,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../components/ui/select";
-import { mockDeviceService } from "../../admin/services/deviceService";
 import {
   isValidEmail,
   mockNotificationService,
@@ -49,6 +47,7 @@ import {
 } from "../services/productImageResolver";
 import { invalidateMenuCache } from "../services/supabase/menuService";
 import AdminNotifications from "./AdminNotifications";
+import AdminDevices from "./AdminDevices";
 import {
   createCategory,
   deleteCategory,
@@ -80,6 +79,7 @@ type AdminSection =
   | "menu"
   | "categories"
   | "notifications"
+  | "devices"
   | "settings";
 type Props = { section: AdminSection; onNavigate: (route: string) => void };
 const nav = [
@@ -87,6 +87,7 @@ const nav = [
   ["menu", "Menu", UtensilsCrossed],
   ["categories", "Categories", Tags],
   ["notifications", "Notifications", Mail],
+  ["devices", "Devices", MonitorSmartphone],
   ["settings", "Settings", SettingsIcon],
 ] as const;
 const input =
@@ -1035,13 +1036,12 @@ function CategoryForm({
   );
 }
 
-function DeviceForm({
-  connected,
-  onConnectionChange,
-}: {
+function DeviceForm(_props: {
   connected: boolean;
   onConnectionChange: (connected: boolean) => void;
 }) {
+  return <div className="rounded-2xl border border-[#d7fb69]/15 bg-[#d7fb69]/[.05] p-5"><strong className="text-[#d7fb69]">Device provisioning has moved to Admin → Devices</strong><p className="mt-2 text-sm text-white/45">Create one-time or reusable activation keys, view safe device status, revoke sessions, and refresh configuration from the Devices section.</p></div>;
+  /* Retired prototype implementation retained only as migration history.
   const [key, setKey] = useState("");
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState<"connect" | "sync" | "disconnect" | null>(
@@ -1182,6 +1182,7 @@ function DeviceForm({
       )}
     </div>
   );
+  */
 }
 
 function NotificationsPage() {
@@ -1575,6 +1576,7 @@ export default function Dashboard({ section, onNavigate }: Props) {
     menu: <MenuPage />,
     categories: <CategoriesPage />,
     notifications: <AdminNotifications />,
+    devices: <AdminDevices />,
     settings: <SettingsPage />,
   };
   return (

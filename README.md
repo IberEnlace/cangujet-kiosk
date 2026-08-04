@@ -13,5 +13,7 @@
 
   Supabase foundation and staff authentication: [docs/SUPABASE.md](docs/SUPABASE.md).
 
+  Production device activation and management: [docs/device-provisioning.md](docs/device-provisioning.md).
+
   Production QR provider and signed webhook contract: [docs/qr-payment.md](docs/qr-payment.md).
   

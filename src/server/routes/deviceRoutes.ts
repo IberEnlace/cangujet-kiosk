@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import type {
   DeviceAccessTokenResponse,
+  DeviceActivationResponse,
   DeviceApiError,
   DeviceBootstrap,
   DeviceRegistrationResponse,
@@ -24,6 +25,29 @@ export function createDeviceRouter(
   const attempts = new Map<string, { count: number; resetAt: number }>();
   let service: DeviceIdentityApplication | null = null;
   const resolveService = () => service ??= serviceFactory();
+
+  router.post("/device/activate", async (request: Request, response: Response<DeviceActivationResponse | DeviceApiError>) => {
+    try {
+      enforceRateLimit(attempts, request.ip || request.socket.remoteAddress || "unknown");
+      const secretKey = typeof request.body?.secretKey === "string" ? request.body.secretKey.trim() : "";
+      const deviceFingerprint = typeof request.body?.deviceFingerprint === "string" ? request.body.deviceFingerprint.trim() : "";
+      const deviceName = typeof request.body?.deviceName === "string" ? request.body.deviceName.trim() : undefined;
+      const appVersion = typeof request.body?.appVersion === "string" ? request.body.appVersion.trim() : undefined;
+      const requestId = validUuid(request.body?.requestId) ? request.body.requestId : requestIdFrom(request);
+      if (!/^MORROW(?:-[A-Z0-9]{4}){6}$/i.test(secretKey) || !validInstallationId(deviceFingerprint)
+        || (deviceName && deviceName.length > 120) || (appVersion && appVersion.length > 80)) {
+        throw new DeviceApiFailure("invalid_setup_request", 400, "A valid device activation request is required.");
+      }
+      diagnostic("activation_request_received");
+      const result = await resolveService().activate({ secretKey, deviceFingerprint, deviceName, appVersion, requestId });
+      setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
+      const { refreshToken: _refreshToken, refreshExpiresAt: _refreshExpiresAt, ...publicResult } = result;
+      diagnostic("activation_succeeded", result.device.id ? 201 : 200);
+      response.status(201).json(publicResult);
+    } catch (error) {
+      sendError(response, error);
+    }
+  });
 
   router.post("/devices/register", async (request: Request, response: Response<DeviceRegistrationResponse | DeviceApiError>) => {
     try {
@@ -64,6 +88,28 @@ export function createDeviceRouter(
       response.status(204).end();
     } catch (error) {
       clearRefreshCookie(response);
+      sendError(response, error);
+    }
+  });
+
+  router.post("/device/logout", async (request: Request, response: Response<DeviceApiError>) => {
+    try {
+      await resolveService().revoke(readBearerToken(request));
+      clearRefreshCookie(response);
+      response.status(204).end();
+    } catch (error) {
+      clearRefreshCookie(response);
+      sendError(response, error);
+    }
+  });
+
+  router.post("/device/heartbeat", async (request: Request, response: Response) => {
+    try {
+      const current = Number(request.body?.configurationVersion ?? 0);
+      const appVersion = typeof request.body?.appVersion === "string" ? request.body.appVersion.trim().slice(0, 80) : null;
+      const health = request.body?.connectionHealth === "degraded" ? "degraded" : "online";
+      response.json(await resolveService().heartbeat(readBearerToken(request), Number.isSafeInteger(current) && current >= 0 ? current : 0, appVersion, health));
+    } catch (error) {
       sendError(response, error);
     }
   });
@@ -120,7 +166,7 @@ function setRefreshCookie(response: Response, value: string, expiresAt: string) 
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
-    path: "/api/v1/devices",
+    path: "/api/v1",
     expires: new Date(expiresAt),
   });
 }
@@ -130,7 +176,7 @@ function clearRefreshCookie(response: Response) {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "strict",
-    path: "/api/v1/devices",
+    path: "/api/v1",
   });
 }
 
@@ -166,4 +212,17 @@ function sendError(response: Response<DeviceApiError>, error: unknown) {
 
 function diagnostic(event: string, status?: number, code?: string) {
   if (process.env.NODE_ENV !== "production") console.info("[MORROW device API]", { event, status, code });
+}
+
+function validInstallationId(value: string) {
+  return value.length >= 8 && value.length <= 200 && /^[A-Za-z0-9._:-]+$/.test(value);
+}
+
+function validUuid(value: unknown): value is string {
+  return typeof value === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
+}
+
+function requestIdFrom(request: Request) {
+  const header = request.header("x-request-id");
+  return validUuid(header) ? header : crypto.randomUUID();
 }

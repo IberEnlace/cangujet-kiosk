@@ -15,14 +15,14 @@ export class KitchenOrderService {
     return orderService.listKitchen(authentication);
   }
 
-  next(order: ProductionOrder) {
+  next(order: ProductionOrder, authentication: OrderAuthentication = "staff") {
     const nextStatus = NEXT_KITCHEN_STATUS[order.status];
     if (!nextStatus) return Promise.resolve(order);
-    return this.setStatus(order, nextStatus);
+    return this.setStatus(order, nextStatus, undefined, authentication);
   }
 
-  setStatus(order: ProductionOrder, nextStatus: ProductionOrderStatus, reason?: string) {
-    return orderService.transition(order.id, { nextStatus, expectedVersion: order.version, reason });
+  setStatus(order: ProductionOrder, nextStatus: ProductionOrderStatus, reason?: string, authentication: OrderAuthentication = "staff") {
+    return orderService.transition(order.id, { nextStatus, expectedVersion: order.version, reason }, authentication);
   }
 }
 

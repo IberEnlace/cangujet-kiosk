@@ -96,8 +96,8 @@ export function useKitchenOrders() {
     const before = live;
     try {
       const updated = requestedStatus
-        ? await kitchenOrderService.setStatus(order, requestedStatus, reason)
-        : await kitchenOrderService.next(order);
+        ? await kitchenOrderService.setStatus(order, requestedStatus, reason, authMode)
+        : await kitchenOrderService.next(order, authMode);
       setLive(current => reconcile(current, [updated]));
       setError("");
       return true;
@@ -109,7 +109,7 @@ export function useKitchenOrders() {
     } finally {
       setPendingId(null);
     }
-  }, [fetchCurrent, live]);
+  }, [authMode, fetchCurrent, live]);
 
   const timezone = bootstrapBranch?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
   const businessDay = branchTodayRange(timezone);
@@ -183,18 +183,20 @@ export function usePublicOrderBoard() {
 
 export function useCashierOrders() {
   const auth = useAuth();
+  const bootstrapBranch = useBranch();
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
-  const branchId = auth.profile?.branch_id;
+  const branchId = auth.profile?.branch_id ?? bootstrapBranch?.id ?? null;
+  const authMode: OrderAuthentication = auth.profile ? "staff" : "device";
   const fetchCurrent = useCallback(async () => {
     try {
-      const currentOrders = await cashierReadService.listActive("staff");
+      const currentOrders = await cashierReadService.listActive(authMode);
       setOrders(current => reconcile(current, currentOrders));
       setConnection("connected");
     } catch {
       setConnection(navigator.onLine ? "error" : "disconnected");
     }
-  }, []);
+  }, [authMode]);
   useEffect(() => {
     if (!branchId) { setConnection("disconnected"); return; }
     void fetchCurrent();
@@ -207,13 +209,15 @@ export function useCashierOrders() {
 
 export function usePendingCashierOrders() {
   const auth = useAuth();
+  const bootstrapBranch = useBranch();
   const [orders, setOrders] = useState<ProductionOrder[]>([]);
   const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
   const [error, setError] = useState("");
-  const branchId = auth.profile?.branch_id;
+  const branchId = auth.profile?.branch_id ?? bootstrapBranch?.id ?? null;
+  const authMode: OrderAuthentication = auth.profile ? "staff" : "device";
   const fetchCurrent = useCallback(async () => {
     try {
-      const current = await cashierReadService.listPendingCashierOrders("staff");
+      const current = await cashierReadService.listPendingCashierOrders(authMode);
       setOrders(current);
       setError("");
       setConnection("connected");
@@ -221,7 +225,7 @@ export function usePendingCashierOrders() {
       setError(message(caught));
       setConnection(navigator.onLine ? "error" : "disconnected");
     }
-  }, []);
+  }, [authMode]);
   useEffect(() => {
     if (!branchId) { setConnection("disconnected"); return; }
     void fetchCurrent();
