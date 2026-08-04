@@ -66,6 +66,13 @@ Never place these values in `VITE_` variables. `sent` means Resend accepted a
 message; `delivered`, `delayed`, `failed`, `bounced`, and `complained` come from
 the signed webhook.
 
+The Admin UI sends manual reports and test messages to the same-origin Express
+routes `/api/v1/admin/notifications/daily-report` and
+`/api/v1/admin/notifications/test`. Express validates the Supabase access token,
+requires an active branch administrator, and then calls the Edge Function with
+server-only credentials. The browser must not call `send-notification-email`
+directly.
+
 Store the processor URL and the same internal secret in Supabase Vault before
 applying the operational migration (or before the first cron run):
 

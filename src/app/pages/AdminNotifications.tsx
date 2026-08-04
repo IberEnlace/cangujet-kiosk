@@ -65,7 +65,6 @@ export default function AdminNotifications() {
   async function sendReport() {
     setReporting(true);
     const result = await sendDailyReportNow();
-    console.log("[MORROW] Daily report response:", result);
     setReporting(false);
     if (!result.ok) {
       setBackendMessage(result.error.message);

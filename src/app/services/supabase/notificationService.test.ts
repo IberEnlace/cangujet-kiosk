@@ -24,7 +24,7 @@ test("unconfigured frontend does not fake settings or email success", async () =
   const delivery = await sendTestNotification("admin@example.com");
   assert.equal(settings.ok, false);
   assert.equal(delivery.ok, false);
-  if (!delivery.ok) assert.equal(delivery.error.message, "Email delivery is not configured.");
+  if (!delivery.ok) assert.equal(delivery.error.message, "A live administrator session is required for email delivery.");
   assert.doesNotMatch(page, /simulated successfully|pretend/i);
 });
 
@@ -42,6 +42,22 @@ test("Edge Function validates active admin and provider configuration", () => {
   assert.match(edgeFunction, /https:\/\/api\.resend\.com\/emails/);
 });
 
+test("browser delivery uses authenticated same-origin API routes instead of invoking Edge Functions", () => {
+  assert.match(notificationService, /getStaffAccessToken/);
+  assert.match(notificationService, /\/api\/v1\/admin\/notifications\/daily-report/);
+  assert.match(notificationService, /\/api\/v1\/admin\/notifications\/test/);
+  assert.doesNotMatch(notificationService, /supabase\.functions\.invoke/);
+});
+
+test("Edge Function uses strict CORS and always handles runtime failures", () => {
+  assert.match(edgeFunction, /http:\/\/localhost:5173/);
+  assert.match(edgeFunction, /https:\/\/morrow-kiosk-suite\.vercel\.app/);
+  assert.match(edgeFunction, /status:allowedOrigin\(request\)\?204:403/);
+  assert.match(edgeFunction, /"Vary":"Origin"/);
+  assert.match(edgeFunction, /notification_runtime_failed/);
+  assert.doesNotMatch(edgeFunction, /"Access-Control-Allow-Origin":"\*"/);
+});
+
 test("provider success and failure both update a privileged delivery log", () => {
   assert.match(edgeFunction, /status:\s*"queued"/);
   assert.match(edgeFunction, /status:\s*"sent",provider_message_id:body\.id/);
@@ -55,9 +71,8 @@ test("manual daily report bypasses only the schedule toggle and requires provide
   assert.match(edgeFunction, /!manualDailyReport&&\(!settings\|\|!settings\[/);
   assert.match(edgeFunction, /notification_type:type/);
   assert.match(edgeFunction, /buildOperationalEmail\(\{type,branchName/);
-  assert.match(notificationService, /data\?\.suppressed !== true/);
-  assert.match(notificationService, /typeof data\?\.messageId === "string"/);
-  assert.match(notificationService, /typeof data\?\.recipient === "string"/);
+  assert.match(notificationService, /typeof payload\.messageId !== "string"/);
+  assert.match(notificationService, /typeof payload\.recipient !== "string"/);
   assert.match(notificationService, /The daily report was not accepted for delivery/);
   assert.match(page, /await refreshLogs\(\)/);
 });

@@ -1,5 +1,6 @@
 import { supabase } from "../../../lib/supabase/client";
 import type { NotificationDeliveryLogRow, NotificationSettingsRow } from "../../../lib/supabase/database.types";
+import { getStaffAccessToken } from "./authService";
 import { repositoryFailure, type RepositoryResult } from "./repositoryResult";
 
 export type NotificationSettingsInput = {
@@ -60,41 +61,19 @@ export async function saveNotificationSettings(input: NotificationSettingsInput)
 
 export async function sendTestNotification(recipient?: string): Promise<RepositoryResult<TestNotificationResult>> {
   if (recipient && !isValidNotificationEmail(recipient)) return repositoryFailure("invalid_data", "Enter a valid recipient email.");
-  if (!supabase) return repositoryFailure("configuration", "Email delivery is not configured.");
-  const { data, error } = await supabase.functions.invoke("send-notification-email", { body: { type: "test", recipient: recipient?.trim().toLowerCase() || undefined } });
-  if (error || !data?.ok) {
-    let payload = data;
-    const context = error && "context" in error ? error.context : null;
-    if (!payload && context instanceof Response) {
-      try { payload = await context.clone().json(); } catch { /* A non-JSON gateway failure uses the safe generic message below. */ }
-    }
-    const code = payload?.code;
-    const message = code === "email_not_configured" || code === "server_not_configured"
-      ? "Email delivery is not configured."
-      : typeof payload?.message === "string" ? payload.message : "The test notification could not be sent.";
-    return repositoryFailure(code === "authentication_required" || code === "admin_required" ? "unauthorized" : code === "email_not_configured" ? "configuration" : "network", message, error);
-  }
-  return { ok: true, data: { messageId: data.messageId, recipient: data.recipient, sentAt: data.sentAt }, source: "supabase" };
+  return requestNotificationDelivery(
+    "/api/v1/admin/notifications/test",
+    { recipient: recipient?.trim().toLowerCase() },
+    "The test notification could not be sent.",
+  );
 }
 
 export async function sendDailyReportNow(): Promise<RepositoryResult<TestNotificationResult>> {
-  if (!supabase) return repositoryFailure("configuration", "Email delivery is not configured.");
-  const { data, error } = await supabase.functions.invoke("send-notification-email", { body: { type: "daily_sales_report" } });
-  const accepted = data?.ok === true
-    && data?.suppressed !== true
-    && typeof data?.messageId === "string"
-    && typeof data?.recipient === "string"
-    && typeof data?.sentAt === "string";
-  if (error || !accepted) {
-    const message = data?.suppressed
-      ? "The daily report was not sent because this notification is disabled."
-      : typeof data?.message === "string" ? data.message : "The daily report was not accepted for delivery.";
-    return repositoryFailure("network", message, error);
-  }
-  const recipients = Array.isArray(data.results)
-    ? data.results.filter((item: unknown) => typeof (item as { recipient?: unknown })?.recipient === "string").map((item: { recipient: string }) => item.recipient)
-    : undefined;
-  return { ok: true, data: { messageId: data.messageId, recipient: data.recipient, recipients, sentAt: data.sentAt }, source: "supabase" };
+  return requestNotificationDelivery(
+    "/api/v1/admin/notifications/daily-report",
+    undefined,
+    "The daily report was not accepted for delivery.",
+  );
 }
 
 export async function getRecentDeliveryLogs(limit = 10): Promise<RepositoryResult<NotificationDeliveryLogRow[]>> {
@@ -103,4 +82,80 @@ export async function getRecentDeliveryLogs(limit = 10): Promise<RepositoryResul
   const { data, error } = await supabase.from("notification_delivery_logs").select("*").eq("branch_id", branch.data).order("created_at", { ascending: false }).limit(limit);
   if (error) return repositoryFailure(error.code === "42501" ? "unauthorized" : "network", "Delivery logs could not be loaded.", error);
   return { ok: true, data, source: "supabase" };
+}
+
+type NotificationApiPayload = {
+  ok?: boolean;
+  code?: string;
+  message?: string;
+  messageId?: string;
+  recipient?: string;
+  sentAt?: string;
+  results?: Array<{ recipient?: string }>;
+};
+
+async function requestNotificationDelivery(
+  path: string,
+  body: unknown,
+  fallbackMessage: string,
+): Promise<RepositoryResult<TestNotificationResult>> {
+  const token = await getStaffAccessToken();
+  if (!token) return repositoryFailure("configuration", "A live administrator session is required for email delivery.");
+
+  try {
+    const response = await fetch(path, {
+      method: "POST",
+      credentials: "include",
+      cache: "no-store",
+      headers: {
+        authorization: `Bearer ${token}`,
+        ...(body === undefined ? {} : { "content-type": "application/json" }),
+      },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const payload = await readApiPayload(response);
+    if (!response.ok || payload?.ok !== true) {
+      const message = typeof payload?.message === "string" ? payload.message : fallbackMessage;
+      return repositoryFailure(repositoryCode(response.status, payload?.code), message);
+    }
+    if (
+      typeof payload.messageId !== "string"
+      || typeof payload.recipient !== "string"
+      || typeof payload.sentAt !== "string"
+    ) {
+      return repositoryFailure("network", fallbackMessage);
+    }
+    const recipients = Array.isArray(payload.results)
+      ? payload.results
+        .filter((item): item is { recipient: string } => typeof item?.recipient === "string")
+        .map(item => item.recipient)
+      : undefined;
+    return {
+      ok: true,
+      data: {
+        messageId: payload.messageId,
+        recipient: payload.recipient,
+        recipients,
+        sentAt: payload.sentAt,
+      },
+      source: "supabase",
+    };
+  } catch (error) {
+    return repositoryFailure("network", fallbackMessage, error);
+  }
+}
+
+async function readApiPayload(response: Response): Promise<NotificationApiPayload | null> {
+  try {
+    return await response.json() as NotificationApiPayload;
+  } catch {
+    return null;
+  }
+}
+
+function repositoryCode(status: number, code?: string) {
+  if (status === 401 || status === 403) return "unauthorized" as const;
+  if (status === 400 || status === 422) return "invalid_data" as const;
+  if (code === "email_not_configured" || code === "server_not_configured") return "configuration" as const;
+  return "network" as const;
 }

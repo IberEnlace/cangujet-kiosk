@@ -23,8 +23,13 @@ test("dispatcher enforces settings, trusted authority, recipient privacy, and de
 
 test("reports use authoritative orders and keep ordered and paid values distinct",()=>{
   assert.match(report,/client\.from\("orders"\)/);
-  assert.match(report,/payment_status==="paid"/);
+  assert.match(report,/client\.from\("order_payments"\)/);
+  assert.match(report,/payment\.status === "captured"/);
+  assert.match(report,/tax_total/);
+  assert.match(report,/service_mode/);
   assert.match(report,/totalSales:/);
+  assert.match(report,/grossSales:/);
+  assert.match(report,/paidSales:/);
   assert.match(report,/paidOrders/);
   assert.match(report,/topProducts/);
   assert.match(report,/comparison:/);

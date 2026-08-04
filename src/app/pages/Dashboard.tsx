@@ -1036,155 +1036,6 @@ function CategoryForm({
   );
 }
 
-function DeviceForm(_props: {
-  connected: boolean;
-  onConnectionChange: (connected: boolean) => void;
-}) {
-  return <div className="rounded-2xl border border-[#d7fb69]/15 bg-[#d7fb69]/[.05] p-5"><strong className="text-[#d7fb69]">Device provisioning has moved to Admin → Devices</strong><p className="mt-2 text-sm text-white/45">Create one-time or reusable activation keys, view safe device status, revoke sessions, and refresh configuration from the Devices section.</p></div>;
-  /* Retired prototype implementation retained only as migration history.
-  const [key, setKey] = useState("");
-  const [showKey, setShowKey] = useState(false);
-  const [busy, setBusy] = useState<"connect" | "sync" | "disconnect" | null>(
-    null,
-  );
-  const [lastSync, setLastSync] = useState("Never");
-  const [configuredOn, setConfiguredOn] = useState("");
-  const [confirmDisconnect, setConfirmDisconnect] = useState(false);
-  const connect = async () => {
-    setBusy("connect");
-    try {
-      const config = await mockDeviceService.connectDevice(key);
-      const now = config.lastSync ?? new Date().toLocaleString();
-      onConnectionChange(true);
-      setLastSync(now);
-      setConfiguredOn(now);
-      toast.success("Device configuration loaded successfully.");
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
-  const sync = async () => {
-    setBusy("sync");
-    try {
-      const config = await mockDeviceService.syncDevice();
-      setLastSync(config.lastSync ?? new Date().toLocaleString());
-      toast.success("Device data synced successfully.");
-    } finally {
-      setBusy(null);
-    }
-  };
-  const disconnect = async () => {
-    setBusy("disconnect");
-    await mockDeviceService.disconnectDevice();
-    setKey("");
-    onConnectionChange(false);
-    setLastSync("Never");
-    setConfiguredOn("");
-    setConfirmDisconnect(false);
-    setBusy(null);
-    toast.success("Device disconnected.");
-  };
-  return (
-    <div className="space-y-4">
-      <label className="block text-xs text-white/50">
-        Device Secret Key
-        <div className="relative mt-1">
-          <input
-            type={showKey ? "text" : "password"}
-            className={`${input} pr-11`}
-            value={key}
-            onChange={(e) => setKey(e.target.value)}
-            autoComplete="off"
-          />
-          <button
-            type="button"
-            aria-label={showKey ? "Hide device key" : "Show device key"}
-            onClick={() => setShowKey((x) => !x)}
-            className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg p-2 text-white/40 hover:bg-white/10"
-          >
-            {showKey ? <EyeOff size={16} /> : <Eye size={16} />}
-          </button>
-        </div>
-      </label>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {[
-          ["Connection Status", connected ? "Connected" : "Not Configured"],
-          ["Kiosk Name", "Morrow Kiosk"],
-          ["Kiosk Number", "KSK-001"],
-          ["Branch Name", "Main Branch"],
-          ["Last Sync", lastSync],
-          ...(connected ? [["Configured On", configuredOn]] : []),
-        ].map(([a, b]) => (
-          <div
-            key={a}
-            className="rounded-xl border border-white/5 bg-white/[0.025] p-3"
-          >
-            <p className="text-xs text-white/35">{a}</p>
-            <div className="mt-1 text-sm">
-              {a === "Connection Status" ? <StatusBadge status={b} /> : b}
-            </div>
-          </div>
-        ))}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        <button
-          disabled={busy !== null || connected}
-          onClick={connect}
-          className={`${button} bg-[#d7fb69] text-[#17200f]`}
-        >
-          {busy === "connect" ? "Connecting…" : "Connect Device"}
-        </button>
-        <button
-          disabled={busy !== null || !connected}
-          onClick={sync}
-          className={`${button} border border-white/10 bg-white/5`}
-        >
-          {busy === "sync" ? "Syncing…" : "Sync Now"}
-        </button>
-        <button
-          disabled={busy !== null || !connected}
-          onClick={() => setConfirmDisconnect(true)}
-          className={`${button} border border-red-400/20 bg-red-400/5 text-red-300`}
-        >
-          Disconnect Device
-        </button>
-      </div>
-      <p className="text-[11px] text-white/30">
-        Demo mode: actions are simulated in this prototype.
-      </p>
-      {confirmDisconnect && (
-        <Modal
-          title="Disconnect Device?"
-          onClose={() => setConfirmDisconnect(false)}
-        >
-          <p className="text-sm text-white/55">
-            This kiosk will stop receiving its assigned menu and branch
-            settings.
-          </p>
-          <div className="mt-5 flex justify-end gap-2">
-            <button
-              onClick={() => setConfirmDisconnect(false)}
-              className={`${button} bg-white/5`}
-            >
-              Cancel
-            </button>
-            <button
-              disabled={busy !== null}
-              onClick={disconnect}
-              className={`${button} bg-red-500 text-white`}
-            >
-              {busy === "disconnect" ? "Disconnecting…" : "Disconnect"}
-            </button>
-          </div>
-        </Modal>
-      )}
-    </div>
-  );
-  */
-}
-
 function NotificationsPage() {
   const [v, setV] = useState<NotificationSettings>({
     restaurantEmail: "admin@morrow.example",
@@ -1400,7 +1251,7 @@ function SettingsPage() {
     sound: true,
     animations: true,
   });
-  const [connected, setConnected] = useState(false);
+  const connected = false;
   const saveKiosk = () => {
     if (!Number.isFinite(Number(kiosk.timeout)) || Number(kiosk.timeout) <= 0) {
       toast.error("Idle Timeout must be a positive number.");
@@ -1412,7 +1263,7 @@ function SettingsPage() {
     <>
       <PageHeader
         title="Settings"
-        subtitle="Restaurant, kiosk, and device preferences"
+        subtitle="Restaurant and kiosk preferences"
       />
       <div className="grid max-w-5xl gap-5">
         <SettingsSection title="Restaurant Settings">
@@ -1537,9 +1388,6 @@ function SettingsPage() {
           >
             Save Changes
           </button>
-        </SettingsSection>
-        <SettingsSection title="Device Configuration">
-          <DeviceForm connected={connected} onConnectionChange={setConnected} />
         </SettingsSection>
       </div>
     </>

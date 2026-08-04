@@ -4,7 +4,8 @@ import { buildDailySalesReportEmail } from "../../../../supabase/functions/send-
 import type { DailyReportData } from "../../../../supabase/functions/send-notification-email/data/reportData";
 
 const base:DailyReportData={
-  branchName:"MORROW Main Branch",localDate:"24 July 2026",totalSales:"€66.53",totalOrders:6,averageOrderValue:"€11.09",paidOrders:5,
+  branchName:"MORROW Main Branch",localDate:"24 July 2026",periodStart:"2026-07-23T21:00:00.000Z",periodEnd:"2026-07-24T21:00:00.000Z",
+  totalSales:"€66.53",grossSales:"€72.00",paidSales:"€66.53",totalOrders:6,submittedOrders:2,completedOrders:3,cancelledOrders:1,averageOrderValue:"€11.09",paidOrders:5,
   comparison:{sales:"+12%",orders:"+1"},
   topProducts:[
     {name:"Garden Chickpea Burger",quantity:4,sales:"€31.60"},
@@ -24,7 +25,7 @@ test("daily report renders a simple local-date summary without ISO timestamps",(
   assert.match(email.html,/Total Sales/);
   assert.match(email.html,/Average Order Value/);
   assert.doesNotMatch(email.html,/2026-07-24T|Tax total|Hourly sales|Dine-in/i);
-  assert.match(email.text,/Total Sales: €66\.53/);
+  assert.match(email.text,/Total Sales \(Paid\): €66\.53/);
 });
 
 test("comparison is shown only when available",()=>{
