@@ -164,13 +164,13 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
   const KioskHeader = () => (
     <div className="flex items-center justify-between border-b border-white/10 pb-6 mb-6">
       <div className="flex items-center gap-3">
-        <span className="grid size-11 place-items-center rounded-2xl bg-[#d7ff7a] text-[#17200f] shadow-lg shadow-[#d7ff7a]/20">
+        <span className="grid size-11 place-items-center rounded-2xl bg-[#d7ff7a] text-[#FFFFFF] shadow-lg shadow-[#d7ff7a]/20">
           <UtensilsCrossed size={22} />
         </span>
         <div>
           <b className="text-lg tracking-tight text-white">Morrow Premium</b>
           <div className="flex items-center gap-2 mt-0.5">
-            <span className="font-['Space_Mono'] text-[10px] tracking-widest text-[#d7ff7a]">KIOSK 04</span>
+            <span className="font-['Plus_Jakarta_Sans'] text-[10px] tracking-widest text-[#d7ff7a]">KIOSK 04</span>
             <span className="text-white/30 text-[10px]">•</span>
             <span className="text-white/45 text-[10px]">Zone: Dining Lobby</span>
           </div>
@@ -209,7 +209,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
 
           <div className="text-center relative z-10 max-w-xl mx-auto">
             <MorrowLogo variant="full" priority className="mx-auto mb-10 h-auto w-[clamp(15rem,38vw,22rem)]" />
-            <p className="mt-4 font-['Space_Mono'] text-xs tracking-[0.4em] text-[#d7ff7a] uppercase">
+            <p className="mt-4 font-['Plus_Jakarta_Sans'] text-xs tracking-[0.4em] text-[#d7ff7a] uppercase">
               Thoughtfully Crafted · Quietly Fast
             </p>
           </div>
@@ -217,7 +217,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
           <div className="flex flex-col items-center gap-6 relative z-10">
             <button 
               onClick={() => setScreen("Welcome")}
-              className="group flex items-center gap-4 bg-[#d7ff7a] text-[#17200f] px-10 py-6 rounded-3xl font-semibold text-lg hover:bg-[#cbf26c] transition-all shadow-xl shadow-[#d7ff7a]/15 active:scale-[0.98]"
+              className="group flex items-center gap-4 bg-[#d7ff7a] text-[#FFFFFF] px-10 py-6 rounded-3xl font-semibold text-lg hover:bg-[#cbf26c] transition-all shadow-xl shadow-[#d7ff7a]/15 active:scale-[0.98]"
             >
               Start Your Order
               <ArrowRight className="group-hover:translate-x-1.5 transition-transform" size={20} />
@@ -243,7 +243,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
           </div>
 
           <div className="relative z-10 max-w-2xl mt-12">
-            <span className="font-['Space_Mono'] text-xs tracking-[0.25em] text-[#d7ff7a] uppercase bg-[#d7ff7a]/10 px-3 py-1.5 rounded-full border border-[#d7ff7a]/20">
+            <span className="font-['Plus_Jakarta_Sans'] text-xs tracking-[0.25em] text-[#d7ff7a] uppercase bg-[#d7ff7a]/10 px-3 py-1.5 rounded-full border border-[#d7ff7a]/20">
               Premium Kiosk Ordering
             </span>
             <h2 className="text-5xl md:text-6xl font-bold tracking-tight text-white mt-6 leading-tight">
@@ -258,7 +258,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
           <div className="relative z-10 flex flex-wrap gap-4 mt-12">
             <button 
               onClick={() => setScreen("Language")} 
-              className="flex-1 min-w-[200px] flex items-center justify-center gap-3 bg-[#d7ff7a] text-[#17200f] px-8 py-5 rounded-2xl font-bold hover:bg-[#c3ec60] transition"
+              className="flex-1 min-w-[200px] flex items-center justify-center gap-3 bg-[#d7ff7a] text-[#FFFFFF] px-8 py-5 rounded-2xl font-bold hover:bg-[#c3ec60] transition"
             >
               Order Now <ArrowRight size={18} />
             </button>
@@ -373,7 +373,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
             </div>
 
             <div className="mt-8 flex gap-4">
-              <button onClick={() => setScreen("Service")} className="bg-[#d7ff7a] text-[#17200f] px-8 py-4 rounded-xl font-bold hover:bg-[#c4ec60] transition">
+              <button onClick={() => setScreen("Service")} className="bg-[#d7ff7a] text-[#FFFFFF] px-8 py-4 rounded-xl font-bold hover:bg-[#c4ec60] transition">
                 Apply & Continue
               </button>
               <button onClick={() => setScreen("Welcome")} className="border border-white/10 bg-white/5 px-8 py-4 rounded-xl font-semibold text-white/70 hover:bg-white/10 transition">
@@ -470,7 +470,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
                 onClick={() => setScreen("Loyalty")}
                 className="group p-8 rounded-[28px] border border-white/10 bg-gradient-to-br from-[#d7ff7a]/10 to-transparent hover:from-[#d7ff7a]/15 text-center transition-all"
               >
-                <div className="mx-auto size-16 rounded-2xl bg-[#d7ff7a] text-[#17200f] flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
+                <div className="mx-auto size-16 rounded-2xl bg-[#d7ff7a] text-[#FFFFFF] flex items-center justify-center mb-6 group-hover:scale-105 transition-transform">
                   <QrCode size={28} />
                 </div>
                 <h3 className="text-xl font-bold text-white">Loyalty & Rewards</h3>
@@ -553,7 +553,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
                   ))}
                   <button 
                     onClick={() => setScreen("Home")}
-                    className="col-span-2 bg-[#d7ff7a] text-[#17200f] font-bold py-3.5 rounded-xl hover:bg-[#c1e85a] transition flex items-center justify-center gap-2"
+                    className="col-span-2 bg-[#d7ff7a] text-[#FFFFFF] font-bold py-3.5 rounded-xl hover:bg-[#c1e85a] transition flex items-center justify-center gap-2"
                   >
                     Confirm <Check size={16} />
                   </button>
@@ -583,7 +583,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
                 className="cursor-pointer relative overflow-hidden rounded-[32px] bg-[#a9cc50] p-8 text-[#16200b] shadow-xl group"
               >
                 <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl group-hover:scale-110 transition-transform duration-500" />
-                <span className="font-['Space_Mono'] text-[10px] tracking-[0.25em] bg-black/10 px-3 py-1 rounded-full uppercase">Today's Special drop</span>
+                <span className="font-['Plus_Jakarta_Sans'] text-[10px] tracking-[0.25em] bg-black/10 px-3 py-1 rounded-full uppercase">Today's Special drop</span>
                 <h3 className="text-4xl font-bold tracking-tight mt-6 leading-none">The Crisp is <br />Calling.</h3>
                 <p className="mt-3 text-sm opacity-80 max-w-sm">Enjoy our delicious Crispy chicken burger bundled with Golden Rosemary fries and cold drink at special discount.</p>
                 <div className="mt-6 flex items-center gap-4">
@@ -679,7 +679,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
               <div className="border-t border-white/5 pt-6">
                 <div className="flex justify-between text-xs text-white/40 mb-2"><span>Cart Items</span><span>{cart.length}</span></div>
                 <div className="flex justify-between text-sm font-semibold text-white mb-4"><span>Subtotal</span><span>${cart.reduce((s,i)=>s+i.price, 0).toFixed(2)}</span></div>
-                <button disabled={!cart.length} onClick={onCheckout} className="w-full py-4 rounded-2xl bg-[#d7ff7a] text-[#17200f] font-bold text-center hover:bg-[#c6f059] transition disabled:opacity-40 disabled:cursor-not-allowed">Review Cart</button>
+                <button disabled={!cart.length} onClick={onCheckout} className="w-full py-4 rounded-2xl bg-[#d7ff7a] text-[#FFFFFF] font-bold text-center hover:bg-[#c6f059] transition disabled:opacity-40 disabled:cursor-not-allowed">Review Cart</button>
               </div>
             </div>
           </div>
@@ -824,7 +824,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
               
               <button 
                 onClick={() => setVoiceListening(!voiceListening)}
-                className={`z-10 grid size-20 place-items-center rounded-full transition ${voiceListening ? "bg-red-500 text-white shadow-lg shadow-red-500/25" : "bg-[#d7ff7a] text-[#17200f]"}`}
+                className={`z-10 grid size-20 place-items-center rounded-full transition ${voiceListening ? "bg-red-500 text-white shadow-lg shadow-red-500/25" : "bg-[#d7ff7a] text-[#FFFFFF]"}`}
               >
                 <Mic size={32} />
               </button>
@@ -918,7 +918,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
               <button 
                 type="submit"
                 disabled={!aiPrompt.trim() || aiLoading}
-                className="px-5 py-3 bg-[#d7ff7a] hover:bg-[#bce650] text-[#17200f] rounded-xl text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
+                className="px-5 py-3 bg-[#d7ff7a] hover:bg-[#bce650] text-[#FFFFFF] rounded-xl text-xs font-bold transition disabled:opacity-40 disabled:cursor-not-allowed"
               >
                 {aiLoading ? "Thinking…" : "Ask Nori"}
               </button>
@@ -1069,7 +1069,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
                 </div>
               </div>
 
-              <div className="rounded-[28px] bg-[#d7ff7a] p-8 text-[#17200f] relative overflow-hidden flex flex-col justify-between min-h-[220px]">
+              <div className="rounded-[28px] bg-[#d7ff7a] p-8 text-[#FFFFFF] relative overflow-hidden flex flex-col justify-between min-h-[220px]">
                 <div>
                   <span className="font-mono text-[9px] tracking-[0.25em] bg-black/10 px-3 py-1 rounded-full uppercase">COUPON: MATCHA50</span>
                   <h3 className="text-3xl font-bold mt-4 leading-none">Sweet Matcha discount</h3>
@@ -1080,7 +1080,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
                   <button onClick={() => {
                     const matcha = fullMenu.find(m => m.id === "5");
                     if(matcha) addToCart(matcha);
-                  }} className="px-5 py-3 bg-[#17200f] hover:bg-black text-[#d7ff7a] rounded-xl text-xs font-bold transition">Claim Drink</button>
+                  }} className="px-5 py-3 bg-[#FFFFFF] hover:bg-black text-[#d7ff7a] rounded-xl text-xs font-bold transition">Claim Drink</button>
                 </div>
               </div>
             </div>
@@ -1180,7 +1180,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {fullMenu.slice(0, 3).map((item, idx) => (
                 <div key={item.id} className="p-5 rounded-[26px] border border-white/10 bg-white/[0.02] flex flex-col justify-between relative group hover:border-[#d7ff7a]/30 transition-all">
-                  <span className="absolute top-4 left-4 size-8 rounded-full bg-[#d7ff7a] text-[#17200f] font-bold text-xs flex items-center justify-center shadow-lg shadow-[#d7ff7a]/20 z-10">#{idx+1}</span>
+                  <span className="absolute top-4 left-4 size-8 rounded-full bg-[#d7ff7a] text-[#FFFFFF] font-bold text-xs flex items-center justify-center shadow-lg shadow-[#d7ff7a]/20 z-10">#{idx+1}</span>
                   <div className="relative h-40 rounded-xl overflow-hidden mb-4">
                     <img src={item.image} alt={item.name} className="size-full object-cover" />
                   </div>
@@ -1201,7 +1201,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
   }
 
   return (
-    <main className="min-h-screen bg-[#0f120e] font-['DM_Sans'] text-[#f8f8f3] overflow-x-hidden">
+    <main className="min-h-screen bg-[#0f120e] font-['Plus_Jakarta_Sans'] text-[#f8f8f3] overflow-x-hidden">
       <div className="mx-auto grid min-h-[100dvh] w-full max-w-[1080px]">
         
         {/* Simulator Controls Sidebar */}
@@ -1213,7 +1213,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
             <b className="text-sm">Morrow Demo Console</b>
           </div>
 
-          <span className="font-['Space_Mono'] text-[9px] tracking-[0.2em] text-white/35 uppercase block mb-3">
+          <span className="font-['Plus_Jakarta_Sans'] text-[9px] tracking-[0.2em] text-white/35 uppercase block mb-3">
             Simulate Kiosk Screens
           </span>
 
@@ -1224,7 +1224,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
                 onClick={() => setScreen(scr.key)} 
                 className={`flex w-full items-center gap-3 rounded-xl px-3 py-2 text-left text-xs ${
                   screen === scr.key 
-                    ? "bg-[#d7ff7a] font-semibold text-[#17200f]" 
+                    ? "bg-[#d7ff7a] font-semibold text-[#FFFFFF]" 
                     : "text-white/55 hover:bg-white/5"
                 }`}
               >
@@ -1234,7 +1234,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
           </nav>
 
           <div className="mt-8 pt-6 border-t border-white/5">
-            <span className="font-['Space_Mono'] text-[9px] tracking-[0.2em] text-white/35 uppercase block mb-3">
+            <span className="font-['Plus_Jakarta_Sans'] text-[9px] tracking-[0.2em] text-white/35 uppercase block mb-3">
               Kiosk Hardware Info
             </span>
             <div className="space-y-2 text-[10px] text-white/45">

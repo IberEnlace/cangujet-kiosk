@@ -2,81 +2,75 @@
 
 :root {
   --font-size: 16px;
-  --background: #101310;
-  --foreground: #f7f5ee;
-  --card: #181c17;
-  --card-foreground: #f7f5ee;
-  --popover: #181c17;
-  --popover-foreground: #f7f5ee;
-  --primary: #c9f266;
-  --primary-foreground: #17200f;
-  --secondary: #242b21;
-  --secondary-foreground: #f7f5ee;
-  --muted: #252a24;
-  --muted-foreground: #a7afa2;
-  --accent: #fff1d6;
-  --accent-foreground: #332817;
-  --destructive: #d4183d;
-  --destructive-foreground: #ffffff;
-  --border: rgba(255, 255, 255, 0.12);
-  --input: transparent;
-  --input-background: #252a24;
-  --switch-background: #cbced4;
+  /* Cangujet brand colors */
+  --brand-red: #C41E19;
+  --brand-red-hover: #A8161A;
+  --brand-green: #1B6B2D;
+  --brand-tan: #C5A063;
+
+  /* Base theme — clean white */
+  --background: #FFFFFF;
+  --foreground: #1F1F1F;
+  --card: #FFFFFF;
+  --card-foreground: #1F1F1F;
+  --popover: #FFFFFF;
+  --popover-foreground: #1F1F1F;
+
+  /* Primary = Cangujet red */
+  --primary: #C41E19;
+  --primary-foreground: #FFFFFF;
+
+  /* Secondary */
+  --secondary: #F5F5F5;
+  --secondary-foreground: #1F1F1F;
+
+  /* Muted / subtle */
+  --muted: #F9FAFB;
+  --muted-foreground: #6B7280;
+
+  /* Accent */
+  --accent: #FEF2F2;
+  --accent-foreground: #C41E19;
+
+  /* Destructive */
+  --destructive: #EF4444;
+  --destructive-foreground: #FFFFFF;
+
+  /* Borders & inputs */
+  --border: #ECECEC;
+  --input: #FFFFFF;
+  --input-background: #F9FAFB;
+  --switch-background: #D1D5DB;
+
+  /* Focus ring */
+  --ring: #C41E19;
+
+  /* Font weights */
   --font-weight-medium: 500;
   --font-weight-normal: 400;
-  --ring: #c9f266;
+
+  /* Charts (keep semantic colors) */
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
   --chart-4: oklch(0.828 0.189 84.429);
   --chart-5: oklch(0.769 0.188 70.08);
-  --radius: 1rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: #030213;
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+
+  /* Radius */
+  --radius: 0.75rem;
+
+  /* Sidebar — white, red active */
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #1F1F1F;
+  --sidebar-primary: #C41E19;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F5F5F5;
+  --sidebar-accent-foreground: #1F1F1F;
+  --sidebar-border: #ECECEC;
+  --sidebar-ring: #C41E19;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.145 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.145 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.985 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.396 0.141 25.723);
-  --destructive-foreground: oklch(0.637 0.237 25.331);
-  --border: oklch(0.269 0 0);
-  --input: oklch(0.269 0 0);
-  --ring: oklch(0.439 0 0);
-  --font-weight-medium: 500;
-  --font-weight-normal: 400;
-  --chart-1: oklch(0.488 0.243 264.376);
-  --chart-2: oklch(0.696 0.17 162.48);
-  --chart-3: oklch(0.769 0.188 70.08);
-  --chart-4: oklch(0.627 0.265 303.9);
-  --chart-5: oklch(0.645 0.246 16.439);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.269 0 0);
-  --sidebar-ring: oklch(0.439 0 0);
-}
+/* No dark mode — this is a kiosk app with a fixed white theme */
 
 @theme inline {
   --color-background: var(--background);
@@ -128,54 +122,59 @@
     @apply bg-background text-foreground;
   }
 
-  /**
-  * Default typography styles for HTML elements (h1-h4, p, label, button, input).
-  * These are in @layer base, so Tailwind utility classes (like text-sm, text-lg) automatically override them.
-  */
-
   html {
     font-size: var(--font-size);
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 
   h1 {
     font-size: var(--text-2xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-weight: 700;
+    line-height: 1.4;
+    letter-spacing: -0.02em;
+    color: var(--foreground);
   }
 
   h2 {
     font-size: var(--text-xl);
-    font-weight: var(--font-weight-medium);
-    line-height: 1.5;
+    font-weight: 600;
+    line-height: 1.4;
+    letter-spacing: -0.015em;
+    color: var(--foreground);
   }
 
   h3 {
     font-size: var(--text-lg);
-    font-weight: var(--font-weight-medium);
+    font-weight: 600;
     line-height: 1.5;
+    color: var(--foreground);
   }
 
   h4 {
     font-size: var(--text-base);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
+    color: var(--foreground);
   }
 
   label {
-    font-size: var(--text-base);
-    font-weight: var(--font-weight-medium);
+    font-size: var(--text-sm);
+    font-weight: 500;
     line-height: 1.5;
+    color: #374151;
   }
 
   button {
-    font-size: var(--text-base);
+    font-size: var(--text-sm);
     font-weight: var(--font-weight-medium);
     line-height: 1.5;
+    font-family: inherit;
   }
 
-  input {
+  input, textarea, select {
     font-size: var(--text-base);
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
+    font-family: inherit;
   }
 }

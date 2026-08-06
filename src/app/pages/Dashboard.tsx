@@ -91,10 +91,10 @@ const nav = [
   ["settings", "Settings", SettingsIcon],
 ] as const;
 const input =
-  "admin-input w-full text-sm text-white outline-none";
+  "admin-input w-full text-sm text-gray-900 outline-none";
 const button =
-  "admin-button rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d7fb69]/55 focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0d0a] disabled:cursor-not-allowed disabled:opacity-40";
-const card = "admin-card rounded-[20px]";
+  "admin-button rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-40";
+const card = "admin-card rounded-2xl";
 const money = new Intl.NumberFormat("en-IE", {
   style: "currency",
   currency: "EUR",
@@ -112,8 +112,8 @@ function PageHeader({
   return (
     <div className="mb-7 flex flex-wrap items-end gap-4">
       <div>
-        <h1 className="text-[1.65rem] font-black tracking-[-0.035em] text-white">{title}</h1>
-        <p className="mt-1.5 text-sm leading-relaxed text-white/45">{subtitle}</p>
+        <h1 className="text-[1.65rem] font-black tracking-[-0.035em] text-gray-900">{title}</h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-gray-500">{subtitle}</p>
       </div>
       <div className="ml-auto">{action}</div>
     </div>
@@ -146,7 +146,7 @@ function StatusBadge({
   const incoming = ["incoming", "accepted", "cooking"].includes(normalizedStatus);
   return (
     <span
-      className={`admin-status-dot ${normalizedStatus === "online" ? "admin-status-pulse" : ""} inline-flex min-h-6 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold capitalize tracking-wide ${good ? "border-emerald-400/15 bg-emerald-400/[.09] text-emerald-300" : warn ? "border-amber-400/15 bg-amber-400/[.09] text-amber-300" : danger ? "border-red-400/15 bg-red-400/[.09] text-red-300" : incoming ? "border-[#d7fb69]/15 bg-[#d7fb69]/[.08] text-[#d7fb69]" : "border-white/[.07] bg-white/[.035] text-white/50"}`}
+      className={`admin-status-dot ${normalizedStatus === "online" ? "admin-status-pulse" : ""} inline-flex min-h-6 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold capitalize tracking-wide ${good ? "border-emerald-500/20 bg-emerald-50 text-emerald-700" : warn ? "border-amber-500/20 bg-amber-50 text-amber-700" : danger ? "border-red-500/20 bg-red-50 text-red-700" : incoming ? "border-[#C41E19]/15 bg-[#C41E19]/[.06] text-[#C41E19]" : "border-gray-200 bg-gray-50 text-gray-500"}`}
     >
       {status.replace(/_/g, " ")}
     </span>
@@ -163,7 +163,7 @@ function Modal({
 }) {
   return (
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/75 p-4 backdrop-blur-[2px]"
+      className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/40 p-4 backdrop-blur-[3px]"
       role="dialog"
       aria-modal="true"
       aria-label={title}
@@ -171,13 +171,13 @@ function Modal({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="admin-dialog max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-[20px] p-6">
+      <div className="admin-dialog max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl p-6">
         <div className="mb-5 flex items-center">
-          <h2 className="text-lg font-bold tracking-[-.02em]">{title}</h2>
+          <h2 className="text-lg font-bold tracking-[-.02em] text-gray-900">{title}</h2>
           <button
             aria-label="Close"
             onClick={onClose}
-            className="ml-auto rounded-lg p-2 hover:bg-white/10"
+            className="ml-auto rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
           >
             <X size={18} />
           </button>
@@ -197,17 +197,17 @@ function Toggle({
   label: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 text-sm text-white/75">
+    <label className="flex cursor-pointer items-center justify-between gap-4 text-sm text-gray-700">
       <span>{label}</span>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`h-6 w-11 rounded-full border p-1 transition-[background-color,border-color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7fb69]/50 ${checked ? "border-[#d7fb69]/45 bg-[#d7fb69]" : "border-white/10 bg-white/10"}`}
+        className={`h-6 w-11 rounded-full border p-1 transition-[background-color,border-color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/50 ${checked ? "border-[#C41E19]/45 bg-[#C41E19]" : "border-gray-200 bg-gray-100"}`}
       >
         <span
-          className={`block size-4 rounded-full bg-[#17200f] shadow-sm transition-transform duration-150 ease-out ${checked ? "translate-x-5" : ""}`}
+          className={`block size-4 rounded-full bg-white shadow-sm transition-transform duration-150 ease-out ${checked ? "translate-x-5" : ""}`}
         />
       </button>
     </label>
@@ -247,7 +247,7 @@ function DashboardPage() {
   const stats = data ? [
     ["Today's Sales", formatDashboardCurrency(data.currency, data.todaySales), "Total order value today"],
     ["Today's Orders", String(data.todayOrders), "Completed and active orders"],
-    ["Kiosk Name", "Morrow Kiosk 01", "Active device name"],
+    ["Kiosk Name", "cangujet kiosk 01", "Active device name"],
     ["Kiosk Number", "KSK - 001", "Device identifier"],
   ] : [];
   const statuses = data ? [
@@ -265,35 +265,35 @@ function DashboardPage() {
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {loading ? Array.from({ length: 4 }, (_, index) => (
           <div key={index} className={`${card} p-5`}>
-            <Skeleton className="h-3 w-24 bg-white/10" /><Skeleton className="mt-4 h-8 w-32 bg-white/10" /><Skeleton className="mt-2 h-3 w-28 bg-white/10" />
+            <Skeleton className="h-3 w-24 bg-gray-200" /><Skeleton className="mt-4 h-8 w-32 bg-gray-200" /><Skeleton className="mt-2 h-3 w-28 bg-gray-200" />
           </div>
         )) : stats.map(([title, value, sub]) => (
           <div key={title} className={`${card} p-5`}>
-            <p className="text-xs font-bold uppercase tracking-wider text-white/35">{title}</p>
-            <p className="mt-4 text-[1.75rem] font-black tracking-[-.035em] text-[#d7fb69]">{value}</p>
-            <p className="mt-1.5 text-xs leading-relaxed text-white/38">{sub}</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">{title}</p>
+            <p className="mt-4 text-[1.75rem] font-black tracking-[-.035em] text-[#C41E19]">{value}</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-gray-400">{sub}</p>
           </div>
         ))}
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
         <section className={`${card} overflow-hidden`}>
-          <h2 className="p-5 text-sm font-bold">Recent Orders</h2>
+          <h2 className="p-5 text-sm font-bold text-gray-900">Recent Orders</h2>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-sm">
-              <thead className="border-y border-white/5 text-xs uppercase text-white/30"><tr>
+              <thead className="border-y border-gray-100 text-xs uppercase text-gray-400"><tr>
                 {["Order ID", "Time", "Items", "Total", "Status"].map(h => <th key={h} className="px-5 py-3">{h}</th>)}
               </tr></thead>
               <tbody>
                 {loading ? Array.from({ length: 5 }, (_, index) => (
-                  <tr key={index} className="border-b border-white/5"><td colSpan={5} className="px-5 py-3"><Skeleton className="h-5 w-full bg-white/10" /></td></tr>
+                  <tr key={index} className="border-b border-gray-100"><td colSpan={5} className="px-5 py-3"><Skeleton className="h-5 w-full bg-gray-100" /></td></tr>
                 )) : !data?.recentOrders.length ? (
-                  <tr><td colSpan={5} className="px-5 py-10 text-center text-white/35">No orders yet today.</td></tr>
+                  <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-400">No orders yet today.</td></tr>
                 ) : data.recentOrders.map(order => (
-                  <tr key={order.id} className="border-b border-white/5">
-                    <td className="px-5 py-3 font-mono text-white/60">{formatDashboardOrderNumber(order.orderNumber)}</td>
-                    <td className="px-5 py-3">{new Intl.DateTimeFormat(undefined, { timeZone: data.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(order.createdAt))}</td>
-                    <td className="px-5 py-3">{formatDashboardItemCount(order.itemCount)}</td>
-                    <td className="px-5 py-3 font-bold">{formatDashboardCurrency(data.currency, order.total)}</td>
+                  <tr key={order.id} className="border-b border-gray-100">
+                    <td className="px-5 py-3 font-mono text-gray-500">{formatDashboardOrderNumber(order.orderNumber)}</td>
+                    <td className="px-5 py-3 text-gray-700">{new Intl.DateTimeFormat(undefined, { timeZone: data.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(order.createdAt))}</td>
+                    <td className="px-5 py-3 text-gray-700">{formatDashboardItemCount(order.itemCount)}</td>
+                    <td className="px-5 py-3 font-bold text-gray-900">{formatDashboardCurrency(data.currency, order.total)}</td>
                     <td className="px-5 py-3"><StatusBadge status={mapOrderStatus(order.status)} /></td>
                   </tr>
                 ))}
@@ -302,12 +302,12 @@ function DashboardPage() {
           </div>
         </section>
         <section className={`${card} p-5`}>
-          <h2 className="mb-3 text-sm font-bold">System Status</h2>
+          <h2 className="mb-3 text-sm font-bold text-gray-900">System Status</h2>
           {loading ? Array.from({ length: 6 }, (_, index) => (
-            <div key={index} className="flex items-center justify-between border-b border-white/5 py-3"><Skeleton className="h-4 w-28 bg-white/10" /><Skeleton className="h-6 w-20 rounded-full bg-white/10" /></div>
+            <div key={index} className="flex items-center justify-between border-b border-gray-100 py-3"><Skeleton className="h-4 w-28 bg-gray-100" /><Skeleton className="h-6 w-20 rounded-full bg-gray-100" /></div>
           )) : statuses.map(([label, status]) => (
-            <div key={label} className="flex items-center justify-between border-b border-white/5 py-3 last:border-0">
-              <span className="text-sm text-white/70">{label}</span><StatusBadge status={status} />
+            <div key={label} className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0">
+              <span className="text-sm text-gray-600">{label}</span><StatusBadge status={status} />
             </div>
           ))}
         </section>
@@ -329,15 +329,15 @@ function AdminSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-white">
+      <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-gray-900">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent className="z-[10001] rounded-xl border-white/10 bg-[#111511] text-white shadow-2xl">
+      <SelectContent className="z-[10001] rounded-xl border-gray-100 bg-white text-gray-900 shadow-xl">
         {options.map((option) => (
           <SelectItem
             key={option}
             value={option}
-            className="rounded-lg text-white/80 focus:bg-[#d7fb69]/15 focus:text-[#d7fb69] data-[state=checked]:text-[#d7fb69]"
+            className="rounded-lg text-gray-700 focus:bg-[#C41E19]/10 focus:text-[#C41E19] data-[state=checked]:text-[#C41E19]"
           >
             {option}
           </SelectItem>
@@ -408,7 +408,7 @@ function ProductForm({
   };
   return (
     <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-      <label className="sm:col-span-2 text-xs text-white/50">
+      <label className="sm:col-span-2 text-xs text-gray-500">
         Product name
         <input
           className={`${input} mt-1`}
@@ -416,7 +416,7 @@ function ProductForm({
           onChange={(e) => setP({ ...p, name: e.target.value })}
         />
       </label>
-      <label className="sm:col-span-2 text-xs text-white/50">
+      <label className="sm:col-span-2 text-xs text-gray-500">
         Description
         <textarea
           className={`${input} mt-1`}
@@ -424,20 +424,20 @@ function ProductForm({
           onChange={(e) => setP({ ...p, description: e.target.value })}
         />
       </label>
-      <div className="text-xs text-white/50">
+      <div className="text-xs text-gray-500">
         Category
         <Select value={p.categoryId ?? ""} onValueChange={categoryId => setP({ ...p, categoryId })}>
-          <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-white">
+          <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-gray-900">
             <SelectValue placeholder="Select a category" />
           </SelectTrigger>
-          <SelectContent className="z-[10001] rounded-xl border-white/10 bg-[#111511] text-white">
+          <SelectContent className="z-[10001] rounded-xl border-gray-100 bg-white text-gray-900">
             {categories.filter(category => category.isActive).map(category => (
               <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      <label className="text-xs text-white/50">
+      <label className="text-xs text-gray-500">
         Price
         <input
           type="number"
@@ -448,9 +448,9 @@ function ProductForm({
           onChange={(e) => setP({ ...p, price: Number(e.target.value) })}
         />
       </label>
-      <label className="sm:col-span-2 text-xs text-white/50">
+      <label className="sm:col-span-2 text-xs text-gray-500">
         Product image
-        <div className="mt-1 flex items-center gap-4 rounded-xl border border-dashed border-white/15 bg-white/[0.025] p-4">
+        <div className="mt-1 flex items-center gap-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4">
           {p.image ? (
             <img
               src={p.image}
@@ -458,7 +458,7 @@ function ProductForm({
               className="size-20 rounded-xl object-cover"
             />
           ) : (
-            <div className="grid size-20 place-items-center rounded-xl bg-white/5 text-[10px] text-white/30">
+            <div className="grid size-20 place-items-center rounded-xl bg-gray-100 text-[10px] text-gray-400">
               No image
             </div>
           )}
@@ -472,11 +472,11 @@ function ProductForm({
             />
             <label
               htmlFor="product-image-upload"
-              className={`${button} inline-flex cursor-pointer border border-white/10 bg-white/5 hover:bg-white/10`}
+              className={`${button} inline-flex cursor-pointer border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100`}
             >
               {uploadingImage ? "Uploading..." : "Choose Image"}
             </label>
-            <p className="mt-2 text-[10px] text-white/30">
+            <p className="mt-2 text-[10px] text-gray-400">
               Preview only — not uploaded.
             </p>
           </div>
@@ -529,11 +529,11 @@ function ProductForm({
         <button
           type="button"
           onClick={onClose}
-          className={`${button} bg-white/5`}
+          className={`${button} bg-gray-50 text-gray-700 border border-gray-200`}
         >
           Cancel
         </button>
-        <button disabled={uploadingImage} className={`${button} bg-[#d7fb69] text-[#17200f]`}>
+        <button disabled={uploadingImage} className={`${button} bg-[#C41E19] text-white`}>
           Save Product
         </button>
       </div>
@@ -591,7 +591,7 @@ function MenuPage() {
           <button
             onClick={() => setEditing({ ...blankProduct, categoryId: categories.find(category => category.isActive)?.id })}
             disabled={loadingMenu || categories.length === 0}
-            className={`${button} flex items-center gap-2 bg-[#d7fb69] text-[#17200f]`}
+            className={`${button} flex items-center gap-2 bg-[#C41E19] text-white`}
           >
             <Plus size={16} />
             Add Product
@@ -601,7 +601,7 @@ function MenuPage() {
       <div className={`${card} overflow-hidden`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-left text-sm">
-            <thead className="border-b border-white/5 text-xs uppercase text-white/30">
+            <thead className="border-b border-gray-100 text-xs uppercase text-gray-400">
               <tr>
                 {[
                   "Product",
@@ -610,7 +610,7 @@ function MenuPage() {
                   "Availability",
                   "Actions",
                 ].map((h) => (
-                  <th key={h} className="px-5 py-3">
+                  <th key={h} className="px-5 py-3 text-gray-400">
                     {h}
                   </th>
                 ))}
@@ -619,35 +619,35 @@ function MenuPage() {
             <tbody>
             {loadingMenu ? (
               Array.from({ length: 5 }, (_, index) => (
-                <tr key={index} className="border-b border-white/5">
+                <tr key={index} className="border-b border-gray-100">
                   <td colSpan={5} className="px-5 py-4">
-                    <Skeleton className="h-10 w-full rounded-lg bg-white/[.055]" />
+                    <Skeleton className="h-10 w-full rounded-lg bg-gray-100" />
                   </td>
                 </tr>
               ))
             ) : products.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-12 text-center">
-                    <div className="mx-auto max-w-xs rounded-2xl border border-dashed border-white/10 bg-white/[.018] px-6 py-7">
-                      <PackageOpen className="mx-auto mb-3 text-white/25" size={22} />
-                      <p className="text-sm font-semibold text-white/65">No products yet</p>
-                      <p className="mt-1 text-xs text-white/35">Add your first product to populate the menu.</p>
+                    <div className="mx-auto max-w-xs rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-6 py-7">
+                      <PackageOpen className="mx-auto mb-3 text-gray-300" size={22} />
+                      <p className="text-sm font-semibold text-gray-600">No products yet</p>
+                      <p className="mt-1 text-xs text-gray-400">Add your first product to populate the menu.</p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 products.map((p) => (
-                  <tr key={p.id} className="border-b border-white/5">
+                  <tr key={p.id} className="border-b border-gray-100">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <ProductThumbnail product={p} />
-                        <span className="font-medium">{p.name}</span>
+                        <span className="font-medium text-gray-900">{p.name}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 capitalize text-white/55">
+                    <td className="px-5 py-3 capitalize text-gray-500">
                       {p.category.replace(/_/g, " ")}
                     </td>
-                    <td className="px-5 py-3 font-bold text-[#d7fb69]">
+                    <td className="px-5 py-3 font-bold text-[#C41E19]">
                       {money.format(p.price)}
                     </td>
                     <td className="px-5 py-3">
@@ -664,14 +664,14 @@ function MenuPage() {
                         <button
                           aria-label={`Edit ${p.name}`}
                           onClick={() => setEditing(p)}
-                          className="rounded-lg p-2 hover:bg-white/10"
+                          className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
                         >
                           <Pencil size={15} />
                         </button>
                         <button
                           aria-label={`Delete ${p.name}`}
                           onClick={() => setDeleting(p)}
-                          className="rounded-lg p-2 text-red-300 hover:bg-red-400/10"
+                          className="rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
                         >
                           <Trash2 size={15} />
                         </button>
@@ -699,11 +699,11 @@ function MenuPage() {
       )}
       {deleting && (
         <Modal title="Delete Product?" onClose={() => setDeleting(null)}>
-          <p className="text-sm text-white/55">This action cannot be undone.</p>
+          <p className="text-sm text-gray-500">This action cannot be undone.</p>
           <div className="mt-5 flex justify-end gap-2">
             <button
               onClick={() => setDeleting(null)}
-              className={`${button} bg-white/5`}
+              className={`${button} bg-gray-50 text-gray-700 border border-gray-200`}
             >
               Cancel
             </button>
@@ -718,7 +718,7 @@ function MenuPage() {
                   toast.error(cause instanceof Error ? cause.message : "Product could not be deleted.");
                 } finally { setSaving(false); }
               })(); }}
-              className={`${button} bg-red-500 text-white`}
+              className={`${button} bg-[#C41E19] text-white`}
             >
               Delete
             </button>
@@ -785,7 +785,7 @@ function CategoriesPage() {
                 active: true,
               })
             }
-            className={`${button} flex items-center gap-2 bg-[#d7fb69] text-[#17200f]`}
+            className={`${button} flex items-center gap-2 bg-[#C41E19] text-white`}
           >
             <Plus size={16} />
             Add Category
@@ -1428,45 +1428,45 @@ export default function Dashboard({ section, onNavigate }: Props) {
     settings: <SettingsPage />,
   };
   return (
-    <div className="morrow-admin min-h-screen text-[#f5f5f1] font-['DM_Sans'] md:flex">
-      <Toaster theme="dark" position="top-right" />
-      <aside className="border-b border-white/[.05] bg-[#0d0f0c] md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col md:border-b-0 md:border-r">
-        <div className="flex items-center justify-between border-b border-white/[.045] px-5 py-6">
+    <div className="cangujet-admin min-h-screen text-gray-900 font-['Plus_Jakarta_Sans'] md:flex">
+      <Toaster theme="light" position="top-right" />
+      <aside className="border-b border-gray-100 bg-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col md:border-b-0 md:border-r">
+        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-5">
           <div>
             <MorrowLogo variant="full" priority className="h-auto w-36" />
-            <p className="mt-1 text-[10px] text-white/30">Admin Panel</p>
+            <p className="mt-1 text-[10px] text-gray-400">Admin Panel</p>
           </div>
-          <MenuIcon className="text-white/30 md:hidden" size={20} />
+          <MenuIcon className="text-gray-400 md:hidden" size={20} />
         </div>
         <nav
           aria-label="Admin navigation"
-          className="flex gap-1.5 overflow-x-auto p-3 md:flex-1 md:flex-col md:py-5"
+          className="flex gap-1.5 overflow-x-auto p-3 md:flex-1 md:flex-col md:py-4"
         >
           {nav.map(([id, label, Icon]) => (
             <button
               key={id}
               onClick={() => onNavigate(`/admin/${id}`)}
               aria-current={section === id ? "page" : undefined}
-              className={`relative flex min-h-11 shrink-0 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition-all duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#d7fb69]/45 ${section === id ? "bg-[#d7fb69]/[.11] font-bold text-[#d7fb69] before:absolute before:inset-y-2 before:left-0 before:w-0.5 before:rounded-full before:bg-[#d7fb69] before:shadow-[0_0_10px_rgba(215,251,105,.28)]" : "text-white/48 hover:bg-white/[.045] hover:text-white/85"}`}
+              className={`relative flex min-h-10 shrink-0 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition-all duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/30 ${section === id ? "bg-[#C41E19] font-semibold text-white shadow-sm" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"}`}
             >
-              <Icon size={17} />
+              <Icon size={16} />
               {label}
             </button>
           ))}
         </nav>
-        <div className="hidden border-t border-white/5 p-4 md:block">
-          <div className="flex items-center gap-3 rounded-xl border border-white/[.045] bg-white/[.025] p-3">
-            <div className="grid size-8 place-items-center rounded-full bg-[#d7fb69]/15 text-xs font-bold text-[#d7fb69]">
+        <div className="hidden border-t border-gray-100 p-4 md:block">
+          <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+            <div className="grid size-8 place-items-center rounded-full bg-[#C41E19]/10 text-xs font-bold text-[#C41E19]">
               A
             </div>
             <div>
-              <p className="text-xs font-bold">Admin</p>
-              <p className="text-[10px] text-white/30">Morrow Kiosk</p>
+              <p className="text-xs font-bold text-gray-900">Admin</p>
+              <p className="text-[10px] text-gray-400">cangujet kiosk</p>
             </div>
           </div>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 p-4 pb-28 sm:p-7 lg:p-10">
+      <main className="min-w-0 flex-1 bg-gray-50 p-4 pb-28 sm:p-7 lg:p-10">
         <div className="mx-auto w-full max-w-[1440px]">{pages[section]}</div>
       </main>
     </div>

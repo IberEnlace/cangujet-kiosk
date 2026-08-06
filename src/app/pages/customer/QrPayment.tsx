@@ -141,16 +141,16 @@ export default function QrPayment({ onComplete, onCancel, onInvalid }: {
   const processing = session.status === "processing";
   const money = new Intl.NumberFormat(undefined, { style: "currency", currency: session.currency }).format(Number(session.amount));
 
-  return <main className="min-h-[100dvh] bg-[#070a07] px-5 py-6 font-['DM_Sans'] text-[#f4f5ef]">
+  return <main className="min-h-[100dvh] bg-[#070a07] px-5 py-6 font-['Plus_Jakarta_Sans'] text-[#f4f5ef]">
     <div className="mx-auto flex min-h-[calc(100dvh-3rem)] max-w-[780px] flex-col">
       <header className="flex items-center justify-between">
         <MorrowLogo variant="full" priority className="h-auto w-36" />
-        <span className="flex items-center gap-2 rounded-full border border-[#D7FB69]/20 bg-[#D7FB69]/8 px-4 py-2 text-xs font-bold text-[#D7FB69]"><ShieldCheck size={15} />Secure QR Payment</span>
+        <span className="flex items-center gap-2 rounded-full border border-[#C41E19]/20 bg-[#C41E19]/8 px-4 py-2 text-xs font-bold text-[#C41E19]"><ShieldCheck size={15} />Secure QR Payment</span>
       </header>
 
       <section className="flex flex-1 flex-col items-center justify-center py-7 text-center" aria-live="polite">
         {success ? <>
-          <div className="grid size-28 place-items-center rounded-full bg-[#D7FB69] text-[#17200f] shadow-[0_0_70px_rgba(215,251,105,.22)]"><Check size={58} strokeWidth={3} /></div>
+          <div className="grid size-28 place-items-center rounded-full bg-[#C41E19] text-[#FFFFFF] shadow-[0_0_70px_rgba(215,251,105,.22)]"><Check size={58} strokeWidth={3} /></div>
           <h1 className="mt-7 text-5xl font-black tracking-[-.05em]">Payment received</h1>
           <p className="mt-3 text-lg text-white/50">Your order is confirmed. Continuing automatically…</p>
         </> : <>
@@ -159,11 +159,11 @@ export default function QrPayment({ onComplete, onCancel, onInvalid }: {
 
           {!expired ? <div className="relative mt-7 overflow-hidden rounded-[32px] bg-white p-6 shadow-2xl shadow-black/50">
             <img src={session.qrCode} alt={`QR code for order ${session.orderNumber}`} className="size-[min(52vw,320px)] object-contain" />
-            <div className="pointer-events-none absolute inset-x-5 top-5 h-1 animate-[bounce_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-[#D7FB69] to-transparent shadow-[0_0_16px_#D7FB69]" />
+            <div className="pointer-events-none absolute inset-x-5 top-5 h-1 animate-[bounce_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-[#C41E19] to-transparent shadow-[0_0_16px_#C41E19]" />
           </div> : <div className="mt-8 grid size-40 place-items-center rounded-[32px] border border-white/10 bg-white/[.035] text-white/25"><QrCode size={88} /></div>}
 
           <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
-            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-white/35">Total</p><p className="text-3xl font-black text-[#D7FB69]">{money}</p></div>
+            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-white/35">Total</p><p className="text-3xl font-black text-[#C41E19]">{money}</p></div>
             <div className="h-10 w-px bg-white/10" />
             <div><p className="text-xs font-bold uppercase tracking-[.18em] text-white/35">Order</p><p className="text-2xl font-black">{session.orderNumber}</p></div>
             <div className="h-10 w-px bg-white/10" />
@@ -171,7 +171,7 @@ export default function QrPayment({ onComplete, onCancel, onInvalid }: {
           </div>
 
           <div className="mt-5 flex items-center gap-2 text-sm font-bold text-white/50">
-            {processing ? <Loader2 size={17} className="animate-spin text-[#D7FB69]" /> : connection === "connected" ? <span className="size-2 animate-pulse rounded-full bg-[#D7FB69]" /> : <WifiOff size={16} />}
+            {processing ? <Loader2 size={17} className="animate-spin text-[#C41E19]" /> : connection === "connected" ? <span className="size-2 animate-pulse rounded-full bg-[#C41E19]" /> : <WifiOff size={16} />}
             {processing ? "Processing payment…" : expired ? "Payment session ended" : "Waiting for payment…"}
           </div>
         </>}
@@ -179,7 +179,7 @@ export default function QrPayment({ onComplete, onCancel, onInvalid }: {
       </section>
 
       {!success ? <footer className="grid gap-3 border-t border-white/8 pt-5 sm:grid-cols-2">
-        {expired ? <button type="button" disabled={busy} onClick={() => void generateNew()} className="min-h-16 rounded-2xl bg-[#D7FB69] px-6 text-lg font-black text-[#17200f] disabled:opacity-50"><RefreshCw size={19} className={`me-2 inline ${busy ? "animate-spin" : ""}`} />Generate New QR</button> : null}
+        {expired ? <button type="button" disabled={busy} onClick={() => void generateNew()} className="min-h-16 rounded-2xl bg-[#C41E19] px-6 text-lg font-black text-[#FFFFFF] disabled:opacity-50"><RefreshCw size={19} className={`me-2 inline ${busy ? "animate-spin" : ""}`} />Generate New QR</button> : null}
         <button type="button" disabled={busy} onClick={() => void cancel()} className={`min-h-16 rounded-2xl border border-white/15 bg-white/[.035] px-6 text-lg font-black disabled:opacity-50 ${expired ? "" : "sm:col-span-2"}`}><ArrowLeft size={19} className="me-2 inline" />Cancel Payment</button>
       </footer> : null}
     </div>

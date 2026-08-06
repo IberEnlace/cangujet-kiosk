@@ -53,7 +53,7 @@ export default function MockQrPayment({ sessionId }: { sessionId: string }) {
     : "—", [session]);
   const finished = session ? terminal(session.status) : false;
 
-  return <main className="min-h-[100dvh] bg-[#070a07] px-5 py-8 font-['DM_Sans'] text-[#f4f5ef]">
+  return <main className="min-h-[100dvh] bg-[#070a07] px-5 py-8 font-['Plus_Jakarta_Sans'] text-[#f4f5ef]">
     <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-xl flex-col">
       <header className="flex items-center justify-between gap-4">
         <MorrowLogo variant="full" priority className="h-auto w-36" />
@@ -61,7 +61,7 @@ export default function MockQrPayment({ sessionId }: { sessionId: string }) {
       </header>
 
       <section className="my-auto py-10 text-center" aria-live="polite">
-        <div className="mx-auto grid size-20 place-items-center rounded-[24px] bg-[#D7FB69]/10 text-[#D7FB69]"><TestTube2 size={38} /></div>
+        <div className="mx-auto grid size-20 place-items-center rounded-[24px] bg-[#C41E19]/10 text-[#C41E19]"><TestTube2 size={38} /></div>
         <h1 className="mt-6 text-4xl font-black tracking-[-.04em]">MORROW Mock Payment</h1>
         <p className="mt-2 text-white/45">Local payment simulator for development and testing.</p>
 
@@ -81,7 +81,7 @@ export default function MockQrPayment({ sessionId }: { sessionId: string }) {
       </section>
 
       {session && !finished ? <footer className="grid gap-3 border-t border-white/10 pt-5">
-        <button type="button" disabled={busy} onClick={() => void act("success")} className="min-h-16 rounded-2xl bg-[#D7FB69] px-5 text-lg font-black text-[#17200f] disabled:opacity-50">{busy ? <Loader2 size={20} className="me-2 inline animate-spin" /> : <Check size={20} className="me-2 inline" />}Simulate Payment Success</button>
+        <button type="button" disabled={busy} onClick={() => void act("success")} className="min-h-16 rounded-2xl bg-[#C41E19] px-5 text-lg font-black text-[#FFFFFF] disabled:opacity-50">{busy ? <Loader2 size={20} className="me-2 inline animate-spin" /> : <Check size={20} className="me-2 inline" />}Simulate Payment Success</button>
         <div className="grid grid-cols-2 gap-3">
           <button type="button" disabled={busy} onClick={() => void act("fail")} className="min-h-14 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 font-bold text-red-200 disabled:opacity-50">Simulate Failure</button>
           <button type="button" disabled={busy} onClick={() => void act("cancel")} className="min-h-14 rounded-2xl border border-white/15 bg-white/[.04] px-4 font-bold disabled:opacity-50">Cancel Payment</button>
@@ -92,11 +92,11 @@ export default function MockQrPayment({ sessionId }: { sessionId: string }) {
 }
 
 function Detail({ label, value, accent = false, icon }: { label: string; value: string; accent?: boolean; icon?: React.ReactNode }) {
-  return <div><p className="text-xs font-bold uppercase tracking-[.16em] text-white/35">{label}</p><p className={`mt-1 flex items-center gap-2 text-xl font-black capitalize ${accent ? "text-[#D7FB69]" : ""}`}>{icon}{value}</p></div>;
+  return <div><p className="text-xs font-bold uppercase tracking-[.16em] text-white/35">{label}</p><p className={`mt-1 flex items-center gap-2 text-xl font-black capitalize ${accent ? "text-[#C41E19]" : ""}`}>{icon}{value}</p></div>;
 }
 
 function Status({ icon, title, copy, success = false }: { icon: React.ReactNode; title: string; copy: string; success?: boolean }) {
-  return <div className={`mt-6 rounded-2xl border p-4 text-center ${success ? "border-[#D7FB69]/20 bg-[#D7FB69]/8 text-[#D7FB69]" : "border-white/10 bg-black/15 text-white/70"}`}><div className="flex justify-center">{icon}</div><p className="mt-2 font-black">{title}</p><p className="mt-1 text-sm opacity-70">{copy}</p></div>;
+  return <div className={`mt-6 rounded-2xl border p-4 text-center ${success ? "border-[#C41E19]/20 bg-[#C41E19]/8 text-[#C41E19]" : "border-white/10 bg-black/15 text-white/70"}`}><div className="flex justify-center">{icon}</div><p className="mt-2 font-black">{title}</p><p className="mt-1 text-sm opacity-70">{copy}</p></div>;
 }
 
 function terminal(status: QrPaymentSession["status"]) { return ["paid", "expired", "cancelled", "failed"].includes(status); }

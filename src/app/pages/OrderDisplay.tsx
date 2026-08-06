@@ -26,7 +26,7 @@ export default function OrderDisplay({onNavigate:_onNavigate}:Props){
   const completedOrders=useMemo(()=>kitchenOrders.filter(order=>order.status==="completed"&&now-orderTimestamp(order)<=COMPLETED_LIFETIME_MS).sort((a,b)=>orderTimestamp(b)-orderTimestamp(a)).slice(0,MAX_COMPLETED),[kitchenOrders,now]);
   const clock=new Date(now).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
 
-  return <main className="flex min-h-screen flex-col select-none overflow-hidden bg-[#05070a] font-['DM_Sans'] text-[#f0f0eb]">
+  return <main className="flex min-h-screen flex-col select-none overflow-hidden bg-[#05070a] font-['Plus_Jakarta_Sans'] text-[#f0f0eb]">
     {board.error?<div role="alert" className="bg-red-950/80 px-4 py-2 text-center text-sm text-red-200">Order status is temporarily unavailable. Retrying automatically.</div>:null}
     <header className="flex items-center justify-between border-b border-white/5 bg-[#0a0d0f] px-[clamp(1rem,2.5vw,3rem)] py-[clamp(.8rem,1.5vh,1.25rem)]"><div><MorrowLogo variant="full" priority className="h-auto w-[clamp(8rem,10vw,12rem)]"/><p className="mt-1 text-[clamp(.55rem,.65vw,.75rem)] uppercase tracking-[.2em] text-white/30">Order Status Display</p></div><div className="flex items-center gap-2 text-white/50"><Clock size={20}/><time className="font-mono text-[clamp(1.1rem,1.6vw,2rem)] font-bold tabular-nums">{clock}</time></div></header>
     <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[minmax(0,2fr)_minmax(310px,1fr)]">

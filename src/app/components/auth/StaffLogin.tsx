@@ -3,15 +3,15 @@ import { motion, useReducedMotion } from "motion/react";
 import { ArrowLeft, BarChart3, ChefHat, Eye, EyeOff, LockKeyhole, ReceiptText } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import type { StaffRole } from "../../auth/roleConfig";
-import MorrowLogo from "../branding/MorrowLogo";
+import CangujetLogo from "../branding/MorrowLogo";
 import "./StaffLogin.css";
 
 type Props = { role: StaffRole; title: string; description: string; onSuccess: () => void; onBack: () => void };
 
 const ROLE_META = {
-  admin: { accent: "#60a5fa", rgb: "96,165,250", label: "Restaurant intelligence", statement: "See every signal. Shape every outcome.", icon: BarChart3 },
-  cashier: { accent: "#a78bfa", rgb: "167,139,250", label: "Point of sale", statement: "Every order, payment, and guest—moving together.", icon: ReceiptText },
-  kitchen: { accent: "#fb923c", rgb: "251,146,60", label: "Kitchen operations", statement: "From incoming ticket to ready for service.", icon: ChefHat },
+  admin: { accent: "#3B82F6", rgb: "59,130,246", label: "Restaurant intelligence", statement: "See every signal. Shape every outcome.", icon: BarChart3 },
+  cashier: { accent: "#7C3AED", rgb: "124,58,237", label: "Point of sale", statement: "Every order, payment, and guest—moving together.", icon: ReceiptText },
+  kitchen: { accent: "#EA580C", rgb: "234,88,12", label: "Kitchen operations", statement: "From incoming ticket to ready for service.", icon: ChefHat },
 } as const;
 
 function AdminEnvironment() {
@@ -27,7 +27,7 @@ function AdminEnvironment() {
 function CashierEnvironment() {
   return <div className="auth-visual auth-visual--cashier" aria-hidden="true">
     <div className="pos-terminal"><div className="pos-screen"><div className="visual-toolbar"><i /><span /><span /></div><div className="pos-products">{[0,1,2,3,4,5].map(i => <i key={i}><span /></i>)}</div><div className="pos-total"><span>Total</span><strong>€38.50</strong></div></div><div className="pos-base"><i /><i /><i /></div></div>
-    <div className="receipt-paper"><strong>MORROW</strong><span /><span /><span /><em>€38.50</em></div>
+    <div className="receipt-paper"><strong>cangujet</strong><span /><span /><span /><em>€38.50</em></div>
     <div className="payment-card"><i /><span>•••• 2048</span><em>Approved</em></div>
     <span className="transaction-pulse pulse-one" /><span className="transaction-pulse pulse-two" />
   </div>;
@@ -59,9 +59,9 @@ export default function StaffLogin({ role, title, description, onSuccess, onBack
   return <main className={`auth-page auth-page--${role}`} style={{ "--role-accent": meta.accent, "--role-rgb": meta.rgb } as React.CSSProperties}>
     <section className="auth-environment-panel">
       <div className="auth-ambient" aria-hidden="true"><i /><i /><span /></div>
-      <motion.div {...enter(.04)} className="auth-brand"><MorrowLogo variant="full" priority className="auth-brand__logo" /><span>{meta.label}</span></motion.div>
+      <motion.div {...enter(.04)} className="auth-brand"><CangujetLogo variant="full" priority className="auth-brand__logo" /><span>{meta.label}</span></motion.div>
       <motion.div {...enter(.08, 0, 12)} className="auth-role-scene"><RoleEnvironment role={role} /></motion.div>
-      <motion.div {...enter(.18)} className="auth-environment-copy"><span><RoleIcon size={15} /> {role} workspace</span><h2>{meta.statement}</h2><p>Morrow Restaurant Operating Platform</p></motion.div>
+      <motion.div {...enter(.18)} className="auth-environment-copy"><span><RoleIcon size={15} /> {role} workspace</span><h2>{meta.statement}</h2><p>cangujet kiosk platform</p></motion.div>
     </section>
 
     <section className="auth-form-panel">
@@ -70,7 +70,7 @@ export default function StaffLogin({ role, title, description, onSuccess, onBack
         <div className="auth-card__glow" aria-hidden="true" />
         <div className="auth-lock"><LockKeyhole size={19}/></div>
         <p className="auth-eyebrow">{role} workspace</p><h1>{title}</h1><p className="auth-description">{description}</p>
-        <motion.div {...enter(.28, 0, 8)} className="auth-field"><label htmlFor={`${role}-email`}>Email or employee ID</label><input id={`${role}-email`} autoFocus value={email} onChange={e=>setEmail(e.target.value)} type="email" required placeholder={`${role}@morrow.local`}/></motion.div>
+        <motion.div {...enter(.28, 0, 8)} className="auth-field"><label htmlFor={`${role}-email`}>Email or employee ID</label><input id={`${role}-email`} autoFocus value={email} onChange={e=>setEmail(e.target.value)} type="email" required placeholder={`${role}@cangujet.local`}/></motion.div>
         <motion.div {...enter(.34, 0, 8)} className="auth-field"><label htmlFor={`${role}-password`}>Password</label><div className="auth-password"><input id={`${role}-password`} value={password} onChange={e=>setPassword(e.target.value)} type={show?"text":"password"} required placeholder="Enter your password"/><button type="button" aria-label={show ? "Hide password" : "Show password"} onClick={()=>setShow(v=>!v)}>{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></motion.div>
         {error && <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="auth-error" role="alert">{error}</motion.p>}
         <motion.button {...enter(.4, 0, 8)} type="submit" disabled={loading} className="auth-submit"><span>{loading?"Signing in…":"Sign in securely"}</span>{loading && <i aria-hidden="true" />}</motion.button>

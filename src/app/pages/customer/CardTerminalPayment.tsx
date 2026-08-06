@@ -164,7 +164,7 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
   }, [animation, isActive, status]);
 
   return (
-    <main dir={direction} className="min-h-[100dvh] bg-[#080b08] font-['DM_Sans'] text-[#f0f0eb]">
+    <main dir={direction} className="min-h-[100dvh] bg-[#080b08] font-['Plus_Jakarta_Sans'] text-[#f0f0eb]">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[900px] flex-col px-5 py-6 sm:px-10 sm:py-10">
         <header className="flex items-center justify-between">
           <div className="flex items-center gap-3"><MorrowLogo variant="symbol" priority className="size-12 object-contain" /><p className="text-xs text-white/40">Secure terminal payment</p></div>
@@ -191,7 +191,7 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
         </section>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          {canRetry && <button type="button" onClick={startTerminalPayment} className="min-h-16 rounded-2xl bg-[#d7ff7a] px-6 text-lg font-bold text-[#17200f]">{copy.tryAgain}</button>}
+          {canRetry && <button type="button" onClick={startTerminalPayment} className="min-h-16 rounded-2xl bg-[#d7ff7a] px-6 text-lg font-bold text-[#FFFFFF]">{copy.tryAgain}</button>}
           <button type="button" onClick={cancel} disabled={status === "approved"} className={`min-h-16 rounded-2xl border border-white/15 px-6 text-lg font-bold transition hover:bg-white/10 disabled:opacity-30 ${canRetry ? "" : "sm:col-span-2"}`}><ArrowLeft className="me-2 inline" size={20} />{isActive ? copy.cancel : copy.backToPaymentMethods}</button>
         </div>
 

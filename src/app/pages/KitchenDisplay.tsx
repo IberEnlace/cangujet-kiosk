@@ -177,7 +177,7 @@ export default function KitchenDisplay({ onNavigate: _onNavigate }: Props) {
 
   const urgentCount = activeOrders.filter(order => kitchenUrgencyRank(order, sortNow) >= 2).length;
 
-  return <main className="flex min-h-screen flex-col bg-[#070907] font-['DM_Sans'] text-[#F4F5EF]">
+  return <main className="flex min-h-screen flex-col bg-[#070907] font-['Plus_Jakarta_Sans'] text-[#F4F5EF]">
     <Toaster theme="dark" position="top-right" richColors />
     <header className="border-b border-white/8 bg-[#090c09]/95 px-4 py-3 backdrop-blur-xl lg:px-6">
       <div className="flex flex-wrap items-center gap-3 lg:gap-4">

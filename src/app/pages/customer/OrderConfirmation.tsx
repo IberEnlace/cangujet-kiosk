@@ -61,7 +61,7 @@ export default function OrderConfirmation({ onReset }: { onReset: () => void }) 
   const statusText = printStatus === "printing" ? copy.printing : printStatus === "printed" ? copy.printed : copy.printError;
 
   return (
-    <main dir={direction} className="h-screen h-[100dvh] overflow-hidden bg-[#080b08] font-['DM_Sans'] text-[#f0f0eb]">
+    <main dir={direction} className="h-screen h-[100dvh] overflow-hidden bg-[#080b08] font-['Plus_Jakarta_Sans'] text-[#f0f0eb]">
       <div className="confirmation-layout mx-auto grid h-full w-full max-w-[900px] grid-rows-[auto_minmax(0,1fr)_auto] px-4 pt-4 text-center sm:px-8 sm:pt-6">
         <header className="flex flex-col items-center">
           <MorrowLogo variant="full" priority className="h-auto w-36" />
@@ -71,14 +71,14 @@ export default function OrderConfirmation({ onReset }: { onReset: () => void }) 
 
         <section className="grid min-h-0 content-center gap-3 py-2 sm:gap-4">
           <div>
-            <p className="font-['Space_Mono'] text-[10px] font-bold uppercase tracking-[.2em] text-white/40">{copy.orderNumber}</p>
-            <p className="text-[clamp(4.6rem,14dvh,8.5rem)] font-black leading-[.85] tabular-nums text-[#D7FB69] drop-shadow-[0_0_30px_rgba(215,251,105,.16)]">{currentOrderNumber}</p>
+            <p className="font-['Plus_Jakarta_Sans'] text-[10px] font-bold uppercase tracking-[.2em] text-white/40">{copy.orderNumber}</p>
+            <p className="text-[clamp(4.6rem,14dvh,8.5rem)] font-black leading-[.85] tabular-nums text-[#C41E19] drop-shadow-[0_0_30px_rgba(215,251,105,.16)]">{currentOrderNumber}</p>
           </div>
 
           <div className="confirmation-receipt-grid mx-auto grid min-h-0 w-full max-w-3xl items-center gap-3 min-[680px]:grid-cols-2">
             <div className="grid content-center gap-2">
               {printingEnabled && <ReceiptPrinterAnimation status={printStatus} />}
-              <div role="status" className={`mx-auto flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold ${printStatus === "printer_error" ? "border-red-400/25 bg-red-500/10 text-red-300" : "border-[#D7FB69]/20 bg-[#D7FB69]/5 text-[#D7FB69]"}`}>{printingEnabled && <Printer size={16} className={printStatus === "printing" ? "animate-pulse" : ""} />}{printingEnabled ? statusText : "Digital receipt ready"}</div>
+              <div role="status" className={`mx-auto flex min-h-11 w-full max-w-xs items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold ${printStatus === "printer_error" ? "border-red-400/25 bg-red-500/10 text-red-300" : "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]"}`}>{printingEnabled && <Printer size={16} className={printStatus === "printing" ? "animate-pulse" : ""} />}{printingEnabled ? statusText : "Digital receipt ready"}</div>
             </div>
             <div className="flex min-h-0 justify-center"><ReceiptPreview {...receipt} language={language} /></div>
           </div>
@@ -87,12 +87,12 @@ export default function OrderConfirmation({ onReset }: { onReset: () => void }) 
         <footer className="border-t border-white/8 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <p className="text-[clamp(.92rem,1.8vw,1.2rem)] font-semibold leading-snug">{copy.instruction}</p>
           <p className="mt-1 text-[clamp(.72rem,1.3vw,.9rem)] leading-snug text-white/40">{copy.collectAtCounter}</p>
-          {tracking.tracking && <p role="status" className="mt-1 text-xs font-semibold capitalize text-[#D7FB69]">Live order status: {tracking.tracking.status}</p>}
+          {tracking.tracking && <p role="status" className="mt-1 text-xs font-semibold capitalize text-[#C41E19]">Live order status: {tracking.tracking.status}</p>}
           {printStatus === "printer_error" && <p className="mt-1 text-xs text-red-300">{copy.errorHelp}</p>}
-          <p className={`mt-2 min-h-5 text-[clamp(.75rem,1.3vw,.9rem)] text-[#D7FB69] ${printStatus === "printed" ? "visible" : "invisible"}`}>{copy.returningIn.replace("{seconds}", String(countdown))}</p>
+          <p className={`mt-2 min-h-5 text-[clamp(.75rem,1.3vw,.9rem)] text-[#C41E19] ${printStatus === "printed" ? "visible" : "invisible"}`}>{copy.returningIn.replace("{seconds}", String(countdown))}</p>
           <div className="mt-2 grid gap-2 sm:grid-cols-2">
             {printStatus === "printer_error" && <button type="button" onClick={printReceipt} className="min-h-14 rounded-2xl bg-white/10 px-5 text-base font-bold"><RefreshCw className="me-2 inline" size={18} />{copy.retryPrint}</button>}
-            <button type="button" onClick={onReset} className={`min-h-16 rounded-2xl bg-[#D7FB69] px-6 text-lg font-bold text-[#17200f] ${printStatus !== "printer_error" ? "sm:col-span-2" : ""}`}>{printStatus === "printer_error" ? copy.continueWithoutReceipt : copy.startNewOrder}</button>
+            <button type="button" onClick={onReset} className={`min-h-16 rounded-2xl bg-[#C41E19] px-6 text-lg font-bold text-[#FFFFFF] ${printStatus !== "printer_error" ? "sm:col-span-2" : ""}`}>{printStatus === "printer_error" ? copy.continueWithoutReceipt : copy.startNewOrder}</button>
           </div>
         </footer>
       </div>

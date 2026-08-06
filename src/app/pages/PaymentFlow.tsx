@@ -158,7 +158,7 @@ export default function PaymentFlow({ onNavigate, onPayAtCashierConfirmed, onQrP
   // ─── Screens ──────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['Plus_Jakarta_Sans'] flex flex-col">
       <header className="sticky top-0 z-40 bg-[#080b08]/90 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center justify-between">
         <button onClick={() => onNavigate("cart")} className="flex items-center gap-2 text-white/60 hover:text-white transition-colors group">
           <span className="size-9 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center group-hover:border-[#d7ff7a]/30 transition-all"><ArrowLeft size={16} /></span>

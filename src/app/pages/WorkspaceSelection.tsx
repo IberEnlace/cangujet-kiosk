@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } fr
 import { motion, useReducedMotion } from "motion/react";
 import { ArrowRight, BarChart3, ChefHat, Cloud, Cpu, CreditCard, Monitor, Printer, ReceiptText, TabletSmartphone, type LucideIcon } from "lucide-react";
 import type { DeviceMode } from "../auth/roleConfig";
-import MorrowLogo from "../components/branding/MorrowLogo";
+import CangujetLogo from "../components/branding/MorrowLogo";
 import "./RoleSelection.css";
 
 type SelectableMode = Exclude<DeviceMode, "unassigned">;
@@ -18,11 +18,11 @@ type Workspace = {
 };
 
 const WORKSPACES: readonly Workspace[] = [
-  { id: "customer", title: "Customer Kiosk", description: "Start a new guest order with a fast, guided self-service experience.", icon: TabletSmartphone, accent: "#d7ff7a", accentRgb: "215,255,122", defaultRemember: true },
-  { id: "admin", title: "Admin", description: "Manage performance, menus, locations, integrations, and platform settings.", icon: BarChart3, accent: "#60a5fa", accentRgb: "96,165,250", defaultRemember: false },
-  { id: "cashier", title: "Cashier", description: "Create orders, accept payments, print receipts, and manage the register.", icon: ReceiptText, accent: "#a78bfa", accentRgb: "167,139,250", defaultRemember: false },
-  { id: "kitchen", title: "Kitchen", description: "Receive live orders and manage preparation status from one focused view.", icon: ChefHat, accent: "#fb923c", accentRgb: "251,146,60", defaultRemember: false },
-  { id: "display", title: "Order Display", description: "Show preparing and ready order numbers on a clear public-facing screen.", icon: Monitor, accent: "#34d399", accentRgb: "52,211,153", defaultRemember: true },
+  { id: "customer", title: "Customer Kiosk", description: "Start a new guest order with a fast, guided self-service experience.", icon: TabletSmartphone, accent: "#C41E19", accentRgb: "196,30,25", defaultRemember: true },
+  { id: "admin", title: "Admin", description: "Manage performance, menus, locations, integrations, and platform settings.", icon: BarChart3, accent: "#3B82F6", accentRgb: "59,130,246", defaultRemember: false },
+  { id: "cashier", title: "Cashier", description: "Create orders, accept payments, print receipts, and manage the register.", icon: ReceiptText, accent: "#7C3AED", accentRgb: "124,58,237", defaultRemember: false },
+  { id: "kitchen", title: "Kitchen", description: "Receive live orders and manage preparation status from one focused view.", icon: ChefHat, accent: "#EA580C", accentRgb: "234,88,12", defaultRemember: false },
+  { id: "display", title: "Order Display", description: "Show preparing and ready order numbers on a clear public-facing screen.", icon: Monitor, accent: "#059669", accentRgb: "5,150,105", defaultRemember: true },
 ] as const;
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -158,7 +158,7 @@ export default function WorkspaceSelection({ onSelect }: Props) {
     <div className="workspace-opening-shade" aria-hidden="true" />
     <div className="workspace-shell">
       <motion.header className="workspace-header">
-        <motion.div {...enter(0)}><MorrowLogo variant="full" priority className="workspace-logo" /></motion.div>
+        <motion.div {...enter(0)}><CangujetLogo variant="full" priority className="workspace-logo" /></motion.div>
       </motion.header>
 
       <section className="workspace-main" aria-labelledby="workspace-title">
@@ -177,7 +177,7 @@ export default function WorkspaceSelection({ onSelect }: Props) {
             </motion.div>)}
           </div>
         </div>
-        <motion.div {...enter(.9)} className="workspace-platform" role="status" aria-live="polite" aria-atomic="true"><span><i /><i /><i /></span>{selected ? "Opening Workspace…" : "One platform. Every restaurant workflow connected."}</motion.div>
+        <motion.div {...enter(.9)} className="workspace-platform" role="status" aria-live="polite" aria-atomic="true"><span><i /><i /><i /></span>{selected ? "Opening Workspace…" : "cangujet kiosk — every workflow connected."}</motion.div>
       </section>
     </div>
   </main>;

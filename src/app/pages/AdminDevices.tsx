@@ -40,7 +40,7 @@ import {
 import { adminDeviceManagementService } from "../services/device/adminDeviceManagementService";
 import { isStaffApiError, type StaffApiFailureKind } from "../services/staffApiClient";
 
-const field = "mt-2 min-h-12 w-full rounded-2xl border border-white/[.08] bg-black/20 px-4 text-sm text-white outline-none transition focus:border-[#d7fb69]/45 focus:ring-2 focus:ring-[#d7fb69]/10";
+const field = "mt-2 min-h-12 w-full rounded-2xl border border-white/[.08] bg-black/20 px-4 text-sm text-white outline-none transition focus:border-[#C41E19]/45 focus:ring-2 focus:ring-[#C41E19]/10";
 const secondaryButton = "min-h-10 rounded-xl border border-white/[.08] bg-white/[.035] px-3.5 text-xs font-bold text-white/60 transition hover:border-white/15 hover:bg-white/[.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
 const surface = "rounded-[24px] border border-white/[.065] bg-white/[.022] shadow-[0_18px_60px_rgba(0,0,0,.14)]";
 
@@ -155,7 +155,7 @@ export default function AdminDevices() {
 
     <section className={`${surface} p-5 sm:p-7`}>
       <div className="flex items-start gap-3">
-        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#d7fb69]/10 text-[#d7fb69]"><KeyRound size={18}/></span>
+        <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#C41E19]/10 text-[#C41E19]"><KeyRound size={18}/></span>
         <div><h2 className="font-bold text-white">Create activation key</h2><p className="mt-1 text-sm text-white/35">The device chooses its workspace after the key is verified.</p></div>
       </div>
 
@@ -192,7 +192,7 @@ export default function AdminDevices() {
           </div>}
         </div>
 
-        <button disabled={busy === "create" || !branchId} className="mt-6 min-h-12 rounded-2xl bg-[#d7fb69] px-6 text-sm font-black text-[#17200f] shadow-[0_8px_30px_rgba(215,251,105,.12)] transition hover:bg-[#e0ff82] disabled:cursor-not-allowed disabled:opacity-40">
+        <button disabled={busy === "create" || !branchId} className="mt-6 min-h-12 rounded-2xl bg-[#C41E19] px-6 text-sm font-black text-[#FFFFFF] shadow-[0_8px_30px_rgba(215,251,105,.12)] transition hover:bg-[#e0ff82] disabled:cursor-not-allowed disabled:opacity-40">
           {busy === "create" ? <Loader2 className="me-2 inline animate-spin" size={16}/> : <KeyRound className="me-2 inline" size={16}/>}Create activation key
         </button>
       </form>
@@ -256,7 +256,7 @@ function DeviceCard({ device, now, busy, onOpen, perform }: {
   };
   const stopCardClick = (event: MouseEvent) => event.stopPropagation();
 
-  return <article role="button" tabIndex={0} aria-label={`View details for ${device.name}`} onClick={onOpen} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }} className={`${surface} group cursor-pointer p-5 outline-none transition hover:-translate-y-0.5 hover:border-white/[.11] hover:bg-white/[.035] focus-visible:ring-2 focus-visible:ring-[#d7fb69]/35`}>
+  return <article role="button" tabIndex={0} aria-label={`View details for ${device.name}`} onClick={onOpen} onKeyDown={event => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onOpen(); } }} className={`${surface} group cursor-pointer p-5 outline-none transition hover:-translate-y-0.5 hover:border-white/[.11] hover:bg-white/[.035] focus-visible:ring-2 focus-visible:ring-[#C41E19]/35`}>
     <div className="flex items-start gap-3"><span className={`mt-1 size-2.5 shrink-0 rounded-full ${online ? "bg-emerald-400 shadow-[0_0_12px_rgba(52,211,153,.45)]" : "bg-white/20"}`}/><div className="min-w-0 flex-1"><h3 className="truncate font-bold text-white">{device.name}</h3><p className="mt-1 text-sm capitalize text-white/40">{label(device.deviceType)}</p></div>
       <div onClick={stopCardClick}>
         <DropdownMenu><DropdownMenuTrigger asChild><button type="button" aria-label={`Actions for ${device.name}`} disabled={busy} className="grid size-9 place-items-center rounded-xl text-white/35 transition hover:bg-white/[.07] hover:text-white disabled:opacity-40"><MoreHorizontal size={18}/></button></DropdownMenuTrigger><DropdownMenuContent align="end" className="w-56 rounded-2xl border-white/10 bg-[#151915] p-1.5 text-white shadow-2xl">
@@ -275,12 +275,12 @@ function DeviceCard({ device, now, busy, onOpen, perform }: {
 
 function ActivationKeyModal({ value, onCopy, onDone }: { value: string; onCopy: () => void; onDone: () => void }) {
   return <Dialog open onOpenChange={open => { if (!open) onDone(); }}>
-    <DialogContent className="max-w-lg gap-0 rounded-[28px] border-[#d7fb69]/20 bg-[#111510] p-6 text-white shadow-[0_30px_100px_rgba(0,0,0,.6)] sm:p-8 [&>button.absolute]:hidden">
-      <span className="grid size-12 place-items-center rounded-2xl bg-[#d7fb69]/10 text-[#d7fb69]"><KeyRound size={21}/></span>
+    <DialogContent className="max-w-lg gap-0 rounded-[28px] border-[#C41E19]/20 bg-[#111510] p-6 text-white shadow-[0_30px_100px_rgba(0,0,0,.6)] sm:p-8 [&>button.absolute]:hidden">
+      <span className="grid size-12 place-items-center rounded-2xl bg-[#C41E19]/10 text-[#C41E19]"><KeyRound size={21}/></span>
       <DialogTitle className="mt-6 text-2xl font-black tracking-[-.035em] text-white">Activation Key Created</DialogTitle>
       <DialogDescription className="mt-3 whitespace-pre-line text-sm leading-6 text-white/50">{"This key will only be shown once.\nCopy it before closing."}</DialogDescription>
-      <div className="mt-6 select-all break-all rounded-2xl border border-white/[.08] bg-black/25 p-5 text-center font-mono text-base font-bold leading-7 tracking-[.09em] text-[#d7fb69] sm:text-lg">{value}</div>
-      <div className="mt-6 grid gap-3 sm:grid-cols-2"><button type="button" onClick={onCopy} className="min-h-12 rounded-2xl bg-[#d7fb69] font-black text-[#17200f]"><Copy className="me-2 inline" size={16}/>Copy Key</button><DialogClose asChild><button type="button" className={secondaryButton}>Done</button></DialogClose></div>
+      <div className="mt-6 select-all break-all rounded-2xl border border-white/[.08] bg-black/25 p-5 text-center font-mono text-base font-bold leading-7 tracking-[.09em] text-[#C41E19] sm:text-lg">{value}</div>
+      <div className="mt-6 grid gap-3 sm:grid-cols-2"><button type="button" onClick={onCopy} className="min-h-12 rounded-2xl bg-[#C41E19] font-black text-[#FFFFFF]"><Copy className="me-2 inline" size={16}/>Copy Key</button><DialogClose asChild><button type="button" className={secondaryButton}>Done</button></DialogClose></div>
     </DialogContent>
   </Dialog>;
 }
@@ -318,7 +318,7 @@ function EmptyCard({ icon, title, description }: { icon: ReactNode; title: strin
 }
 
 function LoadingCard() {
-  return <div className={`${surface} grid min-h-36 place-items-center`}><Loader2 className="animate-spin text-[#d7fb69]" size={20}/></div>;
+  return <div className={`${surface} grid min-h-36 place-items-center`}><Loader2 className="animate-spin text-[#C41E19]" size={20}/></div>;
 }
 
 function isOnline(device: ManagedDevice, now: number) {

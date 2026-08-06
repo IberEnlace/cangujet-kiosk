@@ -88,7 +88,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
   };
 
   return (
-    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['DM_Sans'] flex flex-col">
+    <div className="min-h-[100dvh] bg-[#080b08] text-[#f0f0eb] font-['Plus_Jakarta_Sans'] flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#080b08]/90 backdrop-blur-xl border-b border-white/5 px-6 py-4 flex items-center justify-between">
         <button
@@ -104,7 +104,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
           <MorrowLogo variant="symbol" className="size-8 object-contain" alt="" />
           <CartIcon size={20} className="text-[#d7ff7a]" />
           <h1 className="font-bold text-lg tracking-tight">Your Cart</h1>
-          <span className="bg-[#d7ff7a] text-[#17200f] text-xs font-bold rounded-full size-6 flex items-center justify-center">
+          <span className="bg-[#d7ff7a] text-[#FFFFFF] text-xs font-bold rounded-full size-6 flex items-center justify-center">
             {items.reduce((s, i) => s + i.qty, 0)}
           </span>
         </div>
@@ -123,7 +123,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
             {(["dine_in", "take_away"] as const).map(type => (
               <button
                 key={type}
-                className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all ${orderType === type ? "bg-[#d7ff7a] text-[#17200f]" : "text-white/50 hover:text-white"}`}
+                className={`px-5 py-2 rounded-xl text-sm font-semibold transition-all ${orderType === type ? "bg-[#d7ff7a] text-[#FFFFFF]" : "text-white/50 hover:text-white"}`}
               >
                 {type === "dine_in" ? "🍽 Eat Here" : "🛍 Take Away"}
               </button>
@@ -142,7 +142,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
               </div>
               <button
                 onClick={() => onNavigate("main")}
-                className="flex items-center gap-2 bg-[#d7ff7a] text-[#17200f] font-bold px-8 py-3 rounded-2xl hover:bg-[#c8f060] transition-all"
+                className="flex items-center gap-2 bg-[#d7ff7a] text-[#FFFFFF] font-bold px-8 py-3 rounded-2xl hover:bg-[#c8f060] transition-all"
               >
                 Browse Menu <ChevronRight size={18} />
               </button>
@@ -166,7 +166,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
                 >
                   <div className="relative">
                     <img src={item.image} alt={item.name} className="size-20 rounded-xl object-cover" />
-                    <div className="absolute -top-1 -right-1 bg-[#d7ff7a] text-[#17200f] text-xs font-bold rounded-full size-5 flex items-center justify-center">
+                    <div className="absolute -top-1 -right-1 bg-[#d7ff7a] text-[#FFFFFF] text-xs font-bold rounded-full size-5 flex items-center justify-center">
                       {item.qty}
                     </div>
                   </div>
@@ -332,7 +332,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
                       />
                       <button
                         onClick={handleCoupon}
-                        className="px-4 py-2.5 bg-[#d7ff7a] text-[#17200f] font-bold text-sm rounded-xl hover:bg-[#c8f060] transition-all"
+                        className="px-4 py-2.5 bg-[#d7ff7a] text-[#FFFFFF] font-bold text-sm rounded-xl hover:bg-[#c8f060] transition-all"
                       >
                         Apply
                       </button>
@@ -420,7 +420,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
             className={`w-full py-4 rounded-2xl font-bold text-lg flex items-center justify-center gap-3 transition-all ${
               isCartEmpty || incompleteLines.size > 0
                 ? "bg-white/5 text-white/20 cursor-not-allowed"
-                : "bg-[#d7ff7a] text-[#17200f] hover:bg-[#c8f060] shadow-lg shadow-[#d7ff7a]/20 active:scale-[0.98]"
+                : "bg-[#d7ff7a] text-[#FFFFFF] hover:bg-[#c8f060] shadow-lg shadow-[#d7ff7a]/20 active:scale-[0.98]"
             }`}
           >
             {orderSubmission.isBusy ? "Validating order…" : "Proceed to Checkout"}

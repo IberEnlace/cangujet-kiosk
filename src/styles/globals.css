@@ -1,222 +1,241 @@
 @layer components {
-  .morrow-cashier {
-    --cashier-surface: #141614;
-    --cashier-elevated: #181b17;
-    background: radial-gradient(circle at 35% -20%, rgba(215,251,105,.035), transparent 34rem), #0b0d0a;
-  }
-  .cashier-button {
-    box-shadow: 0 1px 2px rgba(0,0,0,.18);
-    transition: transform 140ms ease-out, filter 140ms ease-out, background-color 140ms ease-out, border-color 140ms ease-out;
-  }
-  .cashier-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.045); }
-  .cashier-button:active:not(:disabled) { transform: translateY(0) scale(.985); }
-  .cashier-search {
-    border: 1px solid rgba(255,255,255,.085); background: var(--cashier-elevated);
-    color: rgba(255,255,255,.92); box-shadow: inset 0 1px 0 rgba(255,255,255,.018);
-    transition: border-color 140ms ease-out, background-color 140ms ease-out, box-shadow 140ms ease-out;
-  }
-  .cashier-search::placeholder { color: rgba(255,255,255,.42); }
-  .cashier-search:hover { border-color: rgba(255,255,255,.16); background: #1b1f1a; }
-  .cashier-search:focus {
-    border-color: #d7fb69; box-shadow: 0 0 0 3px rgba(215,251,105,.1), 0 0 18px rgba(215,251,105,.035);
-  }
-  .cashier-category {
-    transition: color 140ms ease-out, border-color 140ms ease-out, background-color 140ms ease-out, transform 140ms ease-out;
-  }
-  .cashier-category:active { transform: scale(.98); }
-  .cashier-product {
-    border: 1px solid rgba(255,255,255,.065); background: var(--cashier-surface);
-    box-shadow: 0 1px 2px rgba(0,0,0,.2), 0 8px 22px rgba(0,0,0,.07);
-    transition: transform 120ms ease-out, border-color 120ms ease-out, background-color 120ms ease-out, box-shadow 120ms ease-out;
-  }
-  .cashier-product:hover:not(:disabled) {
-    transform: translateY(-2px); border-color: rgba(215,251,105,.62); background: #181b17;
-    box-shadow: 0 3px 6px rgba(0,0,0,.2), 0 12px 26px rgba(0,0,0,.1);
-  }
-  .cashier-product-image { transition: transform 140ms ease-out; }
-  .cashier-product:hover:not(:disabled) .cashier-product-image { transform: scale(1.03); }
-  .cashier-product-add {
-    opacity: 0; transform: scale(.9);
-    transition: opacity 120ms ease-out, transform 120ms ease-out;
-  }
-  .cashier-product:hover:not(:disabled) .cashier-product-add,
-  .cashier-product:focus-visible .cashier-product-add { opacity: 1; transform: scale(1); }
-  .cashier-skeleton {
-    border: 1px solid rgba(255,255,255,.045);
-    background: linear-gradient(105deg, #141614 30%, #1b1e1a 45%, #141614 60%);
-    background-size: 220% 100%; animation: cashier-skeleton 1.35s linear infinite;
-  }
-  .cashier-order-panel {
-    background: #10130f; box-shadow: -12px 0 34px rgba(0,0,0,.12);
-  }
-  .cashier-cart-item {
-    border: 1px solid rgba(255,255,255,.065); background: rgba(255,255,255,.025);
-    transition: border-color 120ms ease-out, background-color 120ms ease-out;
-  }
-  .cashier-cart-item:hover { border-color: rgba(255,255,255,.11); background: rgba(255,255,255,.038); }
-  .cashier-quantity {
-    border: 1px solid rgba(255,255,255,.07); background: rgba(255,255,255,.055);
-    transition: border-color 120ms ease-out, background-color 120ms ease-out, transform 120ms ease-out;
-  }
-  .cashier-quantity:hover { border-color: rgba(215,251,105,.3); background: rgba(215,251,105,.09); }
-  .cashier-quantity:active { transform: scale(.94); }
-  .cashier-dialog {
-    border: 2px solid rgba(112, 111, 111, 0.342) !important; background: transparent !important;
-    border-hover: 2px solid rgba(215,251,105,.75) !important;
-    outline: 1px solid rgba(255,255,255,.1);
-    outline-offset: -5px;
-    box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 0 24px rgba(215,251,105,.07), 0 26px 76px rgba(0,0,0,.46);
-    animation: cashier-dialog-enter 150ms ease-out both;
-  }
-  .cashier-status {
-    display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px;
-    border: 1px solid rgba(255,255,255,.08); border-radius: 999px;
-    font-size: 10px; font-weight: 700; line-height: 1;
-  }
-  .cashier-status-completed {
-    border-color: rgba(52,211,153,.18); background: rgba(52,211,153,.09); color: rgb(110,231,183);
-  }
-  .morrow-cashier input[type="number"] {
-    border: 1px solid rgba(255,255,255,.09); background: #141614;
-    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
-  }
-  .morrow-cashier input[type="number"]:focus {
-    border-color: #d7fb69; box-shadow: 0 0 0 3px rgba(215,251,105,.1);
-  }
-  @keyframes cashier-skeleton { to { background-position-x: -220%; } }
-  @keyframes cashier-dialog-enter {
-    from { opacity: 0; transform: scale(.985) translateY(4px); }
-    to { opacity: 1; transform: scale(1) translateY(0); }
-  }
-  .morrow-admin {
-    --admin-surface: #131512;
-    --admin-elevated: #181b17;
-    --admin-border: rgba(255, 255, 255, 0.06);
-    --admin-field-surface: #181b17;
-    --admin-field-border: rgba(255, 255, 255, 0.08);
-    --admin-field-border-hover: rgba(255, 255, 255, 0.18);
-    --admin-field-accent: #d7fb69;
+  /* ============================================================
+   * CANGUJET ADMIN — White/red premium admin theme
+   * ============================================================ */
+  .cangujet-admin {
+    --admin-surface: #FFFFFF;
+    --admin-elevated: #FFFFFF;
+    --admin-border: #ECECEC;
+    --admin-field-surface: #F9FAFB;
+    --admin-field-border: #E5E7EB;
+    --admin-field-border-hover: #D1D5DB;
+    --admin-field-accent: #C41E19;
     position: relative;
     isolation: isolate;
-    background: radial-gradient(circle at 58% -12%, rgba(215,251,105,.045), transparent 32rem), #0b0d0a;
+    background: #F9FAFB;
   }
-  .morrow-admin::before {
-    position: fixed; inset: 0; z-index: -1; pointer-events: none; content: ""; opacity: .18;
-    background-image: linear-gradient(rgba(255,255,255,.012) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.012) 1px, transparent 1px);
-    background-size: 32px 32px;
-    mask-image: linear-gradient(to bottom, black, transparent 72%);
-  }
+
   .admin-card {
-    background: var(--admin-surface); border: 1px solid var(--admin-border);
-    box-shadow: 0 1px 2px rgba(0,0,0,.22), 0 10px 30px rgba(0,0,0,.08);
-    transition: transform 140ms ease-out, border-color 140ms ease-out, box-shadow 140ms ease-out, background-color 140ms ease-out;
+    background: var(--admin-surface);
+    border: 1px solid var(--admin-border);
+    box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 12px rgba(0,0,0,.04);
+    transition: transform 160ms ease-out, border-color 160ms ease-out, box-shadow 160ms ease-out;
   }
   .admin-card:hover {
-    transform: translateY(-2px); border-color: rgba(255,255,255,.105); background: #151814;
-    box-shadow: 0 2px 4px rgba(0,0,0,.24), 0 14px 34px rgba(0,0,0,.12);
+    transform: translateY(-2px) scale(1.005);
+    border-color: #D1D5DB;
+    box-shadow: 0 4px 12px rgba(0,0,0,.08), 0 16px 32px rgba(0,0,0,.06);
   }
-  .morrow-admin table thead { background: rgba(255,255,255,.012); }
-  .morrow-admin table th {
-    height: 44px; padding-inline: 1.25rem; color: rgba(255,255,255,.38);
+
+  .cangujet-admin table thead { background: #F9FAFB; }
+  .cangujet-admin table th {
+    height: 44px; padding-inline: 1.25rem; color: #6B7280;
     font-size: .6875rem; font-weight: 700; letter-spacing: .075em; text-transform: uppercase;
   }
-  .morrow-admin table tbody tr { transition: background-color 130ms ease-out; }
-  .morrow-admin table tbody tr:hover { background: rgba(255,255,255,.025); }
-  .morrow-admin table td { min-height: 52px; padding-block: .875rem; }
+  .cangujet-admin table tbody tr { transition: background-color 130ms ease-out; }
+  .cangujet-admin table tbody tr:hover { background: #F9FAFB; }
+  .cangujet-admin table td { min-height: 52px; padding-block: .875rem; }
+
   .admin-input,
-  .morrow-admin input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
-  .morrow-admin textarea,
-  .morrow-admin select,
-  .morrow-admin [data-slot="select-trigger"] {
+  .cangujet-admin input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]),
+  .cangujet-admin textarea,
+  .cangujet-admin select,
+  .cangujet-admin [data-slot="select-trigger"] {
     min-height: 48px !important;
     border: 1px solid var(--admin-field-border) !important;
-    border-radius: 16px !important;
+    border-radius: 12px !important;
     background: var(--admin-field-surface) !important;
-    color: rgba(255,255,255,.92) !important;
+    color: #1F1F1F !important;
     padding-inline: 16px !important;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,.018);
+    box-shadow: none;
     transition: border-color 150ms ease-out, background-color 150ms ease-out, box-shadow 150ms ease-out !important;
   }
-  .morrow-admin textarea {
+  .cangujet-admin textarea {
     min-height: 112px !important;
     padding-block: 13px !important;
     line-height: 1.5;
   }
   .admin-input::placeholder,
-  .morrow-admin input::placeholder,
-  .morrow-admin textarea::placeholder {
-    color: rgba(255,255,255,.46) !important;
+  .cangujet-admin input::placeholder,
+  .cangujet-admin textarea::placeholder {
+    color: #9CA3AF !important;
     opacity: 1;
   }
-  .morrow-admin [data-slot="select-trigger"][data-placeholder] {
-    color: rgba(255,255,255,.46) !important;
+  .cangujet-admin [data-slot="select-trigger"][data-placeholder] {
+    color: #9CA3AF !important;
   }
-  .morrow-admin input[type="date"],
-  .morrow-admin input[type="datetime-local"],
-  .morrow-admin input[type="time"] {
-    color-scheme: dark;
+  .cangujet-admin input[type="date"],
+  .cangujet-admin input[type="datetime-local"],
+  .cangujet-admin input[type="time"] {
+    color-scheme: light;
   }
   .admin-input:hover,
-  .morrow-admin input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):hover,
-  .morrow-admin textarea:hover,
-  .morrow-admin select:hover,
-  .morrow-admin [data-slot="select-trigger"]:hover {
+  .cangujet-admin input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):hover,
+  .cangujet-admin textarea:hover,
+  .cangujet-admin select:hover,
+  .cangujet-admin [data-slot="select-trigger"]:hover {
     border-color: var(--admin-field-border-hover) !important;
-    background: #1b1f1a !important;
+    background: #FFFFFF !important;
   }
   .admin-input:focus,
   .admin-input:focus-visible,
-  .morrow-admin input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
-  .morrow-admin textarea:focus,
-  .morrow-admin select:focus,
-  .morrow-admin [data-slot="select-trigger"]:focus,
-  .morrow-admin [data-slot="select-trigger"]:focus-visible,
-  .morrow-admin [data-slot="select-trigger"][data-state="open"] {
+  .cangujet-admin input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):focus,
+  .cangujet-admin textarea:focus,
+  .cangujet-admin select:focus,
+  .cangujet-admin [data-slot="select-trigger"]:focus,
+  .cangujet-admin [data-slot="select-trigger"]:focus-visible,
+  .cangujet-admin [data-slot="select-trigger"][data-state="open"] {
     border-color: var(--admin-field-accent) !important;
     outline: none !important;
-    box-shadow: 0 0 0 3px rgba(215,251,105,.12), 0 0 18px rgba(215,251,105,.045) !important;
+    background: #FFFFFF !important;
+    box-shadow: 0 0 0 3px rgba(196,30,25,.1) !important;
   }
-  .morrow-admin input:disabled,
-  .morrow-admin textarea:disabled,
-  .morrow-admin select:disabled,
-  .morrow-admin [data-slot="select-trigger"]:disabled {
+  .cangujet-admin input:disabled,
+  .cangujet-admin textarea:disabled,
+  .cangujet-admin select:disabled,
+  .cangujet-admin [data-slot="select-trigger"]:disabled {
     cursor: not-allowed;
     opacity: .48;
   }
   .admin-button {
-    min-height: 42px; box-shadow: 0 1px 2px rgba(0,0,0,.16);
-    transition: transform 140ms ease-out, filter 140ms ease-out, border-color 140ms ease-out, background-color 140ms ease-out;
+    min-height: 42px;
+    box-shadow: 0 1px 2px rgba(0,0,0,.06);
+    transition: transform 140ms ease-out, filter 140ms ease-out, border-color 140ms ease-out, background-color 140ms ease-out, box-shadow 140ms ease-out;
   }
-  .admin-button:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.04); }
+  .admin-button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.1); }
   .admin-button:active:not(:disabled) { transform: translateY(0) scale(.985); }
+
   .admin-dialog {
-    animation: admin-dialog-enter 150ms ease-out both; background: var(--admin-elevated);
-    border: 1px solid rgba(255,255,255,.085); box-shadow: 0 24px 70px rgba(0,0,0,.42);
+    animation: admin-dialog-enter 150ms ease-out both;
+    background: #FFFFFF;
+    border: 1px solid #ECECEC;
+    box-shadow: 0 20px 60px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.06);
   }
-  .morrow-admin [role="dialog"] { backdrop-filter: blur(2px); }
-  .morrow-admin [role="dialog"] > div {
-    border-color: rgba(255,255,255,.085);
-    background: var(--admin-elevated);
-    box-shadow: 0 24px 70px rgba(0,0,0,.42);
+  .cangujet-admin [role="dialog"] { backdrop-filter: blur(4px); }
+  .cangujet-admin [role="dialog"] > div {
+    border-color: #ECECEC;
+    background: #FFFFFF;
+    box-shadow: 0 20px 60px rgba(0,0,0,.12);
   }
-  .morrow-admin [role="switch"] {
+  .cangujet-admin [role="switch"] {
     transition: background-color 140ms ease-out, border-color 140ms ease-out, box-shadow 140ms ease-out;
   }
   .admin-status-dot::before {
+    display: inline-block;
     width: 5px; height: 5px; margin-right: 6px; border-radius: 999px; background: currentColor; content: "";
+    vertical-align: middle;
   }
   .admin-status-pulse::before { animation: admin-status-pulse 2s ease-out infinite; }
+
   @keyframes admin-dialog-enter {
     from { opacity: 0; transform: scale(.985) translateY(4px); }
     to { opacity: 1; transform: scale(1) translateY(0); }
   }
   @keyframes admin-status-pulse {
     0%, 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
-    45% { box-shadow: 0 0 0 4px rgba(34,197,94,.12); }
+    45% { box-shadow: 0 0 0 4px rgba(34,197,94,.18); }
   }
+
+  /* ============================================================
+   * CANGUJET CASHIER — White/red POS theme
+   * ============================================================ */
+  .cangujet-cashier {
+    --cashier-surface: #FFFFFF;
+    --cashier-elevated: #F9FAFB;
+    background: #F3F4F6;
+  }
+  .cashier-button {
+    box-shadow: 0 1px 2px rgba(0,0,0,.06);
+    transition: transform 140ms ease-out, filter 140ms ease-out, background-color 140ms ease-out, border-color 140ms ease-out, box-shadow 140ms ease-out;
+  }
+  .cashier-button:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,.1); filter: brightness(1.03); }
+  .cashier-button:active:not(:disabled) { transform: translateY(0) scale(.985); }
+
+  .cashier-search {
+    border: 1px solid #E5E7EB; background: #FFFFFF;
+    color: #1F1F1F; box-shadow: 0 1px 2px rgba(0,0,0,.04);
+    transition: border-color 140ms ease-out, background-color 140ms ease-out, box-shadow 140ms ease-out;
+  }
+  .cashier-search::placeholder { color: #9CA3AF; }
+  .cashier-search:hover { border-color: #D1D5DB; }
+  .cashier-search:focus {
+    border-color: #C41E19; box-shadow: 0 0 0 3px rgba(196,30,25,.1);
+  }
+
+  .cashier-category {
+    transition: color 140ms ease-out, border-color 140ms ease-out, background-color 140ms ease-out, transform 140ms ease-out;
+  }
+  .cashier-category:active { transform: scale(.98); }
+
+  .cashier-product {
+    border: 1px solid #E5E7EB; background: var(--cashier-surface);
+    box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 4px 8px rgba(0,0,0,.03);
+    transition: transform 140ms ease-out, border-color 140ms ease-out, background-color 140ms ease-out, box-shadow 140ms ease-out;
+  }
+  .cashier-product:hover:not(:disabled) {
+    transform: translateY(-3px) scale(1.01); border-color: #C41E19;
+    box-shadow: 0 8px 24px rgba(196,30,25,.12), 0 2px 6px rgba(0,0,0,.06);
+  }
+  .cashier-product-image { transition: transform 140ms ease-out; }
+  .cashier-product:hover:not(:disabled) .cashier-product-image { transform: scale(1.04); }
+  .cashier-product-add {
+    opacity: 0; transform: scale(.9);
+    transition: opacity 120ms ease-out, transform 120ms ease-out;
+  }
+  .cashier-product:hover:not(:disabled) .cashier-product-add,
+  .cashier-product:focus-visible .cashier-product-add { opacity: 1; transform: scale(1); }
+
+  .cashier-skeleton {
+    border: 1px solid #F3F4F6;
+    background: linear-gradient(105deg, #F9FAFB 30%, #FFFFFF 45%, #F9FAFB 60%);
+    background-size: 220% 100%; animation: cashier-skeleton 1.35s linear infinite;
+  }
+  .cashier-order-panel {
+    background: #FFFFFF; box-shadow: -4px 0 20px rgba(0,0,0,.06);
+  }
+  .cashier-cart-item {
+    border: 1px solid #F3F4F6; background: #FAFAFA;
+    transition: border-color 120ms ease-out, background-color 120ms ease-out;
+  }
+  .cashier-cart-item:hover { border-color: #E5E7EB; background: #FFFFFF; }
+  .cashier-quantity {
+    border: 1px solid #E5E7EB; background: #F9FAFB;
+    transition: border-color 120ms ease-out, background-color 120ms ease-out, transform 120ms ease-out;
+  }
+  .cashier-quantity:hover { border-color: #C41E19; background: rgba(196,30,25,.06); }
+  .cashier-quantity:active { transform: scale(.94); }
+
+  .cashier-dialog {
+    background: #FFFFFF;
+    border: 1px solid #ECECEC;
+    box-shadow: 0 20px 60px rgba(0,0,0,.12), 0 4px 12px rgba(0,0,0,.06);
+    animation: cashier-dialog-enter 150ms ease-out both;
+  }
+  .cashier-status {
+    display: inline-flex; align-items: center; min-height: 22px; padding: 2px 8px;
+    border: 1px solid #E5E7EB; border-radius: 999px;
+    font-size: 10px; font-weight: 700; line-height: 1;
+    color: #374151; background: #F9FAFB;
+  }
+  .cashier-status-completed {
+    border-color: rgba(34,197,94,.25); background: rgba(34,197,94,.08); color: #15803D;
+  }
+  .cangujet-cashier input[type="number"] {
+    border: 1px solid #E5E7EB; background: #F9FAFB; color: #1F1F1F;
+    transition: border-color 140ms ease-out, box-shadow 140ms ease-out;
+  }
+  .cangujet-cashier input[type="number"]:focus {
+    border-color: #C41E19; box-shadow: 0 0 0 3px rgba(196,30,25,.1);
+  }
+  @keyframes cashier-skeleton { to { background-position-x: -220%; } }
+  @keyframes cashier-dialog-enter {
+    from { opacity: 0; transform: scale(.985) translateY(4px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
   @media (prefers-reduced-motion: reduce) {
-    .morrow-cashier *, .morrow-cashier *::before, .morrow-cashier *::after,
-    .morrow-admin *, .morrow-admin *::before, .morrow-admin *::after {
+    .cangujet-cashier *, .cangujet-cashier *::before, .cangujet-cashier *::after,
+    .cangujet-admin *, .cangujet-admin *::before, .cangujet-admin *::after {
       scroll-behavior: auto !important; animation-duration: .01ms !important;
       animation-iteration-count: 1 !important; transition-duration: .01ms !important;
     }
