@@ -24,7 +24,7 @@ test("unconfigured frontend does not fake settings or email success", async () =
   const delivery = await sendTestNotification("admin@example.com");
   assert.equal(settings.ok, false);
   assert.equal(delivery.ok, false);
-  if (!delivery.ok) assert.equal(delivery.error.message, "A live administrator session is required for email delivery.");
+  if (!delivery.ok) assert.match(delivery.error.message, /staff session|sign in/i);
   assert.doesNotMatch(page, /simulated successfully|pretend/i);
 });
 
@@ -43,7 +43,7 @@ test("Edge Function validates active admin and provider configuration", () => {
 });
 
 test("browser delivery uses authenticated same-origin API routes instead of invoking Edge Functions", () => {
-  assert.match(notificationService, /getStaffAccessToken/);
+  assert.match(notificationService, /staffApiRequest/);
   assert.match(notificationService, /\/api\/v1\/admin\/notifications\/daily-report/);
   assert.match(notificationService, /\/api\/v1\/admin\/notifications\/test/);
   assert.doesNotMatch(notificationService, /supabase\.functions\.invoke/);

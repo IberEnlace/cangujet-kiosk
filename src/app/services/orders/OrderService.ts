@@ -240,22 +240,7 @@ export const orderService = new OrderService();
 async function authorizationToken(authentication: OrderAuthentication) {
   if (authentication === "none") return null;
   if (authentication === "staff") return getStaffAccessToken();
-  try {
-    let token = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
-    if (!token && typeof window !== "undefined") {
-      const response = await fetch("/api/v1/devices/session/refresh", { method: "POST", credentials: "include" });
-      if (response.ok) {
-        const body = (await response.json()) as { accessToken?: string };
-        if (body.accessToken) {
-          sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, body.accessToken);
-          token = body.accessToken;
-        }
-      }
-    }
-    return token;
-  } catch {
-    return null;
-  }
+  return sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
 }
 
 function parseBody(text: string): unknown {

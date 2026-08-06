@@ -5,6 +5,7 @@ import type {
   BootstrapServiceMode,
   DeviceAccessTokenResponse,
   DeviceActivationRequest,
+  DeviceActivationKeyVerificationResponse,
   DeviceActivationResponse,
   DeviceBootstrap,
   DeviceHeartbeatResponse,
@@ -28,6 +29,7 @@ import { hashDeviceActivationKey } from "./deviceActivationKeyService";
 const REFRESH_TOKEN_DAYS = 30;
 const PAYMENT_METHODS = new Set<BootstrapPaymentMethod>(["card", "pay_at_cashier", "qr"]);
 const SERVICE_MODES = new Set<BootstrapServiceMode>(["dine_in", "take_away"]);
+const DEVICE_TYPES: DeviceRow["device_type"][] = ["kiosk", "cashier_terminal", "kitchen_display", "order_display", "admin_terminal"];
 
 export class DeviceApiFailure extends Error {
   constructor(
@@ -55,6 +57,7 @@ export type AuthorizedDeviceIdentity = {
 
 export interface DeviceIdentityApplication {
   register(secretKey: string): Promise<DeviceRegistrationResult>;
+  verifyActivationKey(secretKey: string): Promise<DeviceActivationKeyVerificationResponse>;
   activate(request: DeviceActivationRequest): Promise<DeviceActivationResult>;
   refresh(refreshToken: string): Promise<DeviceAccessTokenResponse>;
   bootstrap(accessToken: string): Promise<DeviceBootstrap>;
@@ -138,6 +141,7 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
       activated = await this.repository.activateKey({
         keyHash,
         installationId: request.deviceFingerprint,
+        deviceType: request.deviceType,
         deviceName: request.deviceName?.trim() || null,
         appVersion: request.appVersion?.trim() || null,
         requestId: request.requestId || randomUUID(),
@@ -173,6 +177,28 @@ export class DeviceIdentityService implements DeviceIdentityApplication {
         branchId: activated.device.branch_id,
         status: "active",
       },
+    };
+  }
+
+  async verifyActivationKey(secretKey: string): Promise<DeviceActivationKeyVerificationResponse> {
+    const keyHash = this.activationKeyHasher(secretKey);
+    if (!keyHash || !this.repository.findActivationKeyByHash) throw activationFailure("device_key_invalid");
+    const result = await this.repository.findActivationKeyByHash(keyHash);
+    if (!result) throw activationFailure("device_key_invalid");
+    if (result.key.revoked_at || result.key.status === "revoked") throw activationFailure("device_key_revoked");
+    if (result.key.expires_at && Date.parse(result.key.expires_at) <= this.now().getTime()) {
+      throw activationFailure("device_key_expired");
+    }
+    if (result.key.status !== "active" || result.key.activation_count >= result.key.max_activations) {
+      throw activationFailure("device_key_used");
+    }
+    if (!result.branch.is_active || result.restaurant.status !== "active") {
+      throw activationFailure("device_scope_disabled");
+    }
+    return {
+      branch: { name: result.branch.name },
+      restaurant: { name: result.restaurant.name },
+      allowedDeviceTypes: result.key.device_type ? [result.key.device_type] : [...DEVICE_TYPES],
     };
   }
 
@@ -501,12 +527,13 @@ function activationFailure(code: string) {
   if (code.includes("device_key_revoked")) return new DeviceApiFailure("device_key_revoked", 403, "This device key has been revoked.");
   if (code.includes("device_key_used")) return new DeviceApiFailure("device_key_used", 409, "This device key has already been used.");
   if (code.includes("device_scope_disabled")) return new DeviceApiFailure("device_disabled", 403, "This device is disabled.");
+  if (code.includes("device_type_not_allowed")) return new DeviceApiFailure("invalid_setup_request", 400, "This workspace is not allowed for the activation key.");
   if (code.includes("device_key_invalid")) return new DeviceApiFailure("invalid_device_key", 401, "This device key is invalid.");
   return new DeviceApiFailure("device_service_unavailable", 503, "The device service is unavailable.");
 }
 
 function safeAuditCode(code: string) {
-  return ["device_key_invalid", "device_key_expired", "device_key_revoked", "device_key_used", "device_scope_disabled"]
+  return ["device_key_invalid", "device_key_expired", "device_key_revoked", "device_key_used", "device_scope_disabled", "device_type_not_allowed"]
     .find(candidate => code.includes(candidate)) ?? "service_error";
 }
 

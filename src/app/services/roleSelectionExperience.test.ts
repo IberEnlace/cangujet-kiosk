@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-const page = readFileSync("src/app/pages/RoleSelection.tsx", "utf8");
+const page = readFileSync("src/app/pages/WorkspaceSelection.tsx", "utf8");
 const styles = readFileSync("src/app/pages/RoleSelection.css", "utf8");
 
 test("workspace selection preserves the five existing roles, headline, branding, and accent palette", () => {

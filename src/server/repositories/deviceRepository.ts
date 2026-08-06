@@ -55,10 +55,17 @@ export type NewDeviceSession = Pick<DeviceSessionRow,
 export type DeviceActivationInput = {
   keyHash: string;
   installationId: string;
+  deviceType: DeviceRow["device_type"];
   deviceName: string | null;
   appVersion: string | null;
   requestId: string;
   metadata: Json;
+};
+
+export type DeviceActivationKeyVerificationData = {
+  key: DeviceActivationKeyRow;
+  branch: Pick<BranchRow, "name" | "is_active">;
+  restaurant: Pick<RestaurantRow, "name" | "status">;
 };
 
 export type DeviceActivationResult = {
@@ -82,6 +89,7 @@ export type DeviceMenuScope = {
 
 export interface DeviceRepository {
   findCredential(publicKeyId: string): Promise<DeviceCredentialIdentity | null>;
+  findActivationKeyByHash?(keyHash: string): Promise<DeviceActivationKeyVerificationData | null>;
   activateKey(input: DeviceActivationInput): Promise<DeviceActivationResult>;
   createSession(session: NewDeviceSession): Promise<void>;
   getSession(sessionId: string): Promise<DeviceSessionIdentity | null>;
@@ -108,10 +116,24 @@ export class SupabaseDeviceRepository implements DeviceRepository {
     return device.data ? { credential: credential.data, device: device.data } : null;
   }
 
+  async findActivationKeyByHash(keyHash: string): Promise<DeviceActivationKeyVerificationData | null> {
+    const key = await this.client.from("device_activation_keys").select("*").eq("key_hash", keyHash).maybeSingle();
+    assertQuery(key.error, "Device activation key lookup failed.");
+    if (!key.data) return null;
+    const [branch, restaurant] = await Promise.all([
+      this.client.from("branches").select("name,is_active").eq("id", key.data.branch_id).maybeSingle(),
+      this.client.from("restaurants").select("name,status").eq("id", key.data.restaurant_id).maybeSingle(),
+    ]);
+    assertQuery(branch.error ?? restaurant.error, "Device activation scope lookup failed.");
+    if (!branch.data || !restaurant.data) return null;
+    return { key: key.data, branch: branch.data, restaurant: restaurant.data };
+  }
+
   async activateKey(input: DeviceActivationInput): Promise<DeviceActivationResult> {
     const activation = await this.client.rpc("activate_device_key", {
       p_key_hash: input.keyHash,
       p_installation_id: input.installationId,
+      p_device_type: input.deviceType,
       p_device_name: input.deviceName,
       p_app_version: input.appVersion,
       p_request_id: input.requestId,
@@ -351,7 +373,7 @@ function assertQuery(error: { message: string } | null, message: string): assert
 }
 
 function activationError(error: { message: string }) {
-  const code = ["device_key_invalid", "device_key_revoked", "device_key_expired", "device_key_used", "device_scope_disabled"]
+  const code = ["device_key_invalid", "device_key_revoked", "device_key_expired", "device_key_used", "device_scope_disabled", "device_type_not_allowed"]
     .find(candidate => error.message.includes(candidate));
   const mapped = new Error(code ?? "device_activation_failed");
   mapped.name = "DeviceActivationRepositoryError";

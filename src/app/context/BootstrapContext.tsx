@@ -67,6 +67,8 @@ export function BootstrapProvider({ children }: { children: ReactNode }) {
       setMenu(null);
       setState("waiting_for_device");
       setError(null);
+      setOfflineMenu(false);
+      setStaleMenu(false);
       return;
     }
     const activeConfig = config;

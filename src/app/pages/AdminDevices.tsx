@@ -15,7 +15,6 @@ import {
   WifiOff,
 } from "lucide-react";
 import { toast } from "sonner";
-import type { BootstrapDeviceType } from "../../shared/deviceBootstrap";
 import type { DeviceManagementSnapshot, ManagedDevice, SafeActivationKey } from "../../shared/deviceManagement";
 import {
   Dialog,
@@ -39,14 +38,7 @@ import {
   SheetTitle,
 } from "../components/ui/sheet";
 import { adminDeviceManagementService } from "../services/device/adminDeviceManagementService";
-
-const deviceTypes: Array<{ value: BootstrapDeviceType; label: string }> = [
-  { value: "kiosk", label: "Kiosk" },
-  { value: "cashier_terminal", label: "Cashier terminal" },
-  { value: "kitchen_display", label: "Kitchen display" },
-  { value: "order_display", label: "Order display" },
-  { value: "admin_terminal", label: "Admin terminal" },
-];
+import { isStaffApiError, type StaffApiFailureKind } from "../services/staffApiClient";
 
 const field = "mt-2 min-h-12 w-full rounded-2xl border border-white/[.08] bg-black/20 px-4 text-sm text-white outline-none transition focus:border-[#d7fb69]/45 focus:ring-2 focus:ring-[#d7fb69]/10";
 const secondaryButton = "min-h-10 rounded-xl border border-white/[.08] bg-white/[.035] px-3.5 text-xs font-bold text-white/60 transition hover:border-white/15 hover:bg-white/[.07] hover:text-white disabled:cursor-not-allowed disabled:opacity-40";
@@ -59,12 +51,12 @@ export default function AdminDevices() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
+  const [errorKind, setErrorKind] = useState<StaffApiFailureKind | "">("");
   const [visibleKey, setVisibleKey] = useState<VisibleKey | null>(null);
   const [detailsId, setDetailsId] = useState<string | null>(null);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [branchId, setBranchId] = useState("");
-  const [deviceType, setDeviceType] = useState<BootstrapDeviceType>("kiosk");
-  const [deviceName, setDeviceName] = useState("Front Kiosk 1");
+  const [deviceName, setDeviceName] = useState("New device");
   const [policy, setPolicy] = useState<"one_time" | "reusable">("one_time");
   const [maxActivations, setMaxActivations] = useState(1);
   const [expiresAt, setExpiresAt] = useState("");
@@ -76,9 +68,13 @@ export default function AdminDevices() {
       const next = await adminDeviceManagementService.snapshot();
       setData(next);
       setError("");
+      setErrorKind("");
       setBranchId(current => current || next.branches.find(branch => branch.active)?.id || "");
     } catch (caught) {
-      setError(message(caught));
+      const failure = deviceFailure(caught);
+      if (failure.kind === "unauthenticated" || failure.kind === "forbidden") setData(null);
+      setError(failure.message);
+      setErrorKind(failure.kind);
     } finally {
       setLoading(false);
     }
@@ -105,7 +101,6 @@ export default function AdminDevices() {
     try {
       const created = await adminDeviceManagementService.createKey({
         branchId,
-        deviceType,
         deviceName,
         activationPolicy: policy,
         maxActivations: policy === "one_time" ? 1 : maxActivations,
@@ -114,6 +109,7 @@ export default function AdminDevices() {
       setVisibleKey({ keyId: created.key.id, value: created.secretKey });
       await load();
     } catch (caught) {
+      if (isStaffApiError(caught) && (caught.kind === "unauthenticated" || caught.kind === "forbidden")) setData(null);
       toast.error(message(caught));
     } finally {
       setBusy("");
@@ -127,6 +123,7 @@ export default function AdminDevices() {
       toast.success(success);
       await load();
     } catch (caught) {
+      if (isStaffApiError(caught) && (caught.kind === "unauthenticated" || caught.kind === "forbidden")) setData(null);
       toast.error(message(caught));
     } finally {
       setBusy("");
@@ -154,28 +151,24 @@ export default function AdminDevices() {
       </button>
     </header>
 
-    {error && <div role="alert" className="mb-6 rounded-2xl border border-red-400/15 bg-red-400/[.07] px-5 py-4 text-sm text-red-200">{error}</div>}
+    {error && <div role="alert" className={`mb-6 rounded-2xl border px-5 py-4 text-sm ${errorKind === "forbidden" ? "border-amber-300/20 bg-amber-300/[.07] text-amber-100" : errorKind === "network" ? "border-sky-300/15 bg-sky-300/[.06] text-sky-100" : "border-red-400/15 bg-red-400/[.07] text-red-200"}`}>{error}</div>}
 
     <section className={`${surface} p-5 sm:p-7`}>
       <div className="flex items-start gap-3">
         <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-[#d7fb69]/10 text-[#d7fb69]"><KeyRound size={18}/></span>
-        <div><h2 className="font-bold text-white">Create activation key</h2><p className="mt-1 text-sm text-white/35">Use this key once on the new device.</p></div>
+        <div><h2 className="font-bold text-white">Create activation key</h2><p className="mt-1 text-sm text-white/35">The device chooses its workspace after the key is verified.</p></div>
       </div>
 
       <form onSubmit={create} className="mt-7">
-        <div className="grid gap-5 md:grid-cols-3">
+        <div className="grid gap-5 md:grid-cols-2">
           <label className="text-xs font-semibold text-white/45">Branch
             <select required value={branchId} onChange={event => setBranchId(event.target.value)} className={field}>
               {data?.branches.filter(branch => branch.active).map(branch => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
             </select>
           </label>
-          <label className="text-xs font-semibold text-white/45">Device type
-            <select value={deviceType} onChange={event => setDeviceType(event.target.value as BootstrapDeviceType)} className={field}>
-              {deviceTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-            </select>
-          </label>
-          <label className="text-xs font-semibold text-white/45">Device name
+          <label className="text-xs font-semibold text-white/45">Default device name
             <input required maxLength={120} value={deviceName} onChange={event => setDeviceName(event.target.value)} className={field}/>
+            <span className="mt-1.5 block text-[11px] font-normal text-white/25">You can rename the device later.</span>
           </label>
         </div>
 
@@ -234,7 +227,7 @@ function ActivationKeyCard({ activationKey, branch, visibleValue, busy, onCopy, 
 }) {
   return <article className={`${surface} flex min-h-44 flex-col p-5`}>
     <div className="flex items-start gap-3"><span className="grid size-9 shrink-0 place-items-center rounded-xl bg-white/[.045] text-white/40"><KeyRound size={16}/></span><div className="min-w-0"><h3 className="truncate font-bold text-white">{activationKey.deviceName}</h3><p className="mt-1 font-mono text-xs tracking-[.12em] text-white/35">•••• {activationKey.keyHint}</p></div><StatusPill status={activationKey.status}/></div>
-    <div className="mt-5 space-y-1 text-sm text-white/40"><p>{branch}</p>{activationKey.expiresAt && <p>Expires {formatDate(activationKey.expiresAt)}</p>}</div>
+    <div className="mt-5 space-y-1 text-sm text-white/40"><p>{branch}</p><p>{activationKey.deviceType ? label(activationKey.deviceType) : "Workspace selected on device"}</p>{activationKey.expiresAt && <p>Expires {formatDate(activationKey.expiresAt)}</p>}</div>
     <div className="mt-auto flex gap-2 pt-5">{visibleValue && <button type="button" onClick={onCopy} className={secondaryButton}><Copy className="me-1.5 inline" size={13}/>Copy</button>}{activationKey.status === "active" && <button type="button" disabled={busy} onClick={onRevoke} className={`${secondaryButton} text-red-300/80 hover:text-red-200`}><ShieldOff className="me-1.5 inline" size={13}/>Revoke</button>}</div>
   </article>;
 }
@@ -352,3 +345,8 @@ function formatDate(value: string) {
 
 function label(value: string) { return value.replace(/_/g, " "); }
 function message(error: unknown) { return error instanceof Error ? error.message : "Device management request failed."; }
+function deviceFailure(error: unknown): { kind: StaffApiFailureKind; message: string } {
+  if (!isStaffApiError(error)) return { kind: "server", message: message(error) };
+  if (error.kind === "forbidden") return { kind: error.kind, message: `Permission denied. ${error.message}` };
+  return { kind: error.kind, message: error.message };
+}

@@ -1,5 +1,5 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
-import type { Database, DeviceStatus, DeviceType } from "../../lib/supabase/database.types";
+import type { Database, DeviceStatus } from "../../lib/supabase/database.types";
 import type {
   CreateActivationKeyRequest,
   CreateActivationKeyResponse,
@@ -9,8 +9,6 @@ import type {
 } from "../../shared/deviceManagement";
 import { createDeviceActivationKey, hashDeviceActivationKey } from "./deviceActivationKeyService";
 import { DeviceApiFailure } from "./deviceIdentityService";
-
-const DEVICE_TYPES: DeviceType[] = ["kiosk", "cashier_terminal", "kitchen_display", "order_display", "admin_terminal"];
 
 export class DeviceManagementService {
   constructor(
@@ -41,7 +39,7 @@ export class DeviceManagementService {
 
   async createKey(staffToken: string, request: CreateActivationKeyRequest): Promise<CreateActivationKeyResponse> {
     const scope = await this.authorize(staffToken);
-    if (!DEVICE_TYPES.includes(request.deviceType) || !request.deviceName?.trim() || request.deviceName.trim().length > 120) {
+    if (!request.deviceName?.trim() || request.deviceName.trim().length > 120) {
       throw invalidManagementRequest();
     }
     const maxActivations = request.activationPolicy === "one_time" ? 1 : Number(request.maxActivations);
@@ -59,7 +57,7 @@ export class DeviceManagementService {
     const inserted = await this.client.from("device_activation_keys").insert({
       restaurant_id: branch.data.restaurant_id,
       branch_id: branch.data.id,
-      device_type: request.deviceType,
+      device_type: null,
       device_name: request.deviceName.trim(),
       key_hash: keyHash,
       key_hint: generated.keyHint,
@@ -130,7 +128,13 @@ export class DeviceManagementService {
 
   private async authorize(staffToken: string) {
     const user = await this.client.auth.getUser(staffToken);
-    if (user.error || !user.data.user) throw new DeviceApiFailure("invalid_staff_session", 401, "A valid staff session is required.");
+    if (user.error) {
+      if (isInvalidStaffCredentialError(user.error)) {
+        throw new DeviceApiFailure("invalid_staff_session", 401, "A valid staff session is required.");
+      }
+      throw new DeviceApiFailure("staff_authentication_unavailable", 503, "The staff authentication service is temporarily unavailable.");
+    }
+    if (!user.data.user) throw new DeviceApiFailure("invalid_staff_session", 401, "A valid staff session is required.");
     const memberships = await this.client.from("staff_memberships").select("user_id,restaurant_id")
       .eq("user_id", user.data.user.id).eq("role", "admin").eq("is_active", true);
     assertQuery(memberships.error, "Administrator membership could not be verified.");
@@ -197,4 +201,8 @@ function invalidManagementRequest() {
 
 function assertQuery(error: { message: string } | null, message: string): asserts error is null {
   if (error) throw new Error(`${message} ${error.message}`);
+}
+
+function isInvalidStaffCredentialError(error: { status?: number; name?: string }) {
+  return error.status === 401 || error.status === 403 || error.name === "AuthSessionMissingError";
 }

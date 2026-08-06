@@ -2,6 +2,8 @@ import { isSupportedLanguage, type SupportedLanguage } from "../../config/langua
 import { isOrderType } from "../../config/serviceOptions";
 import type {
   DeviceAccessTokenResponse,
+  DeviceActivationKeyVerificationResponse,
+  BootstrapDeviceType,
   DeviceApiError,
   DeviceBootstrap,
   DeviceRegistrationResponse,
@@ -16,6 +18,8 @@ import {
 import {
   DEVICE_ACCESS_TOKEN_STORAGE_KEY,
   DEVICE_CONFIG_STORAGE_KEY,
+  LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY,
+  LEGACY_DEVICE_CONFIG_STORAGE_KEY,
   type DeviceRequestOptions,
   type DeviceConfigurationService,
 } from "./DeviceConfigurationService";
@@ -40,6 +44,8 @@ class DeviceHttpError extends Error {
 export class SupabaseDeviceConfigurationService implements DeviceConfigurationService {
   private readonly fetcher: Fetcher;
   private readonly requestTimeoutMs: number;
+  private refreshPromise: Promise<string | null> | null = null;
+  private refreshAttempt = 0;
 
   constructor(
     fetcher?: Fetcher,
@@ -49,7 +55,21 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
     this.requestTimeoutMs = requestTimeoutMs;
   }
 
-  async configureDevice(secretKey: string, options: DeviceRequestOptions = {}): Promise<KioskDeviceConfig> {
+  async verifyActivationKey(secretKey: string, options: DeviceRequestOptions = {}): Promise<DeviceActivationKeyVerificationResponse> {
+    try {
+      return await this.request<DeviceActivationKeyVerificationResponse>("/api/v1/device/activation-key/verify", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ secretKey }),
+        signal: options.signal,
+      }, true);
+    } catch (error) {
+      throw this.toConfigurationError(error);
+    }
+  }
+
+  async configureDevice(secretKey: string, deviceType?: BootstrapDeviceType, options: DeviceRequestOptions = {}): Promise<KioskDeviceConfig> {
     diagnostic("registration_request_started");
     try {
       const activation = isDeviceActivationKey(secretKey);
@@ -60,6 +80,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
         body: JSON.stringify(activation ? {
           secretKey,
           deviceFingerprint: getDeviceInstallationId(),
+          deviceType,
           appVersion: import.meta.env?.VITE_APP_VERSION ?? "web",
           requestId: crypto.randomUUID(),
         } : { secretKey }),
@@ -81,15 +102,18 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
 
   async getSavedConfiguration(options: DeviceRequestOptions = {}): Promise<KioskDeviceConfig | null> {
     const cached = this.readPublicConfiguration();
+    const storedAccessToken = this.readAccessToken();
+    const hadDeviceState = Boolean(storedAccessToken || cached);
     diagnostic("restored_session", {
-      accessTokenFound: Boolean(sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY)),
+      accessTokenFound: Boolean(storedAccessToken),
       publicCacheFound: Boolean(cached),
     });
     try {
-      let accessToken = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+      let accessToken = storedAccessToken;
       if (!accessToken) accessToken = await this.refreshAccessToken(options.signal);
       if (!accessToken) {
-        this.clearLocalConfiguration();
+        this.clearDeviceAccessToken();
+        if (hadDeviceState) throw new DeviceConfigurationError("session_expired");
         return null;
       }
       let bootstrap: DeviceBootstrap;
@@ -99,18 +123,19 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
         if (!(error instanceof DeviceHttpError) || error.status !== 401) throw error;
         accessToken = await this.refreshAccessToken(options.signal);
         if (!accessToken) {
-          this.clearLocalConfiguration();
-          return null;
+          this.clearDeviceAccessToken();
+          throw new DeviceConfigurationError("session_expired");
         }
         bootstrap = await this.loadBootstrap(accessToken, options.signal);
       }
       const config = this.mapBootstrap(bootstrap, new Date().toISOString());
       this.savePublicConfiguration(config);
+      diagnostic("bootstrap_applied", { source: "server", configVersion: config.configVersion });
       return config;
     } catch (error) {
       const normalized = this.toConfigurationError(error);
-      if (cached && ["network_error", "timeout", "server_error"].includes(normalized.code)) {
-        diagnostic("offline_bootstrap_restored", { code: normalized.code, configVersion: cached.configVersion });
+      if (cached && ["network_error", "timeout"].includes(normalized.code)) {
+        diagnostic("offline_bootstrap_restored", { code: normalized.code, configVersion: cached.configVersion, source: "cache" });
         return { ...cached, offline: true };
       }
       throw normalized;
@@ -118,7 +143,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
   }
 
   async clearConfiguration(options: DeviceRequestOptions = {}) {
-    let accessToken = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    let accessToken = this.readAccessToken();
     try {
       if (!accessToken) accessToken = await this.refreshAccessToken(options.signal);
       if (accessToken) {
@@ -137,9 +162,9 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
   }
 
   async heartbeat(configurationVersion: number, options: DeviceRequestOptions = {}) {
-    let accessToken = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    let accessToken = this.readAccessToken();
     if (!accessToken) accessToken = await this.refreshAccessToken(options.signal);
-    if (!accessToken) return true;
+    if (!accessToken) throw new DeviceConfigurationError("session_expired");
     try {
       const result = await this.request<{ configurationChanged: boolean }>("/api/v1/device/heartbeat", {
         method: "POST",
@@ -152,7 +177,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
     } catch (error) {
       if (!(error instanceof DeviceHttpError) || error.status !== 401) throw this.toConfigurationError(error);
       accessToken = await this.refreshAccessToken(options.signal);
-      if (!accessToken) return true;
+      if (!accessToken) throw new DeviceConfigurationError("session_expired");
       const result = await this.request<{ configurationChanged: boolean }>("/api/v1/device/heartbeat", {
         method: "POST",
         headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
@@ -199,7 +224,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
   }
 
   private async loadBootstrap(accessToken: string, signal?: AbortSignal) {
-    diagnostic("bootstrap_request_started");
+    diagnostic("bootstrap_request_started", { path: "/api/v1/device/bootstrap", credentialType: "device+cookie", credentialsAttached: true });
     return this.request<DeviceBootstrap>("/api/v1/device/bootstrap", {
       headers: { authorization: `Bearer ${accessToken}` },
       credentials: "include",
@@ -208,17 +233,33 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
   }
 
   private async refreshAccessToken(signal?: AbortSignal) {
-    diagnostic("refresh_attempted");
+    if (this.refreshPromise) {
+      diagnostic("refresh_joined", { path: "/api/v1/devices/session/refresh", attempt: this.refreshAttempt, credentialType: "cookie", credentialsAttached: true });
+      return this.refreshPromise;
+    }
+    const attempt = ++this.refreshAttempt;
+    diagnostic("refresh_attempted", { path: "/api/v1/devices/session/refresh", attempt, credentialType: "cookie", credentialsAttached: true });
+    const operation = this.performRefresh(attempt, signal);
+    this.refreshPromise = operation;
+    try { return await operation; }
+    finally { if (this.refreshPromise === operation) this.refreshPromise = null; }
+  }
+
+  private async performRefresh(attempt: number, _signal?: AbortSignal) {
     try {
       const result = await this.request<DeviceAccessTokenResponse>("/api/v1/devices/session/refresh", {
         method: "POST",
         credentials: "include",
-        signal,
       }, true);
       this.saveAccessToken(result.accessToken);
+      diagnostic("refresh_succeeded", { path: "/api/v1/devices/session/refresh", attempt, credentialType: "cookie", credentialsAttached: true });
       return result.accessToken;
     } catch (error) {
-      if (error instanceof DeviceHttpError && error.status === 401) return null;
+      if (error instanceof DeviceHttpError && error.status === 401) {
+        this.clearDeviceAccessToken();
+        diagnostic("refresh_rejected", { path: "/api/v1/devices/session/refresh", status: 401, attempt, credentialType: "cookie", credentialsAttached: true });
+        return null;
+      }
       throw error;
     }
   }
@@ -273,14 +314,24 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
 
   private readPublicConfiguration() {
     try {
-      const raw = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY);
+      const current = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY);
+      const legacy = current ? null : localStorage.getItem(LEGACY_DEVICE_CONFIG_STORAGE_KEY);
+      const raw = current ?? legacy;
       if (!raw) return null;
       const parsed: unknown = JSON.parse(raw);
-      if (this.isConfigurationValid(parsed)) return parsed;
+      if (this.isConfigurationValid(parsed)) {
+        if (legacy) {
+          localStorage.setItem(DEVICE_CONFIG_STORAGE_KEY, raw);
+          localStorage.removeItem(LEGACY_DEVICE_CONFIG_STORAGE_KEY);
+        }
+        return parsed;
+      }
       localStorage.removeItem(DEVICE_CONFIG_STORAGE_KEY);
+      localStorage.removeItem(LEGACY_DEVICE_CONFIG_STORAGE_KEY);
       return null;
     } catch {
       localStorage.removeItem(DEVICE_CONFIG_STORAGE_KEY);
+      localStorage.removeItem(LEGACY_DEVICE_CONFIG_STORAGE_KEY);
       return null;
     }
   }
@@ -291,17 +342,34 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
 
   private saveAccessToken(accessToken: string) {
     sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, accessToken);
+    sessionStorage.removeItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+  }
+
+  private readAccessToken() {
+    const current = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    if (current) return current;
+    const legacy = sessionStorage.getItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    if (!legacy) return null;
+    sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, legacy);
+    sessionStorage.removeItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    return legacy;
+  }
+
+  private clearDeviceAccessToken() {
+    sessionStorage.removeItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    sessionStorage.removeItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY);
   }
 
   private clearLocalConfiguration() {
-    sessionStorage.removeItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    this.clearDeviceAccessToken();
     localStorage.removeItem(DEVICE_CONFIG_STORAGE_KEY);
+    localStorage.removeItem(LEGACY_DEVICE_CONFIG_STORAGE_KEY);
   }
 
   private async request<T>(url: string, init: RequestInit, expectsJson: boolean): Promise<T> {
     const controller = new AbortController();
     let timedOut = false;
-    const isRegistration = url === "/api/v1/devices/register" || url === "/api/v1/device/activate";
+    const isRegistration = url === "/api/v1/devices/register" || url === "/api/v1/device/activate" || url === "/api/v1/device/activation-key/verify";
     const abortFromCaller = () => controller.abort();
     if (init.signal?.aborted) controller.abort();
     else init.signal?.addEventListener("abort", abortFromCaller, { once: true });
@@ -309,6 +377,12 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       timedOut = true;
       controller.abort();
     }, this.requestTimeoutMs);
+    const credentialType = requestCredentialType(init);
+    diagnostic("api_request", {
+      path: url,
+      credentialType,
+      credentialsAttached: credentialType !== "none",
+    });
 
     let response: Response;
     try {
@@ -317,6 +391,12 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       if (isRegistration) diagnostic("registration_after_fetch");
     } catch (error) {
       if (isRegistration) diagnosticError("registration_fetch_catch", error);
+      diagnostic("api_response", {
+        path: url,
+        status: timedOut ? "timeout" : init.signal?.aborted ? "aborted" : "network_error",
+        credentialType,
+        credentialsAttached: credentialType !== "none",
+      });
       if (timedOut) throw new DeviceConfigurationError("timeout");
       if (init.signal?.aborted) throw error;
       if (error instanceof TypeError) throw new DeviceConfigurationError("network_error");
@@ -326,7 +406,12 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
       init.signal?.removeEventListener("abort", abortFromCaller);
     }
 
-    diagnostic("api_response", { path: url, status: response.status });
+    diagnostic("api_response", {
+      path: url,
+      status: response.status,
+      credentialType,
+      credentialsAttached: credentialType !== "none",
+    });
     if (isRegistration) {
       diagnostic("registration_response_received", { status: response.status });
       diagnostic("registration_response_status", { status: response.status });
@@ -385,6 +470,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
     if (error.code === "invalid_setup_request" || error.status === 400) return new DeviceConfigurationError("invalid_request");
     if (error.status === 409) return new DeviceConfigurationError("conflict");
     if (error.code === "configuration_error") return new DeviceConfigurationError("configuration_error");
+    if (error.status === 404) return new DeviceConfigurationError("server_error");
     if (error.status >= 500) return new DeviceConfigurationError("server_error");
     return new DeviceConfigurationError("protocol_error");
   }
@@ -434,4 +520,14 @@ function fallbackHttpErrorCode(status: number) {
   if (status === 403) return "device_disabled";
   if (status === 409) return "device_session_conflict";
   return "device_service_unavailable";
+}
+
+function requestCredentialType(init: RequestInit) {
+  const headers = new Headers(init.headers);
+  const hasBearerToken = headers.has("authorization");
+  const hasCookieSession = init.credentials === "include";
+  if (hasBearerToken && hasCookieSession) return "device+cookie";
+  if (hasBearerToken) return "device";
+  if (hasCookieSession) return "cookie";
+  return "none";
 }

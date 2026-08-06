@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import type {
   DeviceAccessTokenResponse,
+  DeviceActivationKeyVerificationResponse,
   DeviceActivationResponse,
   DeviceApiError,
   DeviceBootstrap,
@@ -17,6 +18,7 @@ import { DeviceTokenService } from "../services/deviceTokenService";
 const REFRESH_COOKIE = "morrow_device_refresh";
 const REGISTER_WINDOW_MS = 60_000;
 const REGISTER_ATTEMPTS = 10;
+const DEVICE_TYPES = new Set(["kiosk", "cashier_terminal", "kitchen_display", "order_display", "admin_terminal"]);
 
 export function createDeviceRouter(
   serviceFactory: () => DeviceIdentityApplication = createDeviceIdentityServiceFromEnvironment,
@@ -26,20 +28,34 @@ export function createDeviceRouter(
   let service: DeviceIdentityApplication | null = null;
   const resolveService = () => service ??= serviceFactory();
 
+  router.post("/device/activation-key/verify", async (request: Request, response: Response<DeviceActivationKeyVerificationResponse | DeviceApiError>) => {
+    try {
+      enforceRateLimit(attempts, request.ip || request.socket.remoteAddress || "unknown");
+      const secretKey = typeof request.body?.secretKey === "string" ? request.body.secretKey.trim() : "";
+      if (!/^MORROW(?:-[A-Z0-9]{4}){6}$/i.test(secretKey)) {
+        throw new DeviceApiFailure("invalid_setup_request", 400, "A valid device activation key is required.");
+      }
+      response.json(await resolveService().verifyActivationKey(secretKey));
+    } catch (error) {
+      sendError(response, error);
+    }
+  });
+
   router.post("/device/activate", async (request: Request, response: Response<DeviceActivationResponse | DeviceApiError>) => {
     try {
       enforceRateLimit(attempts, request.ip || request.socket.remoteAddress || "unknown");
       const secretKey = typeof request.body?.secretKey === "string" ? request.body.secretKey.trim() : "";
       const deviceFingerprint = typeof request.body?.deviceFingerprint === "string" ? request.body.deviceFingerprint.trim() : "";
+      const deviceType = typeof request.body?.deviceType === "string" ? request.body.deviceType.trim() : "";
       const deviceName = typeof request.body?.deviceName === "string" ? request.body.deviceName.trim() : undefined;
       const appVersion = typeof request.body?.appVersion === "string" ? request.body.appVersion.trim() : undefined;
       const requestId = validUuid(request.body?.requestId) ? request.body.requestId : requestIdFrom(request);
-      if (!/^MORROW(?:-[A-Z0-9]{4}){6}$/i.test(secretKey) || !validInstallationId(deviceFingerprint)
+      if (!/^MORROW(?:-[A-Z0-9]{4}){6}$/i.test(secretKey) || !validInstallationId(deviceFingerprint) || !DEVICE_TYPES.has(deviceType)
         || (deviceName && deviceName.length > 120) || (appVersion && appVersion.length > 80)) {
         throw new DeviceApiFailure("invalid_setup_request", 400, "A valid device activation request is required.");
       }
       diagnostic("activation_request_received");
-      const result = await resolveService().activate({ secretKey, deviceFingerprint, deviceName, appVersion, requestId });
+      const result = await resolveService().activate({ secretKey, deviceFingerprint, deviceType: deviceType as DeviceActivationResponse["device"]["deviceType"], deviceName, appVersion, requestId });
       setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
       const { refreshToken: _refreshToken, refreshExpiresAt: _refreshExpiresAt, ...publicResult } = result;
       diagnostic("activation_succeeded", result.device.id ? 201 : 200);

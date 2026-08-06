@@ -1,11 +1,21 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { CUSTOMER_IDLE_TIMEOUT_MS } from "./auth/mockCredentials";
-import { ROUTES, getHomeRouteForRole, getLoginRouteForRole, isStaffRole, type AppRoute, type StaffRole } from "./auth/roleConfig";
+import { ROUTES, WORKSPACE_SELECTION_ROUTE, getHomeRouteForRole, getLoginRouteForRole, isStaffRole, type AppRoute, type StaffRole } from "./auth/roleConfig";
 import { guardRoute, isKnownRoute } from "./auth/routeGuards";
+import { routeRequiresDeviceSession, shouldInitializeDeviceSession } from "./auth/workspaceRequirements";
+import {
+  beginIntentionalWorkspaceSelection,
+  completeIntentionalWorkspaceSelection,
+  initialWorkspaceResumeDecision,
+  isLegacyWorkspaceSelectionRoute,
+  isWorkspaceSelectionOverrideActive,
+  workspaceNavigationDiagnostic,
+  workspaceRouteForDevice,
+} from "./auth/workspaceNavigation";
 import { CartProvider, useCart } from "./context/CartContext";
 import { LanguageProvider, useLanguage } from "./context/LanguageContext";
-import RoleSelection from "./pages/RoleSelection";
+import WorkspaceSelection from "./pages/WorkspaceSelection";
 import StaffLogin from "./components/auth/StaffLogin";
 import DeviceSetup from "./pages/device/DeviceSetup";
 import CashierDashboard from "./pages/CashierDashboard";
@@ -40,17 +50,24 @@ import { clearPayAtCashierConfirmation, readPayAtCashierConfirmation } from "./s
 import { clearQrPaymentSession, readQrPaymentAttempt } from "./services/orders/qrPaymentSession";
 
 function getCurrentRoute(): AppRoute {
-  const path = window.location.hash.replace(/^#/, "") || ROUTES.selectRole;
+  const path = window.location.hash.replace(/^#/, "") || WORKSPACE_SELECTION_ROUTE;
   if (path.startsWith(`${ROUTES.mockQrPayment}/`)) return ROUTES.mockQrPayment;
+  if (isLegacyWorkspaceSelectionRoute(path)) return WORKSPACE_SELECTION_ROUTE;
   if (path === "/admin/integrations") return ROUTES.adminDashboard;
   if (path === "/admin/email") return ROUTES.adminNotifications;
-  return isKnownRoute(path) ? path : ROUTES.idle;
+  return isKnownRoute(path) ? path : WORKSPACE_SELECTION_ROUTE;
 }
 
-function navigateTo(route: string) {
+function navigateTo(route: string, replace = false) {
   const normalized = route.startsWith("/") ? route : `/${route}`;
   const next = `#${normalized}`;
-  if (window.location.hash !== next) window.location.hash = normalized;
+  if (window.location.hash === next) return;
+  if (replace) {
+    window.history.replaceState(null, "", next);
+    window.dispatchEvent(new Event("hashchange"));
+    return;
+  }
+  window.location.hash = normalized;
 }
 
 const LOGIN_COPY: Record<StaffRole, { title: string; description: string }> = {
@@ -73,22 +90,61 @@ function Application() {
   const { clearOrderSession } = useOrderSubmission();
   const [route, setRoute] = useState<AppRoute>(getCurrentRoute);
   const [noriReturnRoute, setNoriReturnRoute] = useState<AppRoute>(ROUTES.categories);
+  const [adminSessionGate, setAdminSessionGate] = useState<{ route: AppRoute; state: "checking" | "valid" | "network_error" } | null>(null);
+  const [adminSessionRetry, setAdminSessionRetry] = useState(0);
+  const initialRouteResolvedRef = useRef(false);
 
   useEffect(() => {
     const initialHash = window.location.hash;
-    if (!initialHash || initialHash === "#/") navigateTo(ROUTES.selectRole);
+    const initialPath = initialHash.replace(/^#/, "");
+    if (!initialHash || initialHash === "#/") navigateTo(WORKSPACE_SELECTION_ROUTE, true);
+    else if (isLegacyWorkspaceSelectionRoute(initialPath)) {
+      beginIntentionalWorkspaceSelection();
+      workspaceNavigationDiagnostic({ route: WORKSPACE_SELECTION_ROUTE, persistedWorkspace: null, selectionOverrideActive: true, redirectSource: "legacy_selection_route", redirectAllowed: true });
+      navigateTo(WORKSPACE_SELECTION_ROUTE, true);
+    }
     else if (initialHash === "#/admin/integrations") navigateTo(ROUTES.adminDashboard);
     else if (initialHash === "#/admin/email") navigateTo(ROUTES.adminNotifications);
+    else if (!initialPath.startsWith(`${ROUTES.mockQrPayment}/`) && !isKnownRoute(initialPath)) {
+      beginIntentionalWorkspaceSelection();
+      workspaceNavigationDiagnostic({ route: WORKSPACE_SELECTION_ROUTE, persistedWorkspace: null, selectionOverrideActive: true, redirectSource: "invalid_route", redirectAllowed: true });
+      navigateTo(WORKSPACE_SELECTION_ROUTE, true);
+    }
     const update = () => setRoute(getCurrentRoute());
     window.addEventListener("hashchange", update); update();
     return () => window.removeEventListener("hashchange", update);
   }, []);
 
   const assignedDeviceType = device.config?.bootstrap.device.type ?? null;
-  const guardedRoute = useMemo(() => deviceCanOpenRoute(assignedDeviceType, route)
+  const persistedWorkspace = auth.selectedDeviceMode !== "unassigned" ? auth.selectedDeviceMode : assignedDeviceType;
+  const protectedAdminRoute = route.startsWith("/admin") && route !== ROUTES.adminLogin;
+  const requiresDeviceSession = routeRequiresDeviceSession(route, auth.currentRole, auth.isAuthenticated);
+  const staffDeviceAlternativeRoute = (route === ROUTES.cashier || route === ROUTES.kitchen)
+    && !auth.isAuthenticated;
+  const deviceAuthorizationPending = staffDeviceAlternativeRoute
+    && ["initializing", "registering"].includes(device.initializationStatus);
+  const guardedRoute = useMemo(() => deviceCanOpenRoute(assignedDeviceType, route) || deviceAuthorizationPending
     ? route
-    : guardRoute(route, auth.currentRole, auth.isAuthenticated), [assignedDeviceType, route, auth.currentRole, auth.isAuthenticated]);
+    : guardRoute(route, auth.currentRole, auth.isAuthenticated), [assignedDeviceType, route, auth.currentRole, auth.isAuthenticated, deviceAuthorizationPending]);
   useEffect(() => { if (!auth.isLoading && guardedRoute !== route) navigateTo(guardedRoute); }, [auth.isLoading, guardedRoute, route]);
+  useEffect(() => {
+    if (!protectedAdminRoute || auth.isLoading || !auth.isAuthenticated || auth.currentRole !== "admin") {
+      setAdminSessionGate(null);
+      return;
+    }
+    let active = true;
+    setAdminSessionGate({ route, state: "checking" });
+    void auth.verifySession("admin").then(result => {
+      if (!active) return;
+      if (result === "unauthenticated") {
+        setAdminSessionGate(null);
+        navigateTo(ROUTES.adminLogin);
+        return;
+      }
+      setAdminSessionGate({ route, state: result === "valid" ? "valid" : "network_error" });
+    });
+    return () => { active = false; };
+  }, [adminSessionRetry, auth.currentRole, auth.isAuthenticated, auth.isLoading, auth.verifySession, protectedAdminRoute, route]);
   useEffect(() => { if (route === ROUTES.categories && !orderType) navigateTo(ROUTES.service); }, [orderType, route]);
 
   const resetKiosk = useCallback(() => {
@@ -126,18 +182,41 @@ function Application() {
     clearCart(); clearOrderSession(); setOrderStatus("idle"); resetOrderType(); resetConversation(); sessionStorage.removeItem("morrow:nori-entry-category"); sessionStorage.removeItem("morrow:nori-voice-responses");
     window.history.replaceState(null, "", `#${ROUTES.idle}`); setRoute(ROUTES.idle);
   }, [clearCart, clearOrderSession, resetConversation, resetOrderType, setOrderStatus]);
+  const enterWorkspaceSelection = useCallback((source: string) => {
+    auth.clearDeviceMode();
+    beginIntentionalWorkspaceSelection();
+    workspaceNavigationDiagnostic({ route: WORKSPACE_SELECTION_ROUTE, persistedWorkspace, selectionOverrideActive: true, redirectSource: source, redirectAllowed: true });
+    navigateTo(WORKSPACE_SELECTION_ROUTE, true);
+  }, [auth.clearDeviceMode, persistedWorkspace]);
   const customerViewport = (child: ReactNode) => <div className="min-h-[100dvh] bg-[#050705]"><div className="mx-auto min-h-[100dvh] w-full max-w-[1080px] shadow-[0_0_80px_rgba(0,0,0,.35)]">{child}</div></div>;
-  const staffPage = (role: StaffRole, child: ReactNode) => <StaffLayout role={role} onLoggedOut={() => navigateTo(getLoginRouteForRole(role))} onChangeMode={() => navigateTo(ROUTES.selectRole)}>{child}</StaffLayout>;
+  const staffPage = (role: StaffRole, child: ReactNode) => <StaffLayout role={role} onLoggedOut={() => navigateTo(getLoginRouteForRole(role))} onChangeMode={() => enterWorkspaceSelection(`${role}_change_mode`)}>{child}</StaffLayout>;
 
   useEffect(() => {
+    if (!requiresDeviceSession || staffDeviceAlternativeRoute) return;
     if (route === ROUTES.mockQrPayment) return;
     if (device.initializationStatus === "initializing" || device.initializationStatus === "error") return;
     if (device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) navigateTo(ROUTES.deviceSetup);
-  }, [device.initializationStatus, route]);
+  }, [device.initializationStatus, requiresDeviceSession, route, staffDeviceAlternativeRoute]);
   useEffect(() => {
-    if (device.initializationStatus !== "authenticated" || !assignedDeviceType) return;
-    if (route === ROUTES.selectRole) navigateTo(workspaceForDevice(assignedDeviceType));
-  }, [assignedDeviceType, device.initializationStatus, route]);
+    if (initialRouteResolvedRef.current) return;
+    const selectionOverrideActive = isWorkspaceSelectionOverrideActive();
+    const decision = initialWorkspaceResumeDecision({
+      route,
+      initializationStatus: device.initializationStatus,
+      assignedDeviceType,
+      selectionOverrideActive,
+    });
+    workspaceNavigationDiagnostic({
+      route,
+      persistedWorkspace,
+      selectionOverrideActive,
+      redirectSource: decision.reason,
+      redirectAllowed: Boolean(decision.target),
+    });
+    if (!decision.resolved) return;
+    initialRouteResolvedRef.current = true;
+    if (decision.target) navigateTo(decision.target, true);
+  }, [assignedDeviceType, device.initializationStatus, persistedWorkspace, route]);
   useEffect(() => {
     if (route === ROUTES.idle) { clearPayAtCashierConfirmation(); clearQrPaymentSession(); }
   }, [route]);
@@ -154,20 +233,29 @@ function Application() {
   }, [bootstrap.kiosk, route]);
 
   if (route === ROUTES.mockQrPayment) return <MockQrPayment sessionId={mockQrSessionId()} />;
-  if (device.initializationStatus === "initializing") return <DeviceLoadingScreen />;
-  if (device.initializationStatus === "error" && route !== ROUTES.deviceSetup) return <DeviceLoadingScreen
+  if (requiresDeviceSession && device.initializationStatus === "initializing") return <DeviceLoadingScreen />;
+  if (requiresDeviceSession && !staffDeviceAlternativeRoute && device.initializationStatus === "error" && route !== ROUTES.deviceSetup) return <DeviceLoadingScreen
     error={device.initializationError ?? "configuration_error"}
     onRetry={device.retryInitialization}
     onSetup={() => { void device.clearDeviceConfiguration(); navigateTo(ROUTES.deviceSetup); }}
   />;
   if (auth.isLoading && (route.startsWith("/admin") || route.startsWith("/cashier") || route.startsWith("/kitchen"))) return <DeviceLoadingScreen />;
-  if (device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
-  if (device.initializationStatus === "authenticated" && ["waiting_for_device", "loading_configuration", "loading_menu", "error"].includes(bootstrap.state)) return <ConfigurationLoadingScreen />;
+  if (protectedAdminRoute && auth.isAuthenticated && auth.currentRole === "admin" && (adminSessionGate?.route !== route || adminSessionGate.state !== "valid")) {
+    return <AdminSessionGate networkError={adminSessionGate?.route === route && adminSessionGate.state === "network_error"} onRetry={() => setAdminSessionRetry(value => value + 1)} onLogin={() => { void auth.logout().then(() => navigateTo(ROUTES.adminLogin)); }} />;
+  }
+  if (requiresDeviceSession && !staffDeviceAlternativeRoute && device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceRouteForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
+  if (requiresDeviceSession && device.initializationStatus === "authenticated" && ["waiting_for_device", "loading_configuration", "loading_menu", "error"].includes(bootstrap.state)) return <ConfigurationLoadingScreen />;
   if ([ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice].includes(route as "/nori" | "/nori/chat" | "/nori/voice") && !bootstrap.kiosk?.ai.enabled) return null;
   if (route === ROUTES.noriVoice && !bootstrap.kiosk?.ai.voiceEnabled) return null;
   if (guardedRoute !== route) return null;
-  if (route === ROUTES.selectRole) return <RoleSelection onSelect={(mode, remember) => { auth.selectDeviceMode(mode, remember); navigateTo(isStaffRole(mode) ? getLoginRouteForRole(mode) : getHomeRouteForRole(mode)); }} />;
-  if (route === ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
+  if (route === WORKSPACE_SELECTION_ROUTE) return <WorkspaceSelection onSelect={(mode, remember) => {
+    completeIntentionalWorkspaceSelection();
+    auth.selectDeviceMode(mode, remember);
+    const target = isStaffRole(mode) ? getLoginRouteForRole(mode) : getHomeRouteForRole(mode);
+    workspaceNavigationDiagnostic({ route: target, persistedWorkspace: mode, selectionOverrideActive: false, redirectSource: "workspace_selected", redirectAllowed: true });
+    navigateTo(target);
+  }} />;
+  if (route === ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceRouteForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
   if (route === ROUTES.deviceInfo) return <DeviceInfo onBack={() => navigateTo(ROUTES.deviceSetup)} onCleared={() => navigateTo(ROUTES.deviceSetup)} />;
   if (route === ROUTES.idle) return <IdleScreen onStart={startOrder} />;
   if (route === ROUTES.language) return <LanguageSelection onBack={() => navigateTo(ROUTES.idle)} onContinue={() => {
@@ -190,7 +278,7 @@ function Application() {
   if (route === ROUTES.display) return <OrderDisplay onNavigate={() => undefined} />;
 
   const loginRole = (["admin", "cashier", "kitchen"] as StaffRole[]).find(role => route === getLoginRouteForRole(role));
-  if (loginRole) return <StaffLogin role={loginRole} {...LOGIN_COPY[loginRole]} onSuccess={() => navigateTo(getHomeRouteForRole(loginRole))} onBack={() => navigateTo(ROUTES.selectRole)} />;
+  if (loginRole) return <StaffLogin role={loginRole} {...LOGIN_COPY[loginRole]} onSuccess={() => navigateTo(getHomeRouteForRole(loginRole))} onBack={() => enterWorkspaceSelection(`${loginRole}_login_back`)} />;
   if (route === ROUTES.admin) { navigateTo(ROUTES.adminDashboard); return null; }
   const adminSections: Partial<Record<AppRoute, "dashboard" | "menu" | "categories" | "notifications" | "devices" | "settings">> = {
     [ROUTES.adminDashboard]: "dashboard", [ROUTES.adminMenu]: "menu", [ROUTES.adminCategories]: "categories",
@@ -204,7 +292,19 @@ function Application() {
 }
 
 export default function App() {
-  return <DeviceProvider><BootstrapProvider><AuthProvider><CartProvider><LanguageProvider><OrderProvider><NoriConversationProvider><Application /></NoriConversationProvider><OfflineConfigurationBanner /></OrderProvider></LanguageProvider></CartProvider></AuthProvider></BootstrapProvider></DeviceProvider>;
+  return <AuthProvider><RouteAwareDeviceProvider><BootstrapProvider><CartProvider><LanguageProvider><OrderProvider><NoriConversationProvider><Application /></NoriConversationProvider><OfflineConfigurationBanner /></OrderProvider></LanguageProvider></CartProvider></BootstrapProvider></RouteAwareDeviceProvider></AuthProvider>;
+}
+
+function RouteAwareDeviceProvider({ children }: { children: ReactNode }) {
+  const auth = useAuth();
+  const [route, setRoute] = useState<AppRoute>(getCurrentRoute);
+  useEffect(() => {
+    const update = () => setRoute(getCurrentRoute());
+    window.addEventListener("hashchange", update);
+    return () => window.removeEventListener("hashchange", update);
+  }, []);
+  const enabled = shouldInitializeDeviceSession(route, auth.currentRole, auth.isAuthenticated);
+  return <DeviceProvider enabled={enabled}>{children}</DeviceProvider>;
 }
 
 function mockQrSessionId() {
@@ -212,16 +312,13 @@ function mockQrSessionId() {
   return path.startsWith(`${ROUTES.mockQrPayment}/`) ? decodeURIComponent(path.slice(ROUTES.mockQrPayment.length + 1)) : "";
 }
 
-function workspaceForDevice(type: import("../shared/deviceBootstrap").BootstrapDeviceType): AppRoute {
-  if (type === "cashier_terminal") return ROUTES.cashier;
-  if (type === "kitchen_display") return ROUTES.kitchen;
-  if (type === "order_display") return ROUTES.display;
-  if (type === "admin_terminal") return ROUTES.adminLogin;
-  return ROUTES.idle;
-}
-
 function deviceCanOpenRoute(type: import("../shared/deviceBootstrap").BootstrapDeviceType | null, route: AppRoute) {
   return (type === "cashier_terminal" && route === ROUTES.cashier)
     || (type === "kitchen_display" && route === ROUTES.kitchen)
     || (type === "order_display" && route === ROUTES.display);
+}
+
+function AdminSessionGate({ networkError, onRetry, onLogin }: { networkError: boolean; onRetry: () => void; onLogin: () => void }) {
+  if (!networkError) return <DeviceLoadingScreen />;
+  return <main className="grid min-h-[100dvh] place-items-center bg-[#080c08] px-5 text-white"><section role="alert" className="w-full max-w-md rounded-3xl border border-amber-300/15 bg-[#101610] p-8 text-center shadow-2xl"><h1 className="text-2xl font-black tracking-[-.04em]">Unable to verify staff session</h1><p className="mt-3 text-sm leading-6 text-white/45">The authentication service could not be reached. Your session was not cleared.</p><div className="mt-6 flex justify-center gap-3"><button type="button" onClick={onRetry} className="min-h-12 rounded-2xl bg-[#d7fb69] px-5 text-sm font-black text-[#17200f]">Retry connection</button><button type="button" onClick={onLogin} className="min-h-12 rounded-2xl border border-white/10 px-5 text-sm font-bold text-white/60">Sign in again</button></div></section></main>;
 }

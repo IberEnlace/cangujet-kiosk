@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SupabaseDeviceConfigurationService } from "../services/device/SupabaseDeviceConfigurationService";
+import type { BootstrapDeviceType, DeviceActivationKeyVerificationResponse } from "../../shared/deviceBootstrap";
 import {
   DeviceConfigurationError,
   type DeviceErrorStatus,
@@ -15,7 +16,8 @@ interface DeviceContextValue {
   initializationStatus: DeviceInitializationStatus;
   initializationError: DeviceErrorStatus | null;
   config: KioskDeviceConfig | null;
-  configureDevice(secretKey: string): Promise<boolean>;
+  verifyActivationKey(secretKey: string): Promise<DeviceActivationKeyVerificationResponse | null>;
+  configureDevice(secretKey: string, deviceType: BootstrapDeviceType): Promise<boolean>;
   clearDeviceConfiguration(): Promise<void>;
   reloadConfiguration(): Promise<void>;
   retryInitialization(): void;
@@ -25,7 +27,7 @@ const CONFIGURATION_POLL_INTERVAL_MS = 60_000;
 const service = new SupabaseDeviceConfigurationService();
 const DeviceContext = createContext<DeviceContextValue | null>(null);
 
-export function DeviceProvider({ children }: { children: ReactNode }) {
+export function DeviceProvider({ children, enabled = true }: { children: ReactNode; enabled?: boolean }) {
   const [config, setConfig] = useState<KioskDeviceConfig | null>(null);
   const [status, setStatus] = useState<DeviceStatus>("checking");
   const [lifecycleState, setLifecycleState] = useState<DeviceLifecycleState>("initializing");
@@ -34,9 +36,23 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   const [initializationAttempt, setInitializationAttempt] = useState(0);
   const initializationSequenceRef = useRef(0);
   const initializationAbortRef = useRef<AbortController | null>(null);
+  const configRef = useRef<KioskDeviceConfig | null>(null);
+
+  useEffect(() => { configRef.current = config; }, [config]);
 
   useEffect(() => {
     const sequence = ++initializationSequenceRef.current;
+    if (!enabled) {
+      initializationAbortRef.current?.abort();
+      initializationAbortRef.current = null;
+      setConfig(null);
+      setStatus("unconfigured");
+      setInitializationError(null);
+      setInitializationStatus("not_required");
+      setLifecycleState("unconfigured");
+      diagnostic("initialization_skipped", { reason: "workspace_does_not_require_device" });
+      return;
+    }
     const controller = new AbortController();
     initializationAbortRef.current = controller;
     setInitializationStatus("initializing");
@@ -59,8 +75,8 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
         setConfig(null);
         setStatus(code);
         setInitializationError(code);
-        setInitializationStatus("error");
-        setLifecycleState(code === "revoked" ? "revoked" : code === "network_error" ? "offline" : "failed");
+        setInitializationStatus(code === "session_expired" ? "setup_required" : "error");
+        setLifecycleState(code === "session_expired" ? "token_expired" : code === "revoked" ? "revoked" : ["network_error", "timeout"].includes(code) ? "offline" : "failed");
         diagnostic("initialization_failed", { code });
       }
     })();
@@ -68,7 +84,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       controller.abort();
       if (initializationAbortRef.current === controller) initializationAbortRef.current = null;
     };
-  }, [initializationAttempt]);
+  }, [enabled, initializationAttempt]);
 
   const retryInitialization = useCallback(() => {
     setInitializationAttempt(value => value + 1);
@@ -84,10 +100,11 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       setLifecycleState(next ? (next.offline ? "offline" : "active") : "unconfigured");
     } catch (error) {
       const code = error instanceof DeviceConfigurationError ? error.code : "configuration_error";
+      if (code === "session_expired") setConfig(null);
       setStatus(code);
       setInitializationError(code);
-      setInitializationStatus("error");
-      setLifecycleState(code === "revoked" ? "revoked" : code === "network_error" ? "offline" : "failed");
+      setInitializationStatus(code === "session_expired" ? "setup_required" : "error");
+      setLifecycleState(code === "session_expired" ? "token_expired" : code === "revoked" ? "revoked" : ["network_error", "timeout"].includes(code) ? "offline" : "failed");
     }
   }, []);
   const clearDeviceConfiguration = useCallback(async () => {
@@ -100,7 +117,21 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setLifecycleState("unconfigured");
     await service.clearConfiguration();
   }, []);
-  const configureDevice = useCallback(async (secretKey: string) => {
+  const verifyActivationKey = useCallback(async (secretKey: string) => {
+    setStatus("connecting");
+    setInitializationError(null);
+    try {
+      const result = await service.verifyActivationKey(secretKey);
+      setStatus("unconfigured");
+      return result;
+    } catch (error) {
+      const code = error instanceof DeviceConfigurationError ? error.code : "configuration_error";
+      setStatus(code);
+      setInitializationError(code);
+      return null;
+    }
+  }, []);
+  const configureDevice = useCallback(async (secretKey: string, deviceType: BootstrapDeviceType) => {
     initializationAbortRef.current?.abort();
     initializationSequenceRef.current += 1;
     setStatus("connecting");
@@ -108,7 +139,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     setInitializationStatus("registering");
     setLifecycleState("activating");
     try {
-      const next = await service.configureDevice(secretKey);
+      const next = await service.configureDevice(secretKey, deviceType);
       if (!service.isConfigurationValid(next)) throw new DeviceConfigurationError("configuration_error");
       setConfig(next);
       setStatus("configured");
@@ -130,7 +161,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (initializationStatus !== "authenticated" || !config) return;
+    if (!enabled || initializationStatus !== "authenticated" || !configRef.current) return;
     let active = true;
     let refreshing = false;
     let consecutiveFailures = 0;
@@ -140,8 +171,10 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       if (refreshing || document.visibilityState === "hidden") return true;
       refreshing = true;
       try {
-        const changed = await service.heartbeat(config.configVersion, { signal: controller.signal });
-        if (!changed && !config.offline) {
+        const currentConfig = configRef.current;
+        if (!currentConfig) return true;
+        const changed = await service.heartbeat(currentConfig.configVersion, { signal: controller.signal });
+        if (!changed && !currentConfig.offline) {
           setLifecycleState("active");
           return true;
         }
@@ -173,10 +206,26 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
           await service.clearConfiguration().catch(() => undefined);
           return true;
         }
-        setConfig(current => current ? { ...current, offline: true } : current);
-        setLifecycleState("offline");
+        const code = error instanceof DeviceConfigurationError ? error.code : "configuration_error";
+        if (code === "session_expired") {
+          setConfig(null);
+          setStatus(code);
+          setInitializationError(code);
+          setInitializationStatus("setup_required");
+          setLifecycleState("token_expired");
+          return true;
+        }
+        if (["network_error", "timeout"].includes(code)) {
+          setConfig(current => current ? { ...current, offline: true } : current);
+          setLifecycleState("offline");
+        } else {
+          setStatus(code);
+          setInitializationError(code);
+          setInitializationStatus("error");
+          setLifecycleState("failed");
+        }
         diagnostic("configuration_poll_failed", {
-          code: error instanceof DeviceConfigurationError ? error.code : "configuration_error",
+          code,
         });
         return false;
       } finally {
@@ -201,7 +250,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
       window.clearTimeout(pollTimer);
       document.removeEventListener("visibilitychange", visibility);
     };
-  }, [config, initializationStatus]);
+  }, [enabled, initializationStatus]);
 
   const value = useMemo(() => ({
     status,
@@ -209,6 +258,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
     initializationStatus,
     initializationError,
     config,
+    verifyActivationKey,
     configureDevice,
     clearDeviceConfiguration,
     reloadConfiguration,
@@ -216,6 +266,7 @@ export function DeviceProvider({ children }: { children: ReactNode }) {
   }), [
     clearDeviceConfiguration,
     config,
+    verifyActivationKey,
     configureDevice,
     initializationError,
     initializationStatus,

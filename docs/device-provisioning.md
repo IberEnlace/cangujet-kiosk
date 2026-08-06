@@ -2,9 +2,9 @@
 
 ## Architecture
 
-Device activation is a server-mediated flow. An authenticated administrator creates an activation key through `POST /api/v1/admin/device-activation-keys`. The API generates 120 random bits, encodes them as `MORROW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`, returns the raw key once, and stores only an HMAC-SHA256 digest made with `MORROW_DEVICE_KEY_PEPPER`.
+Device activation is a server-mediated flow. An authenticated administrator creates a branch-scoped activation key through `POST /api/v1/admin/device-activation-keys`. The API generates 120 random bits, encodes them as `MORROW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`, returns the raw key once, and stores only an HMAC-SHA256 digest made with `MORROW_DEVICE_KEY_PEPPER`.
 
-The browser creates one non-invasive installation ID with `crypto.randomUUID()` and stores it under `morrow:device-installation-id:v1`. `POST /api/v1/device/activate` hashes the submitted key and calls the atomic `activate_device_key` database function. That function locks the key row, validates its tenant, branch, device type, expiration, revocation state, activation policy, and activation count, then creates the device or returns the existing device for an idempotent repeat from the same installation.
+The browser first calls `POST /api/v1/device/activation-key/verify`. A valid key reveals only the restaurant name, branch name, and allowed workspace types. The operator chooses the workspace on that device, then `POST /api/v1/device/activate` hashes the submitted key and calls the atomic `activate_device_key` database function with that choice. The function locks the key row, validates its tenant, branch, optional legacy fixed device type, expiration, revocation state, activation policy, and activation count, then creates the device or returns the existing device for an idempotent repeat from the same installation.
 
 Activation issues the existing signed, short-lived device JWT and a 30-day opaque refresh token. The access token is held in `sessionStorage`; the refresh token is an HttpOnly, SameSite Strict cookie scoped to `/api/v1`. Only public bootstrap configuration is cached in `localStorage`. Raw activation keys, access tokens, refresh tokens, authorization headers, and key hashes are never logged or returned by bootstrap.
 
@@ -16,12 +16,13 @@ Activation issues the existing signed, short-lived device JWT and a 30-day opaqu
 - `MORROW_DEVICE_KEY_PEPPER` (at least 32 bytes and independent of the token secret)
 - `MORROW_DEVICE_ACCESS_TOKEN_TTL_SECONDS` (defaults to 900)
 
-These values must not use a `VITE_` prefix. Production must route same-origin `/api` requests to the Express service over HTTPS.
+These values must not use a `VITE_` prefix. Production must route same-origin `/api` requests to the Express service over HTTPS. The included Vercel deployment uses `api/handler.ts` and `vercel.json` to route `/api/*` into the same Express application instead of the static Vite 404 fallback.
 
 ## Endpoints
 
 Device endpoints:
 
+- `POST /api/v1/device/activation-key/verify`
 - `POST /api/v1/device/activate`
 - `GET /api/v1/device/bootstrap`
 - `GET /api/v1/device/menu`
@@ -45,6 +46,7 @@ Apply, in timestamp order:
 
 1. `202608040000_device_revoked_status.sql`
 2. `202608040001_device_activation_management.sql`
+3. `202608060001_device_workspace_selection.sql`
 
 The first migration is separate because PostgreSQL requires a newly added enum value to commit before later schema objects use it. The second migration adds activation keys, installation bindings, device lifecycle fields, session/key linkage, audit linkage, RLS/revokes, indexes, configuration-version behavior, and the atomic activation function.
 
@@ -59,11 +61,12 @@ Never run a remote database reset. After migration deployment, deploy the Expres
 
 ## Runtime sequence
 
-1. `POST /api/v1/device/activate` → `201`, access token + public bootstrap, refresh cookie set.
-2. The setup component clears the key state and shows the configuration steps.
-3. The assigned workspace opens from the server-authoritative device type.
-4. `POST /api/v1/device/heartbeat` reports the current configuration version.
-5. When the version changes, `GET /api/v1/device/bootstrap` refreshes safe public configuration.
-6. On page reload, `POST /api/v1/devices/session/refresh` restores an access token, then bootstrap validates the device.
+1. `POST /api/v1/device/activation-key/verify` returns safe scope and allowed workspaces.
+2. The operator selects the workspace on the device.
+3. `POST /api/v1/device/activate` returns the access token, public bootstrap, and refresh cookie.
+4. The setup component clears the key state and opens the selected server-authoritative workspace.
+5. `POST /api/v1/device/heartbeat` reports the current configuration version.
+6. When the version changes, `GET /api/v1/device/bootstrap` refreshes safe public configuration.
+7. On page reload, `POST /api/v1/devices/session/refresh` restores an access token, then bootstrap validates the device.
 
 Revoked or disabled devices cannot refresh, heartbeat, bootstrap, load menus, or call role-restricted order endpoints. A network outage preserves the activation and cached public configuration, but mutation APIs still reject offline operations.

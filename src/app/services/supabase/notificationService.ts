@@ -1,6 +1,6 @@
 import { supabase } from "../../../lib/supabase/client";
 import type { NotificationDeliveryLogRow, NotificationSettingsRow } from "../../../lib/supabase/database.types";
-import { getStaffAccessToken } from "./authService";
+import { isStaffApiError, staffApiRequest } from "../staffApiClient";
 import { repositoryFailure, type RepositoryResult } from "./repositoryResult";
 
 export type NotificationSettingsInput = {
@@ -99,24 +99,14 @@ async function requestNotificationDelivery(
   body: unknown,
   fallbackMessage: string,
 ): Promise<RepositoryResult<TestNotificationResult>> {
-  const token = await getStaffAccessToken();
-  if (!token) return repositoryFailure("configuration", "A live administrator session is required for email delivery.");
-
   try {
-    const response = await fetch(path, {
+    const payload = await staffApiRequest<NotificationApiPayload>(path, {
       method: "POST",
-      credentials: "include",
-      cache: "no-store",
-      headers: {
-        authorization: `Bearer ${token}`,
-        ...(body === undefined ? {} : { "content-type": "application/json" }),
-      },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      body,
     });
-    const payload = await readApiPayload(response);
-    if (!response.ok || payload?.ok !== true) {
+    if (payload?.ok !== true) {
       const message = typeof payload?.message === "string" ? payload.message : fallbackMessage;
-      return repositoryFailure(repositoryCode(response.status, payload?.code), message);
+      return repositoryFailure("unknown", message);
     }
     if (
       typeof payload.messageId !== "string"
@@ -141,21 +131,13 @@ async function requestNotificationDelivery(
       source: "supabase",
     };
   } catch (error) {
+    if (isStaffApiError(error)) {
+      const code = error.kind === "unauthenticated" ? "unauthenticated"
+        : error.kind === "forbidden" ? "forbidden"
+          : error.kind === "server" ? "server"
+            : error.kind === "network" ? "network" : "unknown";
+      return repositoryFailure(code, error.message, error);
+    }
     return repositoryFailure("network", fallbackMessage, error);
   }
-}
-
-async function readApiPayload(response: Response): Promise<NotificationApiPayload | null> {
-  try {
-    return await response.json() as NotificationApiPayload;
-  } catch {
-    return null;
-  }
-}
-
-function repositoryCode(status: number, code?: string) {
-  if (status === 401 || status === 403) return "unauthorized" as const;
-  if (status === 400 || status === 422) return "invalid_data" as const;
-  if (code === "email_not_configured" || code === "server_not_configured") return "configuration" as const;
-  return "network" as const;
 }

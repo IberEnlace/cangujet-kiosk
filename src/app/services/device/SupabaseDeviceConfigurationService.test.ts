@@ -5,10 +5,13 @@ import { DeviceConfigurationError } from "../../types/device";
 import {
   DEVICE_ACCESS_TOKEN_STORAGE_KEY,
   DEVICE_CONFIG_STORAGE_KEY,
+  LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY,
+  LEGACY_DEVICE_CONFIG_STORAGE_KEY,
 } from "./DeviceConfigurationService";
 import { SupabaseDeviceConfigurationService } from "./SupabaseDeviceConfigurationService";
 
 const VALID_DEVICE_KEY = `mdk_${"a".repeat(24)}_${"B".repeat(43)}`;
+const VALID_ACTIVATION_KEY = "MORROW-ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
 
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
@@ -116,6 +119,25 @@ test("device registration maps one bootstrap and never persists the raw key or a
   assert.deepEqual(JSON.parse(String(calls[0].init.body)), { secretKey: VALID_DEVICE_KEY });
 });
 
+test("activation verifies the key first and submits the workspace selected on the device", async () => {
+  const { fetcher, calls } = queuedFetch(
+    jsonResponse({ restaurant: { name: "MORROW" }, branch: { name: "Istanbul Branch" }, allowedDeviceTypes: ["kiosk", "kitchen_display"] }),
+    jsonResponse({ accessToken: "activation-token", tokenType: "Bearer", expiresAt: "2026-07-30T12:15:00.000Z", bootstrap: bootstrap() }, 201),
+  );
+  const service = new SupabaseDeviceConfigurationService(fetcher);
+
+  const verification = await service.verifyActivationKey(VALID_ACTIVATION_KEY);
+  const config = await service.configureDevice(VALID_ACTIVATION_KEY, "kitchen_display");
+
+  assert.deepEqual(verification.allowedDeviceTypes, ["kiosk", "kitchen_display"]);
+  assert.equal(config.deviceId, "device-1");
+  assert.deepEqual(calls.map(call => call.url), [
+    "/api/v1/device/activation-key/verify",
+    "/api/v1/device/activate",
+  ]);
+  assert.equal(JSON.parse(String(calls[1].init.body)).deviceType, "kitchen_display");
+});
+
 test("startup restores a session through the HttpOnly refresh cookie and reloads bootstrap", async () => {
   const { fetcher, calls } = queuedFetch(
     jsonResponse({ accessToken: "refreshed-token", tokenType: "Bearer", expiresAt: "2026-07-30T12:15:00.000Z" }),
@@ -174,11 +196,108 @@ test("invalid stored session attempts refresh once and never loops bootstrap", a
   );
   const service = new SupabaseDeviceConfigurationService(fetcher);
 
-  assert.equal(await service.getSavedConfiguration(), null);
+  await assert.rejects(
+    service.getSavedConfiguration(),
+    (error: unknown) => error instanceof DeviceConfigurationError && error.code === "session_expired",
+  );
   assert.deepEqual(calls.map(call => call.url), [
     "/api/v1/device/bootstrap",
     "/api/v1/devices/session/refresh",
   ]);
+});
+
+test("staff authentication storage is never reused as a device bearer token", async () => {
+  sessionStorage.setItem("morrow.staff.accessToken", "staff-only-token");
+  const { fetcher, calls } = queuedFetch(
+    jsonResponse({ code: "invalid_device_session", message: "missing device cookie" }, 401),
+  );
+  const service = new SupabaseDeviceConfigurationService(fetcher);
+
+  assert.equal(await service.getSavedConfiguration(), null);
+  assert.deepEqual(calls.map(call => call.url), ["/api/v1/devices/session/refresh"]);
+  assert.equal((calls[0].init.headers as Record<string, string> | undefined)?.authorization, undefined);
+});
+
+test("refresh 401 expires device authentication without deleting the public bootstrap cache", async () => {
+  await seedCachedConfiguration();
+  const cachedBefore = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY);
+  const { fetcher, calls } = queuedFetch(
+    jsonResponse({ code: "invalid_device_session", message: "expired" }, 401),
+  );
+  const service = new SupabaseDeviceConfigurationService(fetcher);
+
+  await assert.rejects(
+    service.getSavedConfiguration(),
+    (error: unknown) => error instanceof DeviceConfigurationError && error.code === "session_expired",
+  );
+
+  assert.deepEqual(calls.map(call => call.url), ["/api/v1/devices/session/refresh"]);
+  assert.equal(sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY), null);
+  assert.equal(localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY), cachedBefore);
+});
+
+test("refresh 503 is a service error and never masquerades as offline cache", async () => {
+  await seedCachedConfiguration();
+  const cachedBefore = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY);
+  const service = new SupabaseDeviceConfigurationService(queuedFetch(
+    jsonResponse({ code: "device_service_unavailable", message: "unavailable" }, 503),
+  ).fetcher);
+
+  await assert.rejects(
+    service.getSavedConfiguration(),
+    (error: unknown) => error instanceof DeviceConfigurationError && error.code === "server_error",
+  );
+  assert.equal(localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY), cachedBefore);
+});
+
+test("a genuine network failure may restore the public bootstrap cache as offline", async () => {
+  await seedCachedConfiguration();
+  const service = new SupabaseDeviceConfigurationService((async () => {
+    throw new TypeError("offline");
+  }) as typeof fetch);
+
+  const restored = await service.getSavedConfiguration();
+
+  assert.equal(restored?.deviceId, "device-1");
+  assert.equal(restored?.offline, true);
+});
+
+test("concurrent startup callers share one refresh request", async () => {
+  let refreshCalls = 0;
+  const fetcher = (async (input: string | URL | Request) => {
+    const url = String(input);
+    if (url === "/api/v1/devices/session/refresh") {
+      refreshCalls += 1;
+      await new Promise<void>(resolve => queueMicrotask(resolve));
+      return jsonResponse({ accessToken: "shared-token", tokenType: "Bearer", expiresAt: "2026-07-30T12:15:00.000Z" });
+    }
+    return jsonResponse(bootstrap());
+  }) as typeof fetch;
+  const service = new SupabaseDeviceConfigurationService(fetcher);
+
+  const [first, second] = await Promise.all([
+    service.getSavedConfiguration(),
+    service.getSavedConfiguration(),
+  ]);
+
+  assert.equal(refreshCalls, 1);
+  assert.equal(first?.deviceId, "device-1");
+  assert.equal(second?.deviceId, "device-1");
+});
+
+test("legacy device keys migrate into explicit device-only storage keys", async () => {
+  await seedCachedConfiguration();
+  const cached = localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY)!;
+  localStorage.removeItem(DEVICE_CONFIG_STORAGE_KEY);
+  localStorage.setItem(LEGACY_DEVICE_CONFIG_STORAGE_KEY, cached);
+  sessionStorage.setItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY, "legacy-device-token");
+  const service = new SupabaseDeviceConfigurationService(queuedFetch(jsonResponse(bootstrap())).fetcher);
+
+  assert.equal((await service.getSavedConfiguration())?.deviceId, "device-1");
+  assert.equal(sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY), "legacy-device-token");
+  assert.equal(sessionStorage.getItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY), null);
+  assert.notEqual(localStorage.getItem(DEVICE_CONFIG_STORAGE_KEY), null);
+  assert.equal(localStorage.getItem(LEGACY_DEVICE_CONFIG_STORAGE_KEY), null);
 });
 
 test("bootstrap network failure is explicit and does not attempt refresh", async () => {
@@ -325,6 +444,17 @@ function queuedFetch(...responses: Response[]) {
     return response;
   }) as typeof fetch;
   return { fetcher, calls };
+}
+
+async function seedCachedConfiguration() {
+  const service = new SupabaseDeviceConfigurationService(queuedFetch(jsonResponse({
+    accessToken: "seed-token",
+    tokenType: "Bearer",
+    expiresAt: "2026-07-30T12:15:00.000Z",
+    bootstrap: bootstrap(),
+  }, 201)).fetcher);
+  await service.configureDevice(VALID_DEVICE_KEY);
+  sessionStorage.removeItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
 }
 
 function jsonResponse(value: unknown, status = 200) {

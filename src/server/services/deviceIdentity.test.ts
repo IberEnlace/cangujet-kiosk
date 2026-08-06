@@ -181,6 +181,9 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
   };
   const fake: DeviceIdentityApplication = {
     async register() { return registration; },
+    async verifyActivationKey() {
+      return { restaurant: { name: "MORROW" }, branch: { name: "Main" }, allowedDeviceTypes: ["kiosk", "cashier_terminal"] };
+    },
     async activate() {
       return {
         ...registration,
@@ -234,12 +237,21 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
     assert.equal(body.refreshToken, undefined);
     assert.match(registered.headers.get("set-cookie") ?? "", /HttpOnly/);
 
+    const verified = await fetch(`http://127.0.0.1:${port}/api/v1/device/activation-key/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secretKey: "MORROW-ABCD-EFGH-JKLM-NPQR-STUV-WXYZ" }),
+    });
+    assert.equal(verified.status, 200);
+    assert.deepEqual((await verified.json() as { allowedDeviceTypes: string[] }).allowedDeviceTypes, ["kiosk", "cashier_terminal"]);
+
     const activated = await fetch(`http://127.0.0.1:${port}/api/v1/device/activate`, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         secretKey: "MORROW-ABCD-EFGH-JKLM-NPQR-STUV-WXYZ",
         deviceFingerprint: "90000000-0000-4000-8000-000000000001",
+        deviceType: "kiosk",
         requestId: "91000000-0000-4000-8000-000000000001",
         appVersion: "test",
       }),

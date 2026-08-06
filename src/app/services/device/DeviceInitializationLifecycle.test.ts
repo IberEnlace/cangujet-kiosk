@@ -6,6 +6,7 @@ const context = readFileSync("src/app/context/DeviceContext.tsx", "utf8");
 const app = readFileSync("src/app/App.tsx", "utf8");
 const main = readFileSync("src/main.tsx", "utf8");
 const setup = readFileSync("src/app/pages/device/DeviceSetup.tsx", "utf8");
+const workspaceStage = readFileSync("src/app/pages/device/DeviceWorkspaceStage.tsx", "utf8");
 
 test("Strict Mode initialization is restartable after effect cleanup", () => {
   assert.match(main, /<StrictMode>/);
@@ -36,7 +37,12 @@ test("device setup submission is explicit, validates the shared key grammar, and
   assert.match(setup, /secretKey\.trim\(\)/);
   assert.match(setup, /isSupportedDeviceProvisioningKey\(trimmed\)/);
   assert.match(setup, /initializationStatus === "registering"/);
-  assert.match(setup, /await configureDevice\(trimmed\)/);
+  assert.match(setup, /await verifyActivationKey\(trimmed\)/);
+  assert.match(setup, /await configureDevice\(secretKey\.trim\(\), deviceType\)/);
+  assert.match(workspaceStage, /Configure this device/);
+  assert.match(workspaceStage, /Select the workspace this device will run/);
+  assert.match(workspaceStage, /AnimatePresence mode="wait"/);
+  assert.match(workspaceStage, /role="tablist"/);
   assert.match(setup, /const displayedError = validationError \?/);
 });
 
@@ -56,7 +62,8 @@ test("clearing setup returns the context to setup-required state", () => {
 });
 
 test("configuration polling starts only when authenticated and cleans up", () => {
-  assert.match(context, /initializationStatus !== "authenticated" \|\| !config/);
+  assert.match(context, /initializationStatus !== "authenticated" \|\| !configRef\.current/);
+  assert.match(context, /\[enabled, initializationStatus\]/);
   assert.match(context, /window\.clearTimeout\(pollTimer\)/);
   assert.match(context, /5_000 \* \(2 \*\*/);
   assert.match(context, /document\.removeEventListener\("visibilitychange", visibility\)/);

@@ -7,6 +7,7 @@ import { createDeviceActivationKey, hashDeviceActivationKey } from "./deviceActi
 const pepperA = "a-production-pepper-that-is-at-least-32-bytes-long";
 const pepperB = "a-different-pepper-that-is-at-least-32-bytes-long";
 const migration = readFileSync("supabase/migrations/202608040001_device_activation_management.sql", "utf8");
+const workspaceMigration = readFileSync("supabase/migrations/202608060001_device_workspace_selection.sql", "utf8");
 
 test("activation keys use server randomness, a paste-friendly grammar, and keyed one-way hashes", () => {
   const first = createDeviceActivationKey();
@@ -44,6 +45,15 @@ test("migration atomically enforces key lifecycle, installation idempotency, ten
   assert.match(migration, /revoke all on public\.device_activation_keys, public\.device_activations from anon, authenticated/);
 });
 
+test("workspace selection keeps old fixed keys compatible and assigns new generic keys atomically", () => {
+  assert.match(workspaceMigration, /alter column device_type drop not null/);
+  assert.match(workspaceMigration, /p_device_type public\.device_type/);
+  assert.match(workspaceMigration, /v_key\.device_type is not null and v_key\.device_type <> p_device_type/);
+  assert.match(workspaceMigration, /v_device_type := coalesce\(v_key\.device_type, p_device_type\)/);
+  assert.match(workspaceMigration, /for update/);
+  assert.match(workspaceMigration, /grant execute on function public\.activate_device_key[\s\S]*to service_role/);
+});
+
 test("browser provisioning uses one stable installation UUID and contains no invasive fingerprinting", () => {
   const source = readFileSync("src/app/services/device/deviceInstallation.ts", "utf8");
   assert.match(source, /morrow:device-installation-id:v1/);
@@ -58,10 +68,10 @@ test("device state machine, heartbeat refresh, setup messages, and provider sing
   for (const state of ["initializing", "unconfigured", "activating", "active", "revoked", "offline", "failed"]) {
     assert.match(context, new RegExp(`\\"${state}\\"`));
   }
-  assert.match(context, /service\.heartbeat\(config\.configVersion/);
+  assert.match(context, /service\.heartbeat\(currentConfig\.configVersion/);
   assert.match(setup, /This device key is invalid\./);
   assert.match(setup, /This device key has expired\./);
   assert.match(setup, /This device key has already been used\./);
   assert.match(setup, /This device key has been revoked\./);
-  assert.equal((app.match(/<DeviceProvider>/g) ?? []).length, 1);
+  assert.equal((app.match(/<DeviceProvider enabled=/g) ?? []).length, 1);
 });

@@ -2,6 +2,9 @@ export type UserRole = "customer" | "admin" | "cashier" | "kitchen" | "display";
 export type StaffRole = Extract<UserRole, "admin" | "cashier" | "kitchen">;
 export type DeviceMode = "unassigned" | UserRole;
 
+export const WORKSPACE_SELECTION_ROUTE = "/workspace-selection" as const;
+export const LEGACY_WORKSPACE_SELECTION_ROUTES = ["/select-role", "/roles", "/role-selection", "/device/workspace"] as const;
+
 export const ROUTES = {
   idle: "/idle",
   language: "/language",
@@ -10,7 +13,7 @@ export const ROUTES = {
   nori: "/nori",
   noriChat: "/nori/chat",
   noriVoice: "/nori/voice",
-  selectRole: "/select-role",
+  workspaceSelection: WORKSPACE_SELECTION_ROUTE,
   kiosk: "/kiosk",
   cart: "/cart",
   payment: "/payment",

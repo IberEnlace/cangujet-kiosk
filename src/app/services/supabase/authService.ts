@@ -6,6 +6,8 @@ import type { StaffRole } from "../../auth/roleConfig";
 
 export type StaffIdentity = { session: Session | null; profile: ProfileRow; isDemo: boolean };
 export type AuthFailure = "invalid_credentials" | "inactive_profile" | "missing_profile" | "wrong_workspace" | "service_error";
+export type StaffSessionVerification = "valid" | "unauthenticated" | "network_error";
+export const STAFF_SESSION_INVALIDATED_EVENT = "morrow:staff-session-invalidated";
 
 export async function restoreStaffIdentity(): Promise<StaffIdentity | null> {
   if (!supabase) return null;
@@ -29,10 +31,48 @@ export async function signInStaff(role: StaffRole, email: string, password: stri
 
 export async function signOutStaff() { if (supabase) await supabase.auth.signOut(); }
 
+export async function verifyStaffSession(): Promise<StaffSessionVerification> {
+  if (!supabase) return "unauthenticated";
+  const session = await supabase.auth.getSession();
+  if (session.error) return isAuthenticationFailure(session.error) ? "unauthenticated" : "network_error";
+  if (!session.data.session?.access_token) return "unauthenticated";
+  try {
+    const user = await supabase.auth.getUser(session.data.session.access_token);
+    if (!user.error && user.data.user) return "valid";
+    return isAuthenticationFailure(user.error) ? "unauthenticated" : "network_error";
+  } catch {
+    return "network_error";
+  }
+}
+
+export async function invalidateStaffSession() {
+  if (supabase) {
+    try { await supabase.auth.signOut({ scope: "local" }); } catch { /* The local auth state is still invalidated below. */ }
+  }
+  if (typeof window !== "undefined") window.dispatchEvent(new Event(STAFF_SESSION_INVALIDATED_EVENT));
+}
+
+export function onStaffSessionInvalidated(callback: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+  window.addEventListener(STAFF_SESSION_INVALIDATED_EVENT, callback);
+  return () => window.removeEventListener(STAFF_SESSION_INVALIDATED_EVENT, callback);
+}
+
+export async function getStaffSessionCredential(): Promise<{ token: string | null; failure: "unauthenticated" | "network" | null }> {
+  if (!supabase) return { token: null, failure: "unauthenticated" };
+  try {
+    const { data, error } = await supabase.auth.getSession();
+    if (error) return { token: null, failure: isAuthenticationFailure(error) ? "unauthenticated" : "network" };
+    return data.session?.access_token
+      ? { token: data.session.access_token, failure: null }
+      : { token: null, failure: "unauthenticated" };
+  } catch {
+    return { token: null, failure: "network" };
+  }
+}
+
 export async function getStaffAccessToken() {
-  if (!supabase) return null;
-  const { data, error } = await supabase.auth.getSession();
-  return error ? null : data.session?.access_token ?? null;
+  return (await getStaffSessionCredential()).token;
 }
 
 export function onStaffAuthChange(callback: (identity: StaffIdentity | null) => void) {
@@ -54,6 +94,10 @@ async function loadIdentity(session: Session, includeInactive = false): Promise<
 function demoProfile(role: StaffRole): ProfileRow {
   const now = new Date().toISOString();
   return { id: `demo-${role}`, full_name: `Morrow ${role}`, role, branch_id: "mock-main", is_active: true, created_at: now, updated_at: now };
+}
+
+function isAuthenticationFailure(error: { status?: number; name?: string } | null) {
+  return error?.status === 401 || error?.status === 403 || error?.name === "AuthSessionMissingError";
 }
 
 export const authMode = isSupabaseConfigured ? "supabase" : "demo";

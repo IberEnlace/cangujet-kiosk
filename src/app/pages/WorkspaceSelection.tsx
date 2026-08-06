@@ -115,7 +115,7 @@ function WorkspaceCard({ workspace, selected, dimmed, softDimmed, reducedMotion,
   </motion.button>;
 }
 
-export default function RoleSelection({ onSelect }: Props) {
+export default function WorkspaceSelection({ onSelect }: Props) {
   const prefersReducedMotion = useReducedMotion();
   const reducedMotion = Boolean(prefersReducedMotion);
   const [selected, setSelected] = useState<SelectableMode | null>(null);

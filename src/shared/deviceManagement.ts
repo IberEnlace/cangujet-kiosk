@@ -4,7 +4,7 @@ export type SafeActivationKey = {
   id: string;
   restaurantId: string;
   branchId: string;
-  deviceType: BootstrapDeviceType;
+  deviceType: BootstrapDeviceType | null;
   deviceName: string;
   keyHint: string;
   status: "active" | "used" | "expired" | "revoked";
@@ -36,7 +36,6 @@ export type DeviceManagementSnapshot = { branches: ManagedBranch[]; keys: SafeAc
 
 export type CreateActivationKeyRequest = {
   branchId: string;
-  deviceType: BootstrapDeviceType;
   deviceName: string;
   expiresAt?: string | null;
   activationPolicy: "one_time" | "reusable";

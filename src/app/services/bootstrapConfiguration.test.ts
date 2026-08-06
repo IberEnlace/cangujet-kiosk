@@ -177,6 +177,46 @@ test("matching versions start from cache and changed config falls back as stale 
   }
 });
 
+test("menu cache fallback is reserved for network failures, not server responses", async () => {
+  const originalFetch = globalThis.fetch;
+  const originalLocalStorage = Object.getOwnPropertyDescriptor(globalThis, "localStorage");
+  const originalSessionStorage = Object.getOwnPropertyDescriptor(globalThis, "sessionStorage");
+  const local = memoryStorage();
+  const session = memoryStorage();
+  session.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, "device-access-token");
+  Object.defineProperty(globalThis, "localStorage", { configurable: true, value: local });
+  Object.defineProperty(globalThis, "sessionStorage", { configurable: true, value: session });
+  writeMenuConfigurationCache({
+    deviceId: "device-a",
+    menuId: "menu-a",
+    menuVersion: 3,
+    configVersion: 8,
+    cachedAt: new Date().toISOString(),
+    menu: MENU,
+  });
+  try {
+    globalThis.fetch = (() => Promise.resolve(new Response(JSON.stringify({ code: "device_service_unavailable" }), {
+      status: 503,
+      headers: { "content-type": "application/json" },
+    }))) as typeof fetch;
+    invalidateMenuCache();
+    const result = await new MenuConfigurationService().load({
+      deviceId: "device-a",
+      menuId: "menu-a",
+      menuVersion: 4,
+      configVersion: 9,
+      currency: "TRY",
+    });
+    assert.equal(result.ok, false);
+    assert.equal(!result.ok && result.code, "menu_failed");
+  } finally {
+    globalThis.fetch = originalFetch;
+    restoreGlobal("localStorage", originalLocalStorage);
+    restoreGlobal("sessionStorage", originalSessionStorage);
+    invalidateMenuCache();
+  }
+});
+
 function memoryStorage(): Storage {
   const values = new Map<string, string>();
   return {

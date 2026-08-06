@@ -42,7 +42,7 @@ export class MenuConfigurationService {
       writeMenuConfigurationCache(value);
       return { ok: true, menu: result.data, source: result.source === "local" ? "development" : "network", offline: false, stale: false };
     }
-    if (cached) {
+    if (cached && result.error.code === "network") {
       return {
         ok: true,
         menu: cached.menu,
@@ -51,7 +51,7 @@ export class MenuConfigurationService {
         stale: cached.menuVersion !== input.menuVersion || cached.configVersion !== input.configVersion,
       };
     }
-    if (import.meta.env?.DEV) {
+    if (import.meta.env?.DEV && result.error.code === "network") {
       return { ok: true, menu: getLocalMenu(), source: "development", offline: true, stale: true };
     }
     const code = result.error.code === "invalid_data"

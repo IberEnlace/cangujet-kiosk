@@ -115,9 +115,16 @@ export type DeviceRegistrationResponse = {
 export type DeviceActivationRequest = {
   secretKey: string;
   deviceFingerprint: string;
+  deviceType: BootstrapDeviceType;
   deviceName?: string;
   appVersion?: string;
   requestId?: string;
+};
+
+export type DeviceActivationKeyVerificationResponse = {
+  branch: { name: string };
+  restaurant: { name: string };
+  allowedDeviceTypes: BootstrapDeviceType[];
 };
 
 export type DeviceActivationResponse = DeviceRegistrationResponse & {
