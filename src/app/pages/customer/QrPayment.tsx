@@ -141,46 +141,46 @@ export default function QrPayment({ onComplete, onCancel, onInvalid }: {
   const processing = session.status === "processing";
   const money = new Intl.NumberFormat(undefined, { style: "currency", currency: session.currency }).format(Number(session.amount));
 
-  return <main className="min-h-[100dvh] bg-[#070a07] px-5 py-6 font-['Plus_Jakarta_Sans'] text-[#f4f5ef]">
+  return <main className="min-h-[100dvh] bg-[#F8F9FA] px-5 py-6 text-[#1F1F1F]">
     <div className="mx-auto flex min-h-[calc(100dvh-3rem)] max-w-[780px] flex-col">
       <header className="flex items-center justify-between">
         <MorrowLogo variant="full" priority className="h-auto w-36" />
-        <span className="flex items-center gap-2 rounded-full border border-[#C41E19]/20 bg-[#C41E19]/8 px-4 py-2 text-xs font-bold text-[#C41E19]"><ShieldCheck size={15} />Secure QR Payment</span>
+        <span className="flex items-center gap-2 rounded-full border border-[#C41E19]/20 bg-[#FFFFFF] px-4 py-2 text-xs font-bold text-[#C41E19] shadow-[0_3px_10px_rgba(31,31,31,.04)]"><ShieldCheck size={15} />Secure QR Payment</span>
       </header>
 
       <section className="flex flex-1 flex-col items-center justify-center py-7 text-center" aria-live="polite">
         {success ? <>
-          <div className="grid size-28 place-items-center rounded-full bg-[#C41E19] text-[#FFFFFF] shadow-[0_0_70px_rgba(215,251,105,.22)]"><Check size={58} strokeWidth={3} /></div>
+          <div className="grid size-28 place-items-center rounded-full bg-[#C41E19] text-[#FFFFFF] shadow-[0_10px_26px_rgba(196,30,25,.18)]"><Check size={58} strokeWidth={3} /></div>
           <h1 className="mt-7 text-5xl font-black tracking-[-.05em]">Payment received</h1>
-          <p className="mt-3 text-lg text-white/50">Your order is confirmed. Continuing automatically…</p>
+          <p className="mt-3 text-lg text-[#6B7280]">Your order is confirmed. Continuing automatically…</p>
         </> : <>
           <h1 className="text-[clamp(2.2rem,6vw,4.5rem)] font-black tracking-[-.05em]">{expired ? "QR code expired" : processing ? "Confirming payment" : "Scan to pay"}</h1>
-          <p className="mt-3 max-w-xl text-lg text-white/50">{expired ? "Generate a fresh QR code to continue." : processing ? "Your payment is being securely confirmed." : "Open your bank, wallet, Apple Pay, or Google Pay app and scan the code."}</p>
+          <p className="mt-3 max-w-xl text-lg text-[#6B7280]">{expired ? "Generate a fresh QR code to continue." : processing ? "Your payment is being securely confirmed." : "Open your bank, wallet, Apple Pay, or Google Pay app and scan the code."}</p>
 
-          {!expired ? <div className="relative mt-7 overflow-hidden rounded-[32px] bg-white p-6 shadow-2xl shadow-black/50">
+          {!expired ? <div className="relative mt-7 overflow-hidden rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] p-6 shadow-[0_10px_30px_rgba(31,31,31,.08)]">
             <img src={session.qrCode} alt={`QR code for order ${session.orderNumber}`} className="size-[min(52vw,320px)] object-contain" />
-            <div className="pointer-events-none absolute inset-x-5 top-5 h-1 animate-[bounce_2s_ease-in-out_infinite] bg-gradient-to-r from-transparent via-[#C41E19] to-transparent shadow-[0_0_16px_#C41E19]" />
-          </div> : <div className="mt-8 grid size-40 place-items-center rounded-[32px] border border-white/10 bg-white/[.035] text-white/25"><QrCode size={88} /></div>}
+            <div className="pointer-events-none absolute inset-x-5 top-5 h-1 animate-pulse bg-[#C41E19]/60" />
+          </div> : <div className="mt-8 grid size-40 place-items-center rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] text-[#9CA3AF] shadow-[0_8px_24px_rgba(31,31,31,.06)]"><QrCode size={88} /></div>}
 
           <div className="mt-7 flex flex-wrap items-center justify-center gap-4">
-            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-white/35">Total</p><p className="text-3xl font-black text-[#C41E19]">{money}</p></div>
-            <div className="h-10 w-px bg-white/10" />
-            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-white/35">Order</p><p className="text-2xl font-black">{session.orderNumber}</p></div>
-            <div className="h-10 w-px bg-white/10" />
-            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-white/35">Expires in</p><p className="flex items-center gap-2 text-2xl font-black"><Clock3 size={19} />{formatTime(remaining)}</p></div>
+            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#9CA3AF]">Total</p><p className="text-3xl font-black text-[#C41E19]">{money}</p></div>
+            <div className="h-10 w-px bg-[#ECECEC]" />
+            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#9CA3AF]">Order</p><p className="text-2xl font-black">{session.orderNumber}</p></div>
+            <div className="h-10 w-px bg-[#ECECEC]" />
+            <div><p className="text-xs font-bold uppercase tracking-[.18em] text-[#9CA3AF]">Expires in</p><p className="flex items-center gap-2 text-2xl font-black"><Clock3 size={19} />{formatTime(remaining)}</p></div>
           </div>
 
-          <div className="mt-5 flex items-center gap-2 text-sm font-bold text-white/50">
+          <div className="mt-5 flex items-center gap-2 text-sm font-bold text-[#6B7280]">
             {processing ? <Loader2 size={17} className="animate-spin text-[#C41E19]" /> : connection === "connected" ? <span className="size-2 animate-pulse rounded-full bg-[#C41E19]" /> : <WifiOff size={16} />}
             {processing ? "Processing payment…" : expired ? "Payment session ended" : "Waiting for payment…"}
           </div>
         </>}
-        {error ? <p role="alert" className="mt-4 rounded-xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p> : null}
+        {error ? <p role="alert" className="mt-4 rounded-xl border border-[#C41E19]/25 bg-[#C41E19]/5 px-4 py-3 text-sm text-[#C41E19]">{error}</p> : null}
       </section>
 
-      {!success ? <footer className="grid gap-3 border-t border-white/8 pt-5 sm:grid-cols-2">
-        {expired ? <button type="button" disabled={busy} onClick={() => void generateNew()} className="min-h-16 rounded-2xl bg-[#C41E19] px-6 text-lg font-black text-[#FFFFFF] disabled:opacity-50"><RefreshCw size={19} className={`me-2 inline ${busy ? "animate-spin" : ""}`} />Generate New QR</button> : null}
-        <button type="button" disabled={busy} onClick={() => void cancel()} className={`min-h-16 rounded-2xl border border-white/15 bg-white/[.035] px-6 text-lg font-black disabled:opacity-50 ${expired ? "" : "sm:col-span-2"}`}><ArrowLeft size={19} className="me-2 inline" />Cancel Payment</button>
+      {!success ? <footer className="grid gap-3 border-t border-[#ECECEC] pt-5 sm:grid-cols-2">
+        {expired ? <button type="button" disabled={busy} onClick={() => void generateNew()} className="min-h-16 rounded-2xl bg-[#C41E19] px-6 text-lg font-black text-[#FFFFFF] shadow-[0_8px_20px_rgba(196,30,25,.18)] transition hover:-translate-y-0.5 hover:bg-[#A8161A] active:scale-[.98] disabled:opacity-50"><RefreshCw size={19} className={`me-2 inline ${busy ? "animate-spin" : ""}`} />Generate New QR</button> : null}
+        <button type="button" disabled={busy} onClick={() => void cancel()} className={`min-h-16 rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] px-6 text-lg font-black text-[#1F1F1F] transition hover:-translate-y-0.5 hover:bg-[#F8F9FA] active:scale-[.98] disabled:opacity-50 ${expired ? "" : "sm:col-span-2"}`}><ArrowLeft size={19} className="me-2 inline" />Cancel Payment</button>
       </footer> : null}
     </div>
   </main>;

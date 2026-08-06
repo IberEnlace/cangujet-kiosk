@@ -91,7 +91,7 @@ const nav = [
   ["settings", "Settings", SettingsIcon],
 ] as const;
 const input =
-  "admin-input w-full text-sm text-gray-900 outline-none";
+  "admin-input w-full text-sm text-[#1F1F1F] outline-none";
 const button =
   "admin-button rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/40 focus-visible:ring-offset-2 focus-visible:ring-offset-white disabled:cursor-not-allowed disabled:opacity-40";
 const card = "admin-card rounded-2xl";
@@ -112,8 +112,8 @@ function PageHeader({
   return (
     <div className="mb-7 flex flex-wrap items-end gap-4">
       <div>
-        <h1 className="text-[1.65rem] font-black tracking-[-0.035em] text-gray-900">{title}</h1>
-        <p className="mt-1.5 text-sm leading-relaxed text-gray-500">{subtitle}</p>
+        <h1 className="text-[1.65rem] font-black tracking-[-0.035em] text-[#1F1F1F]">{title}</h1>
+        <p className="mt-1.5 text-sm leading-relaxed text-[#6B7280]">{subtitle}</p>
       </div>
       <div className="ml-auto">{action}</div>
     </div>
@@ -146,7 +146,7 @@ function StatusBadge({
   const incoming = ["incoming", "accepted", "cooking"].includes(normalizedStatus);
   return (
     <span
-      className={`admin-status-dot ${normalizedStatus === "online" ? "admin-status-pulse" : ""} inline-flex min-h-6 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold capitalize tracking-wide ${good ? "border-emerald-500/20 bg-emerald-50 text-emerald-700" : warn ? "border-amber-500/20 bg-amber-50 text-amber-700" : danger ? "border-red-500/20 bg-red-50 text-red-700" : incoming ? "border-[#C41E19]/15 bg-[#C41E19]/[.06] text-[#C41E19]" : "border-gray-200 bg-gray-50 text-gray-500"}`}
+      className={`admin-status-dot ${normalizedStatus === "online" ? "admin-status-pulse" : ""} inline-flex min-h-6 items-center rounded-full border px-2.5 py-1 text-[10px] font-bold capitalize tracking-wide ${good ? "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]" : warn ? "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]" : danger ? "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]" : incoming ? "border-[#C41E19]/15 bg-[#C41E19]/[.06] text-[#C41E19]" : "border-[#ECECEC] bg-[#F8F9FA] text-[#6B7280]"}`}
     >
       {status.replace(/_/g, " ")}
     </span>
@@ -173,11 +173,11 @@ function Modal({
     >
       <div className="admin-dialog max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl p-6">
         <div className="mb-5 flex items-center">
-          <h2 className="text-lg font-bold tracking-[-.02em] text-gray-900">{title}</h2>
+          <h2 className="text-lg font-bold tracking-[-.02em] text-[#1F1F1F]">{title}</h2>
           <button
             aria-label="Close"
             onClick={onClose}
-            className="ml-auto rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700"
+            className="ml-auto rounded-lg p-2 text-[#9CA3AF] hover:bg-[#F8F9FA] hover:text-[#1F1F1F]"
           >
             <X size={18} />
           </button>
@@ -197,14 +197,14 @@ function Toggle({
   label: string;
 }) {
   return (
-    <label className="flex cursor-pointer items-center justify-between gap-4 text-sm text-gray-700">
+    <label className="flex cursor-pointer items-center justify-between gap-4 text-sm text-[#1F1F1F]">
       <span>{label}</span>
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`h-6 w-11 rounded-full border p-1 transition-[background-color,border-color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/50 ${checked ? "border-[#C41E19]/45 bg-[#C41E19]" : "border-gray-200 bg-gray-100"}`}
+        className={`h-6 w-11 rounded-full border p-1 transition-[background-color,border-color,box-shadow] duration-150 ease-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/50 ${checked ? "border-[#C41E19]/45 bg-[#C41E19]" : "border-[#ECECEC] bg-[#F8F9FA]"}`}
       >
         <span
           className={`block size-4 rounded-full bg-white shadow-sm transition-transform duration-150 ease-out ${checked ? "translate-x-5" : ""}`}
@@ -261,39 +261,39 @@ function DashboardPage() {
   return (
     <>
       <PageHeader title="Dashboard" subtitle="Restaurant Overview" />
-      {error && <div role="alert" className="mb-4 rounded-xl border border-red-400/20 bg-red-400/10 px-4 py-3 text-sm text-red-200">{error}</div>}
+      {error && <div role="alert" className="mb-4 rounded-xl border border-[#C41E19]/20 bg-[#C41E19]/10 px-4 py-3 text-sm text-[#C41E19]">{error}</div>}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {loading ? Array.from({ length: 4 }, (_, index) => (
           <div key={index} className={`${card} p-5`}>
-            <Skeleton className="h-3 w-24 bg-gray-200" /><Skeleton className="mt-4 h-8 w-32 bg-gray-200" /><Skeleton className="mt-2 h-3 w-28 bg-gray-200" />
+            <Skeleton className="h-3 w-24 bg-[#ECECEC]" /><Skeleton className="mt-4 h-8 w-32 bg-[#ECECEC]" /><Skeleton className="mt-2 h-3 w-28 bg-[#ECECEC]" />
           </div>
         )) : stats.map(([title, value, sub]) => (
           <div key={title} className={`${card} p-5`}>
-            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">{title}</p>
+            <p className="text-xs font-bold uppercase tracking-wider text-[#9CA3AF]">{title}</p>
             <p className="mt-4 text-[1.75rem] font-black tracking-[-.035em] text-[#C41E19]">{value}</p>
-            <p className="mt-1.5 text-xs leading-relaxed text-gray-400">{sub}</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-[#9CA3AF]">{sub}</p>
           </div>
         ))}
       </div>
       <div className="mt-5 grid gap-5 xl:grid-cols-[1.6fr_1fr]">
         <section className={`${card} overflow-hidden`}>
-          <h2 className="p-5 text-sm font-bold text-gray-900">Recent Orders</h2>
+          <h2 className="p-5 text-sm font-bold text-[#1F1F1F]">Recent Orders</h2>
           <div className="overflow-x-auto">
             <table className="w-full min-w-[560px] text-left text-sm">
-              <thead className="border-y border-gray-100 text-xs uppercase text-gray-400"><tr>
+              <thead className="border-y border-[#ECECEC] text-xs uppercase text-[#9CA3AF]"><tr>
                 {["Order ID", "Time", "Items", "Total", "Status"].map(h => <th key={h} className="px-5 py-3">{h}</th>)}
               </tr></thead>
               <tbody>
                 {loading ? Array.from({ length: 5 }, (_, index) => (
-                  <tr key={index} className="border-b border-gray-100"><td colSpan={5} className="px-5 py-3"><Skeleton className="h-5 w-full bg-gray-100" /></td></tr>
+                  <tr key={index} className="border-b border-[#ECECEC]"><td colSpan={5} className="px-5 py-3"><Skeleton className="h-5 w-full bg-[#F8F9FA]" /></td></tr>
                 )) : !data?.recentOrders.length ? (
-                  <tr><td colSpan={5} className="px-5 py-10 text-center text-gray-400">No orders yet today.</td></tr>
+                  <tr><td colSpan={5} className="px-5 py-10 text-center text-[#9CA3AF]">No orders yet today.</td></tr>
                 ) : data.recentOrders.map(order => (
-                  <tr key={order.id} className="border-b border-gray-100">
-                    <td className="px-5 py-3 font-mono text-gray-500">{formatDashboardOrderNumber(order.orderNumber)}</td>
-                    <td className="px-5 py-3 text-gray-700">{new Intl.DateTimeFormat(undefined, { timeZone: data.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(order.createdAt))}</td>
-                    <td className="px-5 py-3 text-gray-700">{formatDashboardItemCount(order.itemCount)}</td>
-                    <td className="px-5 py-3 font-bold text-gray-900">{formatDashboardCurrency(data.currency, order.total)}</td>
+                  <tr key={order.id} className="border-b border-[#ECECEC]">
+                    <td className="px-5 py-3 font-mono text-[#6B7280]">{formatDashboardOrderNumber(order.orderNumber)}</td>
+                    <td className="px-5 py-3 text-[#1F1F1F]">{new Intl.DateTimeFormat(undefined, { timeZone: data.timezone, hour: "2-digit", minute: "2-digit" }).format(new Date(order.createdAt))}</td>
+                    <td className="px-5 py-3 text-[#1F1F1F]">{formatDashboardItemCount(order.itemCount)}</td>
+                    <td className="px-5 py-3 font-bold text-[#1F1F1F]">{formatDashboardCurrency(data.currency, order.total)}</td>
                     <td className="px-5 py-3"><StatusBadge status={mapOrderStatus(order.status)} /></td>
                   </tr>
                 ))}
@@ -302,12 +302,12 @@ function DashboardPage() {
           </div>
         </section>
         <section className={`${card} p-5`}>
-          <h2 className="mb-3 text-sm font-bold text-gray-900">System Status</h2>
+          <h2 className="mb-3 text-sm font-bold text-[#1F1F1F]">System Status</h2>
           {loading ? Array.from({ length: 6 }, (_, index) => (
-            <div key={index} className="flex items-center justify-between border-b border-gray-100 py-3"><Skeleton className="h-4 w-28 bg-gray-100" /><Skeleton className="h-6 w-20 rounded-full bg-gray-100" /></div>
+            <div key={index} className="flex items-center justify-between border-b border-[#ECECEC] py-3"><Skeleton className="h-4 w-28 bg-[#F8F9FA]" /><Skeleton className="h-6 w-20 rounded-full bg-[#F8F9FA]" /></div>
           )) : statuses.map(([label, status]) => (
-            <div key={label} className="flex items-center justify-between border-b border-gray-100 py-3 last:border-0">
-              <span className="text-sm text-gray-600">{label}</span><StatusBadge status={status} />
+            <div key={label} className="flex items-center justify-between border-b border-[#ECECEC] py-3 last:border-0">
+              <span className="text-sm text-[#6B7280]">{label}</span><StatusBadge status={status} />
             </div>
           ))}
         </section>
@@ -329,15 +329,15 @@ function AdminSelect({
 }) {
   return (
     <Select value={value} onValueChange={onChange}>
-      <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-gray-900">
+      <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-[#1F1F1F]">
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent className="z-[10001] rounded-xl border-gray-100 bg-white text-gray-900 shadow-xl">
+      <SelectContent className="z-[10001] rounded-xl border-[#ECECEC] bg-white text-[#1F1F1F] shadow-xl">
         {options.map((option) => (
           <SelectItem
             key={option}
             value={option}
-            className="rounded-lg text-gray-700 focus:bg-[#C41E19]/10 focus:text-[#C41E19] data-[state=checked]:text-[#C41E19]"
+            className="rounded-lg text-[#1F1F1F] focus:bg-[#C41E19]/10 focus:text-[#C41E19] data-[state=checked]:text-[#C41E19]"
           >
             {option}
           </SelectItem>
@@ -408,7 +408,7 @@ function ProductForm({
   };
   return (
     <form onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
-      <label className="sm:col-span-2 text-xs text-gray-500">
+      <label className="sm:col-span-2 text-xs text-[#6B7280]">
         Product name
         <input
           className={`${input} mt-1`}
@@ -416,7 +416,7 @@ function ProductForm({
           onChange={(e) => setP({ ...p, name: e.target.value })}
         />
       </label>
-      <label className="sm:col-span-2 text-xs text-gray-500">
+      <label className="sm:col-span-2 text-xs text-[#6B7280]">
         Description
         <textarea
           className={`${input} mt-1`}
@@ -424,20 +424,20 @@ function ProductForm({
           onChange={(e) => setP({ ...p, description: e.target.value })}
         />
       </label>
-      <div className="text-xs text-gray-500">
+      <div className="text-xs text-[#6B7280]">
         Category
         <Select value={p.categoryId ?? ""} onValueChange={categoryId => setP({ ...p, categoryId })}>
-          <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-gray-900">
+          <SelectTrigger className="admin-input mt-1 h-10 rounded-xl text-[#1F1F1F]">
             <SelectValue placeholder="Select a category" />
           </SelectTrigger>
-          <SelectContent className="z-[10001] rounded-xl border-gray-100 bg-white text-gray-900">
+          <SelectContent className="z-[10001] rounded-xl border-[#ECECEC] bg-white text-[#1F1F1F]">
             {categories.filter(category => category.isActive).map(category => (
               <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
-      <label className="text-xs text-gray-500">
+      <label className="text-xs text-[#6B7280]">
         Price
         <input
           type="number"
@@ -448,9 +448,9 @@ function ProductForm({
           onChange={(e) => setP({ ...p, price: Number(e.target.value) })}
         />
       </label>
-      <label className="sm:col-span-2 text-xs text-gray-500">
+      <label className="sm:col-span-2 text-xs text-[#6B7280]">
         Product image
-        <div className="mt-1 flex items-center gap-4 rounded-xl border border-dashed border-gray-200 bg-gray-50 p-4">
+        <div className="mt-1 flex items-center gap-4 rounded-xl border border-dashed border-[#ECECEC] bg-[#F8F9FA] p-4">
           {p.image ? (
             <img
               src={p.image}
@@ -458,7 +458,7 @@ function ProductForm({
               className="size-20 rounded-xl object-cover"
             />
           ) : (
-            <div className="grid size-20 place-items-center rounded-xl bg-gray-100 text-[10px] text-gray-400">
+            <div className="grid size-20 place-items-center rounded-xl bg-[#F8F9FA] text-[10px] text-[#9CA3AF]">
               No image
             </div>
           )}
@@ -472,17 +472,17 @@ function ProductForm({
             />
             <label
               htmlFor="product-image-upload"
-              className={`${button} inline-flex cursor-pointer border border-gray-200 bg-gray-50 text-gray-700 hover:bg-gray-100`}
+              className={`${button} inline-flex cursor-pointer border border-[#ECECEC] bg-[#F8F9FA] text-[#1F1F1F] hover:bg-[#F8F9FA]`}
             >
               {uploadingImage ? "Uploading..." : "Choose Image"}
             </label>
-            <p className="mt-2 text-[10px] text-gray-400">
+            <p className="mt-2 text-[10px] text-[#9CA3AF]">
               Preview only — not uploaded.
             </p>
           </div>
         </div>
       </label>
-      <label className="text-xs text-white/50">
+      <label className="text-xs text-[#6B7280]">
         Calories
         <input
           type="number"
@@ -492,7 +492,7 @@ function ProductForm({
           onChange={(e) => setP({ ...p, calories: Number(e.target.value) })}
         />
       </label>
-      <label className="text-xs text-white/50">
+      <label className="text-xs text-[#6B7280]">
         Protein (g)
         <input
           type="number"
@@ -502,7 +502,7 @@ function ProductForm({
           onChange={(e) => setP({ ...p, protein: Number(e.target.value) })}
         />
       </label>
-      <label className="sm:col-span-2 text-xs text-white/50">
+      <label className="sm:col-span-2 text-xs text-[#6B7280]">
         Allergens (comma separated)
         <input
           className={`${input} mt-1`}
@@ -529,7 +529,7 @@ function ProductForm({
         <button
           type="button"
           onClick={onClose}
-          className={`${button} bg-gray-50 text-gray-700 border border-gray-200`}
+          className={`${button} bg-[#F8F9FA] text-[#1F1F1F] border border-[#ECECEC]`}
         >
           Cancel
         </button>
@@ -601,7 +601,7 @@ function MenuPage() {
       <div className={`${card} overflow-hidden`}>
         <div className="overflow-x-auto">
           <table className="w-full min-w-[820px] text-left text-sm">
-            <thead className="border-b border-gray-100 text-xs uppercase text-gray-400">
+            <thead className="border-b border-[#ECECEC] text-xs uppercase text-[#9CA3AF]">
               <tr>
                 {[
                   "Product",
@@ -610,7 +610,7 @@ function MenuPage() {
                   "Availability",
                   "Actions",
                 ].map((h) => (
-                  <th key={h} className="px-5 py-3 text-gray-400">
+                  <th key={h} className="px-5 py-3 text-[#9CA3AF]">
                     {h}
                   </th>
                 ))}
@@ -619,32 +619,32 @@ function MenuPage() {
             <tbody>
             {loadingMenu ? (
               Array.from({ length: 5 }, (_, index) => (
-                <tr key={index} className="border-b border-gray-100">
+                <tr key={index} className="border-b border-[#ECECEC]">
                   <td colSpan={5} className="px-5 py-4">
-                    <Skeleton className="h-10 w-full rounded-lg bg-gray-100" />
+                    <Skeleton className="h-10 w-full rounded-lg bg-[#F8F9FA]" />
                   </td>
                 </tr>
               ))
             ) : products.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-12 text-center">
-                    <div className="mx-auto max-w-xs rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-6 py-7">
-                      <PackageOpen className="mx-auto mb-3 text-gray-300" size={22} />
-                      <p className="text-sm font-semibold text-gray-600">No products yet</p>
-                      <p className="mt-1 text-xs text-gray-400">Add your first product to populate the menu.</p>
+                    <div className="mx-auto max-w-xs rounded-2xl border border-dashed border-[#ECECEC] bg-[#F8F9FA] px-6 py-7">
+                      <PackageOpen className="mx-auto mb-3 text-[#9CA3AF]" size={22} />
+                      <p className="text-sm font-semibold text-[#6B7280]">No products yet</p>
+                      <p className="mt-1 text-xs text-[#9CA3AF]">Add your first product to populate the menu.</p>
                     </div>
                   </td>
                 </tr>
               ) : (
                 products.map((p) => (
-                  <tr key={p.id} className="border-b border-gray-100">
+                  <tr key={p.id} className="border-b border-[#ECECEC]">
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-3">
                         <ProductThumbnail product={p} />
-                        <span className="font-medium text-gray-900">{p.name}</span>
+                        <span className="font-medium text-[#1F1F1F]">{p.name}</span>
                       </div>
                     </td>
-                    <td className="px-5 py-3 capitalize text-gray-500">
+                    <td className="px-5 py-3 capitalize text-[#6B7280]">
                       {p.category.replace(/_/g, " ")}
                     </td>
                     <td className="px-5 py-3 font-bold text-[#C41E19]">
@@ -664,14 +664,14 @@ function MenuPage() {
                         <button
                           aria-label={`Edit ${p.name}`}
                           onClick={() => setEditing(p)}
-                          className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+                          className="rounded-lg p-2 text-[#6B7280] hover:bg-[#F8F9FA] hover:text-[#1F1F1F]"
                         >
                           <Pencil size={15} />
                         </button>
                         <button
                           aria-label={`Delete ${p.name}`}
                           onClick={() => setDeleting(p)}
-                          className="rounded-lg p-2 text-red-400 hover:bg-red-50 hover:text-red-600"
+                          className="rounded-lg p-2 text-[#C41E19] hover:bg-[#C41E19]/5 hover:text-[#C41E19]"
                         >
                           <Trash2 size={15} />
                         </button>
@@ -699,11 +699,11 @@ function MenuPage() {
       )}
       {deleting && (
         <Modal title="Delete Product?" onClose={() => setDeleting(null)}>
-          <p className="text-sm text-gray-500">This action cannot be undone.</p>
+          <p className="text-sm text-[#6B7280]">This action cannot be undone.</p>
           <div className="mt-5 flex justify-end gap-2">
             <button
               onClick={() => setDeleting(null)}
-              className={`${button} bg-gray-50 text-gray-700 border border-gray-200`}
+              className={`${button} bg-[#F8F9FA] text-[#1F1F1F] border border-[#ECECEC]`}
             >
               Cancel
             </button>
@@ -718,7 +718,7 @@ function MenuPage() {
                   toast.error(cause instanceof Error ? cause.message : "Product could not be deleted.");
                 } finally { setSaving(false); }
               })(); }}
-              className={`${button} bg-[#C41E19] text-white`}
+              className={`${button} border border-[#C41E19]/20 bg-white text-[#C41E19] hover:border-[#C41E19]/30 hover:bg-[#C41E19]/5 hover:text-[#C41E19]`}
             >
               Delete
             </button>
@@ -794,7 +794,7 @@ function CategoriesPage() {
       />
       <div className={`${card} overflow-x-auto`}>
         <table className="w-full min-w-[720px] text-left text-sm">
-          <thead className="border-b border-white/5 text-xs uppercase text-white/30">
+          <thead className="border-b border-[#ECECEC] text-xs uppercase text-[#9CA3AF]">
             <tr>
               {["Name", "Products", "Order", "Status", "Actions"].map((h) => (
                 <th className="px-5 py-3" key={h}>
@@ -805,13 +805,13 @@ function CategoriesPage() {
           </thead>
           <tbody>
             {loadingCategories ? Array.from({ length: 5 }, (_, index) => (
-              <tr key={index} className="border-b border-white/5"><td colSpan={5} className="px-5 py-4"><Skeleton className="h-10 w-full rounded-lg bg-white/[.055]" /></td></tr>
+              <tr key={index} className="border-b border-[#ECECEC]"><td colSpan={5} className="px-5 py-4"><Skeleton className="h-10 w-full rounded-lg bg-[#F8F9FA]" /></td></tr>
             )) : items.length === 0 ? (
-              <tr><td colSpan={5} className="p-12 text-center"><div className="mx-auto max-w-xs rounded-2xl border border-dashed border-white/10 bg-white/[.018] px-6 py-7"><Tags className="mx-auto mb-3 text-white/25" size={22} /><p className="text-sm font-semibold text-white/65">No categories yet</p><p className="mt-1 text-xs text-white/35">Create a category to organize your menu.</p></div></td></tr>
+              <tr><td colSpan={5} className="p-12 text-center"><div className="mx-auto max-w-xs rounded-2xl border border-dashed border-[#ECECEC] bg-[#F8F9FA] px-6 py-7"><Tags className="mx-auto mb-3 text-[#9CA3AF]" size={22} /><p className="text-sm font-semibold text-[#1F1F1F]">No categories yet</p><p className="mt-1 text-xs text-[#9CA3AF]">Create a category to organize your menu.</p></div></td></tr>
             ) : items.map((c, i) => (
-              <tr key={c.id} className="border-b border-white/5">
+              <tr key={c.id} className="border-b border-[#ECECEC]">
                 <td className="px-5 py-4 font-medium">{c.name}</td>
-                <td className="px-5 py-4 text-white/50">
+                <td className="px-5 py-4 text-[#6B7280]">
                   {counts[c.id] ?? counts[c.name.toLowerCase()] ?? 0}
                 </td>
                 <td className="px-5 py-4">{c.displayOrder}</td>
@@ -834,7 +834,7 @@ function CategoriesPage() {
                       disabled={i === 0}
                       aria-label="Move up"
                       onClick={() => { void move(i, -1); }}
-                      className="p-2 disabled:opacity-20"
+                      className="rounded-lg p-2 text-[#6B7280] transition hover:bg-[#F8F9FA] hover:text-[#1F1F1F] disabled:opacity-20"
                     >
                       <ChevronUp size={15} />
                     </button>
@@ -842,21 +842,21 @@ function CategoriesPage() {
                       disabled={i === items.length - 1}
                       aria-label="Move down"
                       onClick={() => { void move(i, 1); }}
-                      className="p-2 disabled:opacity-20"
+                      className="rounded-lg p-2 text-[#6B7280] transition hover:bg-[#F8F9FA] hover:text-[#1F1F1F] disabled:opacity-20"
                     >
                       <ChevronDown size={15} />
                     </button>
                     <button
                       aria-label="Edit category"
                       onClick={() => setEdit(c)}
-                      className="p-2"
+                      className="rounded-lg p-2 text-[#6B7280] transition hover:bg-[#C41E19]/5 hover:text-[#C41E19]"
                     >
                       <Pencil size={15} />
                     </button>
                     <button
                       aria-label="Delete category"
                       onClick={() => setDel(c)}
-                      className="p-2 text-red-300"
+                      className="rounded-lg p-2 text-[#C41E19] transition hover:bg-[#C41E19]/5 hover:text-[#C41E19]"
                     >
                       <Trash2 size={15} />
                     </button>
@@ -889,11 +889,11 @@ function CategoriesPage() {
       )}
       {del && (
         <Modal title="Delete Category?" onClose={() => setDel(null)}>
-          <p className="text-sm text-white/55">This action cannot be undone.</p>
+          <p className="text-sm text-[#6B7280]">This action cannot be undone.</p>
           <div className="mt-5 flex justify-end gap-2">
             <button
               onClick={() => setDel(null)}
-              className={`${button} bg-white/5`}
+              className={`${button} border border-[#ECECEC] bg-white text-[#1F1F1F] hover:bg-[#F8F9FA]`}
             >
               Cancel
             </button>
@@ -905,7 +905,7 @@ function CategoriesPage() {
                 catch (cause) { toast.error(cause instanceof Error ? cause.message : "Category could not be deleted."); }
                 finally { setSavingCategory(false); }
               })(); }}
-              className={`${button} bg-red-500`}
+              className={`${button} border border-[#C41E19]/20 bg-white text-[#C41E19] hover:border-[#C41E19]/30 hover:bg-[#C41E19]/5 hover:text-[#C41E19]`}
             >
               Delete
             </button>
@@ -947,7 +947,7 @@ function CategoryForm({
       }}
       className="space-y-4"
     >
-      <label className="block text-xs text-white/50">
+      <label className="block text-xs text-[#6B7280]">
         Category name
         <input
           className={`${input} mt-1`}
@@ -955,7 +955,7 @@ function CategoryForm({
           onChange={(e) => setV({ ...v, name: e.target.value })}
         />
       </label>
-      <label className="block text-xs text-white/50">
+      <label className="block text-xs text-[#6B7280]">
         Description
         <textarea
           className={`${input} mt-1`}
@@ -964,7 +964,7 @@ function CategoryForm({
         />
       </label>
       <fieldset>
-        <legend className="text-xs text-white/50">Category icon</legend>
+        <legend className="text-xs text-[#6B7280]">Category icon</legend>
         <div className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-8">
           {icons.map(([icon, label]) => (
             <button
@@ -977,7 +977,7 @@ function CategoryForm({
                 setOther(false);
                 setV({ ...v, icon });
               }}
-              className={`rounded-xl border p-3 text-xl transition focus:outline-none focus:ring-2 focus:ring-[#d7fb69]/40 ${!other && v.icon === icon ? "border-[#d7fb69] bg-[#d7fb69]/10" : "border-white/10 bg-white/5 hover:bg-white/10"}`}
+              className={`rounded-xl border p-3 text-xl transition focus:outline-none focus:ring-2 focus:ring-[#C41E19]/35 ${!other && v.icon === icon ? "border-[#C41E19] bg-[#C41E19]/5" : "border-[#ECECEC] bg-white hover:border-[#ECECEC] hover:bg-[#F8F9FA]"}`}
             >
               {icon}
             </button>
@@ -989,7 +989,7 @@ function CategoryForm({
               setOther(true);
               if (known) setV({ ...v, icon: "" });
             }}
-            className={`rounded-xl border px-2 text-xs transition ${other ? "border-[#d7fb69] bg-[#d7fb69]/10" : "border-white/10 bg-white/5"}`}
+            className={`rounded-xl border px-2 text-xs transition ${other ? "border-[#C41E19] bg-[#C41E19]/5 text-[#C41E19]" : "border-[#ECECEC] bg-white text-[#6B7280]"}`}
           >
             Other…
           </button>
@@ -1005,7 +1005,7 @@ function CategoryForm({
           />
         )}
       </fieldset>
-      <label className="block text-xs text-white/50">
+      <label className="block text-xs text-[#6B7280]">
         Display order
         <input
           type="number"
@@ -1024,11 +1024,11 @@ function CategoryForm({
         <button
           type="button"
           onClick={onClose}
-          className={`${button} bg-white/5`}
+          className={`${button} border border-[#ECECEC] bg-white text-[#1F1F1F] hover:bg-[#F8F9FA]`}
         >
           Cancel
         </button>
-        <button className={`${button} bg-[#d7fb69] text-[#17200f]`}>
+        <button className={`${button} bg-[#C41E19] text-white hover:bg-[#A8161A]`}>
           Save Category
         </button>
       </div>
@@ -1113,7 +1113,7 @@ function NotificationsPage() {
               value={v.secondaryEmail}
               onChange={(secondaryEmail) => setV({ ...v, secondaryEmail })}
             />
-            <label className="text-xs text-white/50">
+            <label className="text-xs text-[#6B7280]">
               Daily Report Time
               <input
                 type="time"
@@ -1123,7 +1123,7 @@ function NotificationsPage() {
                   setV({ ...v, dailyReportTime: e.target.value })
                 }
               />
-              <span className="mt-1 block text-[11px] text-white/30">
+              <span className="mt-1 block text-[11px] text-[#9CA3AF]">
                 The daily report will be sent at this time using the restaurant
                 timezone.
               </span>
@@ -1145,7 +1145,7 @@ function NotificationsPage() {
         <div className="flex flex-wrap gap-2 lg:col-span-2">
           <button
             onClick={save}
-            className={`${button} bg-[#d7fb69] text-[#17200f]`}
+            className={`${button} bg-[#C41E19] text-white hover:bg-[#A8161A]`}
           >
             Save Notification Settings
           </button>
@@ -1154,12 +1154,12 @@ function NotificationsPage() {
               setRecipient(v.restaurantEmail);
               setTestOpen(true);
             }}
-            className={`${button} border border-white/10 bg-white/5`}
+            className={`${button} border border-[#ECECEC] bg-white text-[#1F1F1F] hover:bg-[#F8F9FA]`}
           >
             Send Test Notification
           </button>
         </div>
-        <p className="text-[11px] text-white/30 lg:col-span-2">
+        <p className="text-[11px] text-[#9CA3AF] lg:col-span-2">
           Demo mode: actions are simulated in this prototype.
         </p>
       </div>
@@ -1175,7 +1175,7 @@ function NotificationsPage() {
               value={recipient}
               onChange={setRecipient}
             />
-            <label className="block text-xs text-white/50">
+            <label className="block text-xs text-[#6B7280]">
               Notification Type
               <AdminSelect
                 value={notificationType}
@@ -1188,20 +1188,20 @@ function NotificationsPage() {
               />
             </label>
           </div>
-          <p className="mt-3 text-[11px] text-white/30">
+          <p className="mt-3 text-[11px] text-[#9CA3AF]">
             Demo mode: this notification will only be simulated.
           </p>
           <div className="mt-5 flex justify-end gap-2">
             <button
               onClick={() => setTestOpen(false)}
-              className={`${button} bg-white/5`}
+              className={`${button} border border-[#ECECEC] bg-white text-[#1F1F1F] hover:bg-[#F8F9FA]`}
             >
               Cancel
             </button>
             <button
               disabled={loading}
               onClick={sendTest}
-              className={`${button} bg-[#d7fb69] text-[#17200f]`}
+              className={`${button} bg-[#C41E19] text-white hover:bg-[#A8161A]`}
             >
               {loading ? "Sending…" : "Send Test"}
             </button>
@@ -1224,7 +1224,7 @@ function Field({
   type?: string;
 }) {
   return (
-    <label className="text-xs text-white/50">
+    <label className="text-xs text-[#6B7280]">
       {label}
       <input
         type={type}
@@ -1273,7 +1273,7 @@ function SettingsPage() {
               value={restaurant.name}
               onChange={(name) => setRestaurant({ ...restaurant, name })}
             />
-            <label className="text-xs text-white/50">
+            <label className="text-xs text-[#6B7280]">
               Currency
               <AdminSelect
                 value={restaurant.currency}
@@ -1289,7 +1289,7 @@ function SettingsPage() {
               value={restaurant.tax}
               onChange={(tax) => setRestaurant({ ...restaurant, tax })}
             />
-            <label className="text-xs text-white/50">
+            <label className="text-xs text-[#6B7280]">
               Default Language
               <AdminSelect
                 value={restaurant.language}
@@ -1299,7 +1299,7 @@ function SettingsPage() {
                 options={["English", "Turkish"]}
               />
             </label>
-            <label className="text-xs text-white/50">
+            <label className="text-xs text-[#6B7280]">
               Timezone
               <AdminSelect
                 value={restaurant.timezone}
@@ -1319,7 +1319,7 @@ function SettingsPage() {
         </SettingsSection>
         <SettingsSection title="Kiosk Settings">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <label className="text-xs text-white/50">
+            <label className="text-xs text-[#6B7280]">
               Kiosk Name
               <input
                 disabled={connected}
@@ -1328,12 +1328,12 @@ function SettingsPage() {
                 onChange={(e) => setKiosk({ ...kiosk, name: e.target.value })}
               />
               {connected && (
-                <span className="mt-1 block text-[11px] text-white/30">
+                <span className="mt-1 block text-[11px] text-[#9CA3AF]">
                   Managed by the connected device configuration.
                 </span>
               )}
             </label>
-            <label className="text-xs text-white/50">
+            <label className="text-xs text-[#6B7280]">
               Kiosk Number
               <input
                 disabled={connected}
@@ -1342,12 +1342,12 @@ function SettingsPage() {
                 onChange={(e) => setKiosk({ ...kiosk, number: e.target.value })}
               />
               {connected && (
-                <span className="mt-1 block text-[11px] text-white/30">
+                <span className="mt-1 block text-[11px] text-[#9CA3AF]">
                   Managed by the connected device configuration.
                 </span>
               )}
             </label>
-            <label className="text-xs text-white/50">
+            <label className="text-xs text-[#6B7280]">
               Idle Timeout
               <div className="relative mt-1">
                 <input
@@ -1359,7 +1359,7 @@ function SettingsPage() {
                     setKiosk({ ...kiosk, timeout: e.target.value })
                   }
                 />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-white/30">
+                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-[#9CA3AF]">
                   seconds
                 </span>
               </div>
@@ -1384,7 +1384,7 @@ function SettingsPage() {
           </div>
           <button
             onClick={saveKiosk}
-            className={`${button} mt-6 bg-[#d7fb69] text-[#17200f]`}
+            className={`${button} mt-6 bg-[#C41E19] text-white hover:bg-[#A8161A]`}
           >
             Save Changes
           </button>
@@ -1411,7 +1411,7 @@ function Save() {
   return (
     <button
       onClick={() => toast.success("Changes saved for this demo session.")}
-      className={`${button} mt-6 bg-[#d7fb69] text-[#17200f]`}
+      className={`${button} mt-6 bg-[#C41E19] text-white hover:bg-[#A8161A]`}
     >
       Save Changes
     </button>
@@ -1428,15 +1428,15 @@ export default function Dashboard({ section, onNavigate }: Props) {
     settings: <SettingsPage />,
   };
   return (
-    <div className="cangujet-admin min-h-screen text-gray-900 font-['Plus_Jakarta_Sans'] md:flex">
+    <div className="cangujet-admin min-h-screen text-[#1F1F1F] md:flex">
       <Toaster theme="light" position="top-right" />
-      <aside className="border-b border-gray-100 bg-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col md:border-b-0 md:border-r">
-        <div className="flex items-center justify-between border-b border-gray-100 px-5 py-5">
+      <aside className="border-b border-[#ECECEC] bg-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col md:border-b-0 md:border-r">
+        <div className="flex items-center justify-between border-b border-[#ECECEC] px-5 py-5">
           <div>
             <MorrowLogo variant="full" priority className="h-auto w-36" />
-            <p className="mt-1 text-[10px] text-gray-400">Admin Panel</p>
+            <p className="mt-1 text-[10px] text-[#9CA3AF]">Admin Panel</p>
           </div>
-          <MenuIcon className="text-gray-400 md:hidden" size={20} />
+          <MenuIcon className="text-[#9CA3AF] md:hidden" size={20} />
         </div>
         <nav
           aria-label="Admin navigation"
@@ -1447,26 +1447,26 @@ export default function Dashboard({ section, onNavigate }: Props) {
               key={id}
               onClick={() => onNavigate(`/admin/${id}`)}
               aria-current={section === id ? "page" : undefined}
-              className={`relative flex min-h-10 shrink-0 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition-all duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/30 ${section === id ? "bg-[#C41E19] font-semibold text-white shadow-sm" : "text-gray-500 hover:bg-gray-100 hover:text-gray-900"}`}
+              className={`relative flex min-h-10 shrink-0 items-center gap-3 rounded-xl px-3.5 py-2.5 text-sm transition-all duration-150 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/30 ${section === id ? "bg-[#C41E19] font-semibold text-white shadow-sm" : "text-[#6B7280] hover:bg-[#F8F9FA] hover:text-[#1F1F1F]"}`}
             >
               <Icon size={16} />
               {label}
             </button>
           ))}
         </nav>
-        <div className="hidden border-t border-gray-100 p-4 md:block">
-          <div className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50 p-3">
+        <div className="hidden border-t border-[#ECECEC] p-4 md:block">
+          <div className="flex items-center gap-3 rounded-xl border border-[#ECECEC] bg-[#F8F9FA] p-3">
             <div className="grid size-8 place-items-center rounded-full bg-[#C41E19]/10 text-xs font-bold text-[#C41E19]">
               A
             </div>
             <div>
-              <p className="text-xs font-bold text-gray-900">Admin</p>
-              <p className="text-[10px] text-gray-400">cangujet kiosk</p>
+              <p className="text-xs font-bold text-[#1F1F1F]">Admin</p>
+              <p className="text-[10px] text-[#9CA3AF]">cangujet kiosk</p>
             </div>
           </div>
         </div>
       </aside>
-      <main className="min-w-0 flex-1 bg-gray-50 p-4 pb-28 sm:p-7 lg:p-10">
+      <main className="min-w-0 flex-1 bg-[#F8F9FA] p-4 pb-28 sm:p-7 lg:p-10">
         <div className="mx-auto w-full max-w-[1440px]">{pages[section]}</div>
       </main>
     </div>

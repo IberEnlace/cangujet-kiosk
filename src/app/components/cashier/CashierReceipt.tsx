@@ -16,7 +16,7 @@ function ReceiptItemRow({ item, money }: { item: CashierReceiptItem; money: Intl
 
 export default function CashierReceipt({ receipt, mode }: CashierReceiptProps) {
   const money=new Intl.NumberFormat(undefined,{style:"currency",currency:receipt.currency});
-  const shell=mode==="preview"?"mx-auto w-full max-w-[400px] bg-white px-5 py-6 text-black shadow-[0_10px_28px_rgba(0,0,0,.18)]":"cashier-receipt-print";
+  const shell=mode==="preview"?"mx-auto w-full max-w-[400px] rounded-2xl border border-[#ECECEC] bg-white px-5 py-6 text-[#1F1F1F] shadow-[0_8px_24px_rgba(31,31,31,.08)] transition-shadow hover:shadow-[0_12px_30px_rgba(31,31,31,.11)]":"cashier-receipt-print";
   return <article id={mode==="print"?"cashier-print-receipt":undefined} className={`cashier-receipt font-mono text-[11px] leading-[1.4] [font-variant-numeric:tabular-nums] ${shell}`}>
     <header className="receipt-header text-center"><strong className="receipt-brand block font-sans text-sm font-black tracking-[.28em]">{receipt.restaurantName}</strong><div className="mt-1 font-bold">{receipt.branchName}</div><small className="block text-[10px] text-black/65">{receipt.registerName}</small></header>
     <section className="receipt-meta mt-4 space-y-1 border-t border-dashed border-black/45 pt-3"><div className={rowClass}><span>Order:</span><strong className="text-right">#{receipt.orderNumber}</strong></div><div className={rowClass}><span>Date:</span><span className="text-right">{receipt.date}</span></div><div className={rowClass}><span>Cashier:</span><span className="text-right">{receipt.cashierName}</span></div></section>

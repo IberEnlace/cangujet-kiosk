@@ -20,8 +20,8 @@
 }
 
 @keyframes nori-breathe {
-  0%, 100% { transform: scale(1); box-shadow: 0 8px 28px rgba(196, 30, 25, .15); }
-  50% { transform: scale(1.025); box-shadow: 0 10px 32px rgba(196, 30, 25, .22); }
+  0%, 100% { transform: scale(1); box-shadow: 0 6px 18px rgba(31,31,31, .08); }
+  50% { transform: scale(1.018); box-shadow: 0 8px 22px rgba(31,31,31, .11); }
 }
 
 @keyframes nori-ring {

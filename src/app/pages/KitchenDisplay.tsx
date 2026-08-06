@@ -51,17 +51,17 @@ const NEW_ORDER_GLOW_MS = 5_000;
 const SORT_RECONCILIATION_MS = 15_000;
 const DRAG_TYPE = "application/x-morrow-kitchen-order";
 const COLUMNS: Column[] = [
-  { id: "received", label: "Incoming", description: "Awaiting acceptance", icon: <PackageOpen size={17} />, accent: "border-t-sky-400", badge: "border-sky-400/25 bg-sky-400/10 text-sky-200" },
-  { id: "preparing", label: "Accepted", description: "Queued for preparation", icon: <Check size={17} />, accent: "border-t-violet-400", badge: "border-violet-400/25 bg-violet-400/10 text-violet-200" },
-  { id: "cooking", label: "Preparing", description: "In active preparation", icon: <Flame size={17} />, accent: "border-t-orange-400", badge: "border-orange-400/25 bg-orange-400/10 text-orange-200" },
-  { id: "ready", label: "Ready", description: "Awaiting handoff", icon: <ChefHat size={17} />, accent: "border-t-[#D7FB69]", badge: "border-[#D7FB69]/25 bg-[#D7FB69]/10 text-[#D7FB69]" },
+  { id: "received", label: "Incoming", description: "Awaiting acceptance", icon: <PackageOpen size={17} />, accent: "border-t-[#C41E19]", badge: "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]" },
+  { id: "preparing", label: "Accepted", description: "Queued for preparation", icon: <Check size={17} />, accent: "border-t-[#C41E19]", badge: "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]" },
+  { id: "cooking", label: "Preparing", description: "In active preparation", icon: <Flame size={17} />, accent: "border-t-[#C41E19]", badge: "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]" },
+  { id: "ready", label: "Ready", description: "Awaiting handoff", icon: <ChefHat size={17} />, accent: "border-t-[#C41E19]", badge: "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]" },
 ];
 
 const URGENCY_STYLE: Record<KitchenUrgency, { dot: string; border: string; text: string; label: string }> = {
-  green: { dot: "bg-emerald-400", border: "border-emerald-400/25", text: "text-emerald-300", label: "On time" },
-  yellow: { dot: "bg-yellow-300", border: "border-yellow-300/35", text: "text-yellow-200", label: "Watch" },
-  orange: { dot: "bg-orange-400", border: "border-orange-400/45", text: "text-orange-300", label: "Urgent" },
-  red: { dot: "bg-red-500", border: "border-red-500/65", text: "text-red-300", label: "Critical" },
+  green: { dot: "bg-[#C41E19]/50", border: "border-[#C41E19]/20", text: "text-[#C41E19]", label: "On time" },
+  yellow: { dot: "bg-[#C41E19]", border: "border-[#C41E19]/20", text: "text-[#C41E19]", label: "Watch" },
+  orange: { dot: "bg-[#C41E19]", border: "border-[#C41E19]/20", text: "text-[#C41E19]", label: "Urgent" },
+  red: { dot: "bg-[#C41E19]", border: "border-[#C41E19]/30", text: "text-[#C41E19]", label: "Critical" },
 };
 
 export default function KitchenDisplay({ onNavigate: _onNavigate }: Props) {
@@ -177,32 +177,32 @@ export default function KitchenDisplay({ onNavigate: _onNavigate }: Props) {
 
   const urgentCount = activeOrders.filter(order => kitchenUrgencyRank(order, sortNow) >= 2).length;
 
-  return <main className="flex min-h-screen flex-col bg-[#070907] font-['Plus_Jakarta_Sans'] text-[#F4F5EF]">
-    <Toaster theme="dark" position="top-right" richColors />
-    <header className="border-b border-white/8 bg-[#090c09]/95 px-4 py-3 backdrop-blur-xl lg:px-6">
+  return <main className="flex min-h-screen flex-col bg-[#F8F9FA] text-[#1F1F1F]">
+    <Toaster theme="light" position="top-right" richColors />
+    <header className="border-b border-[#ECECEC] bg-white px-4 py-3 shadow-sm lg:px-6">
       <div className="flex flex-wrap items-center gap-3 lg:gap-4">
         <div className="flex items-center gap-3">
           <MorrowLogo variant="symbol" priority className="size-11 object-contain" />
           <h1 className="text-lg font-black tracking-[-.02em]">Kitchen Display</h1>
         </div>
         <div className="ms-auto flex max-w-full min-w-0 items-center justify-end gap-2 max-sm:w-full">
-          <div className="flex min-w-0 flex-1 overflow-x-auto rounded-2xl border border-white/8 bg-white/[.035] sm:flex-none">
-            <Metric label="Active" value={activeOrders.length} color="text-white" />
-            <Metric label="Incoming" value={activeOrders.filter(order => order.status === "received").length} color="text-sky-300" />
-            <Metric label="Urgent" value={urgentCount} color="text-orange-300" />
-            <Metric label="Done today" value={liveOrders.doneToday} color="text-[#D7FB69]" />
+          <div className="flex min-w-0 flex-1 overflow-x-auto rounded-2xl border border-[#ECECEC] bg-[#F8F9FA] sm:flex-none">
+            <Metric label="Active" value={activeOrders.length} color="text-[#1F1F1F]" />
+            <Metric label="Incoming" value={activeOrders.filter(order => order.status === "received").length} color="text-[#C41E19]" />
+            <Metric label="Urgent" value={urgentCount} color="text-[#C41E19]" />
+            <Metric label="Done today" value={liveOrders.doneToday} color="text-[#C41E19]" />
           </div>
           <ConnectionBadge status={liveOrders.connection} />
         </div>
       </div>
     </header>
 
-    <section className="border-b border-white/8 bg-[#080a08] px-4 py-3 lg:px-6" aria-label="Kitchen search">
+    <section className="border-b border-[#ECECEC] bg-white px-4 py-3 lg:px-6" aria-label="Kitchen search">
       <div className="mx-auto max-w-3xl">
-        <label className="flex min-h-12 w-full items-center gap-2 rounded-2xl border border-white/10 bg-white/[.045] px-4 focus-within:border-[#D7FB69]/45">
-          <Search size={17} className="shrink-0 text-white/35" />
-          <input ref={searchRef} value={query} onChange={event => setQuery(event.target.value)} placeholder="Search order, product, or reference…" className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-white/25" aria-label="Search kitchen orders" />
-          {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="grid size-8 place-items-center rounded-lg hover:bg-white/10"><X size={15} /></button> : <kbd className="hidden rounded border border-white/10 px-1.5 py-0.5 text-[10px] text-white/25 sm:block">/</kbd>}
+        <label className="flex min-h-12 w-full items-center gap-2 rounded-2xl border border-[#ECECEC] bg-[#F8F9FA] px-4 focus-within:border-[#C41E19]/45 focus-within:bg-white focus-within:ring-2 focus-within:ring-[#C41E19]/10">
+          <Search size={17} className="shrink-0 text-[#9CA3AF]" />
+          <input ref={searchRef} value={query} onChange={event => setQuery(event.target.value)} placeholder="Search order, product, or reference…" className="min-w-0 flex-1 bg-transparent text-sm text-[#1F1F1F] outline-none placeholder:text-[#9CA3AF]" aria-label="Search kitchen orders" />
+          {query ? <button type="button" onClick={() => setQuery("")} aria-label="Clear search" className="grid size-8 place-items-center rounded-lg text-[#6B7280] hover:bg-[#C41E19]/5 hover:text-[#C41E19]"><X size={15} /></button> : <kbd className="hidden rounded border border-[#ECECEC] bg-white px-1.5 py-0.5 text-[10px] text-[#9CA3AF] sm:block">/</kbd>}
         </label>
       </div>
     </section>
@@ -248,19 +248,19 @@ const KitchenColumn = memo(function KitchenColumn({ column, orders, reducedMotio
   onReject: (order: KitchenOrder) => void;
   onCancel: (order: KitchenOrder) => void;
 }) {
-  return <section aria-labelledby={`kitchen-column-${column.id}`} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; onDragEnter(); }} onDrop={onDrop} className={`flex min-w-0 flex-col overflow-hidden rounded-[22px] border border-t-2 bg-white/[.025] transition-colors ${column.accent} ${dragActive ? "border-[#D7FB69]/45 bg-[#D7FB69]/[.045]" : "border-x-white/8 border-b-white/8"}`}>
-    <header className="flex min-h-[68px] items-center gap-3 border-b border-white/8 bg-[#0B0E0B] px-4 py-3">
+  return <section aria-labelledby={`kitchen-column-${column.id}`} onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; onDragEnter(); }} onDrop={onDrop} className={`flex min-w-0 flex-col overflow-hidden rounded-2xl border border-t-2 bg-white shadow-sm transition duration-200 hover:-translate-y-0.5 hover:shadow-md ${column.accent} ${dragActive ? "border-[#C41E19]/45 bg-[#C41E19]/5" : "border-x-[#ECECEC] border-b-[#ECECEC]"}`}>
+    <header className="flex min-h-[68px] items-center gap-3 border-b border-[#ECECEC] bg-[#F8F9FA] px-4 py-3">
       <span className={`grid size-9 place-items-center rounded-xl border ${column.badge}`}>{column.icon}</span>
-      <div><h2 id={`kitchen-column-${column.id}`} className="font-black">{column.label}</h2><p className="text-[11px] text-white/35">{column.description}</p></div>
-      <span className="ms-auto grid size-8 place-items-center rounded-full bg-white/8 text-sm font-black">{orders.length}</span>
+      <div><h2 id={`kitchen-column-${column.id}`} className="font-black text-[#1F1F1F]">{column.label}</h2><p className="text-[11px] text-[#6B7280]">{column.description}</p></div>
+      <span className="ms-auto grid size-8 place-items-center rounded-full bg-white text-sm font-black text-[#1F1F1F] shadow-sm">{orders.length}</span>
     </header>
     <div className="flex max-h-[calc(100vh-270px)] min-h-[280px] flex-1 flex-col gap-3 overflow-y-auto p-3" role="list">
       <AnimatePresence initial={false} mode="popLayout">
-        {orders.map(order => <motion.div key={order.id} layout={!reducedMotion} layoutId={reducedMotion ? undefined : `kitchen-order-${order.id}`} initial={reducedMotion ? false : { opacity: 0, y: 12, scale: .985 }} animate={reducedMotion ? undefined : { opacity: draggingId === order.id ? .45 : 1, y: 0, scale: 1, boxShadow: newIds.has(order.id) ? ["0 0 0 rgba(215,251,105,0)", "0 0 30px rgba(215,251,105,.28)", "0 0 0 rgba(215,251,105,0)"] : "0 0 0 rgba(215,251,105,0)" }} exit={reducedMotion ? undefined : { opacity: 0, scale: .98 }} transition={{ duration: reducedMotion ? 0 : .18, boxShadow: { duration: 1.4, repeat: newIds.has(order.id) ? 1 : 0 } }} role="listitem">
+        {orders.map(order => <motion.div key={order.id} layout={!reducedMotion} layoutId={reducedMotion ? undefined : `kitchen-order-${order.id}`} initial={reducedMotion ? false : { opacity: 0, y: 12, scale: .985 }} animate={reducedMotion ? undefined : { opacity: draggingId === order.id ? .45 : 1, y: 0, scale: 1 }} exit={reducedMotion ? undefined : { opacity: 0, scale: .98 }} transition={{ duration: reducedMotion ? 0 : .18 }} role="listitem">
           <OrderCard order={order} isNew={newIds.has(order.id)} reducedMotion={reducedMotion} pending={pendingId === order.id} onDragStart={onDragStart} onDragEnd={onDragEnd} onAdvance={onAdvance} onReject={onReject} onCancel={onCancel} />
         </motion.div>)}
       </AnimatePresence>
-      {orders.length === 0 ? <div className={`grid flex-1 place-items-center rounded-2xl border border-dashed px-6 text-center ${dragActive ? "border-[#D7FB69]/40 text-[#D7FB69]" : "border-white/8 text-white/25"}`}><div><Utensils size={30} className="mx-auto mb-3 opacity-45" /><p className="text-sm font-bold">{dragActive ? `Move to ${column.label}` : `No ${column.label.toLowerCase()} orders`}</p></div></div> : null}
+      {orders.length === 0 ? <div className={`grid flex-1 place-items-center rounded-2xl border border-dashed px-6 text-center ${dragActive ? "border-[#C41E19]/40 bg-[#C41E19]/5 text-[#C41E19]" : "border-[#ECECEC] text-[#9CA3AF]"}`}><div><Utensils size={30} className="mx-auto mb-3 opacity-45" /><p className="text-sm font-bold">{dragActive ? `Move to ${column.label}` : `No ${column.label.toLowerCase()} orders`}</p></div></div> : null}
     </div>
   </section>;
 });
@@ -297,13 +297,13 @@ const OrderCard = memo(function OrderCard({ order, isNew, reducedMotion, pending
     onKeyDown={keyboardAdvance}
     tabIndex={0}
     aria-label={`${displayNumber(order)}, ${columnLabel(order.status)}, ${totalItems} items`}
-    className={`group rounded-[20px] border bg-[#101410] p-4 shadow-lg shadow-black/20 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#D7FB69] ${style.border} ${canDrag ? "cursor-grab active:cursor-grabbing" : ""} ${isNew ? "ring-1 ring-[#D7FB69]/55" : ""}`}
+    className={`group rounded-2xl border bg-white p-4 shadow-[0_8px_24px_rgba(31,31,31,.07)] outline-none transition duration-200 hover:-translate-y-0.5 hover:shadow-md focus-visible:ring-2 focus-visible:ring-[#C41E19] ${style.border} ${canDrag ? "cursor-grab active:cursor-grabbing" : ""} ${isNew ? "ring-1 ring-[#C41E19]/55" : ""}`}
   >
     <div className="flex items-start gap-3">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
           <strong className="text-[28px] font-black leading-none tracking-[-.04em]">{displayNumber(order)}</strong>
-          {isNew ? <span className="rounded-md bg-[#D7FB69] px-2 py-1 text-[9px] font-black uppercase text-[#17200F]">New</span> : null}
+          {isNew ? <span className="rounded-md bg-[#C41E19] px-2 py-1 text-[9px] font-black uppercase text-white">New</span> : null}
         </div>
         <div className="mt-2 flex flex-wrap gap-1.5 text-[10px] font-bold uppercase tracking-wide">
           <Tag>{sourceLabel(order)}</Tag><Tag>{serviceLabel(order.type)}</Tag><Tag>{paymentLabel(order.paymentMethod)}</Tag>
@@ -315,36 +315,36 @@ const OrderCard = memo(function OrderCard({ order, isNew, reducedMotion, pending
       </div>
     </div>
 
-    <div className="my-3 h-px bg-white/8" />
+    <div className="my-3 h-px bg-[#F8F9FA]" />
     <div className="space-y-3">
       {order.items.map((item, index) => <div key={`${item.name}-${index}`}>
-        <div className="flex items-start gap-2.5"><span className="grid size-7 shrink-0 place-items-center rounded-lg bg-white/10 text-xs font-black">{item.qty}</span><p className="pt-1 text-sm font-bold leading-tight">{item.name}</p></div>
-        {item.customizations?.map(modifier => <p key={modifier} className="ms-9 mt-1 text-xs font-semibold text-[#D7FB69]">+ {modifier}</p>)}
-        {item.notes ? <p className="ms-9 mt-1 rounded-lg border border-amber-300/15 bg-amber-300/8 px-2 py-1.5 text-xs font-bold text-amber-200">Note: {item.notes}</p> : null}
-        {item.allergenWarnings?.map(allergen => <p key={allergen} className="ms-9 mt-1 rounded-lg border border-red-400/20 bg-red-500/10 px-2 py-1.5 text-xs font-black text-red-200">Allergy: {allergen}</p>)}
+        <div className="flex items-start gap-2.5"><span className="grid size-7 shrink-0 place-items-center rounded-lg bg-[#F8F9FA] text-xs font-black text-[#1F1F1F]">{item.qty}</span><p className="pt-1 text-sm font-bold leading-tight text-[#1F1F1F]">{item.name}</p></div>
+        {item.customizations?.map(modifier => <p key={modifier} className="ms-9 mt-1 text-xs font-semibold text-[#C41E19]">+ {modifier}</p>)}
+        {item.notes ? <p className="ms-9 mt-1 rounded-lg border border-[#C41E19]/20 bg-[#C41E19]/5 px-2 py-1.5 text-xs font-bold text-[#C41E19]">Note: {item.notes}</p> : null}
+        {item.allergenWarnings?.map(allergen => <p key={allergen} className="ms-9 mt-1 rounded-lg border border-[#C41E19]/20 bg-[#C41E19]/5 px-2 py-1.5 text-xs font-black text-[#C41E19]">Allergy: {allergen}</p>)}
       </div>)}
     </div>
-    {order.notes ? <div className="mt-3 rounded-xl border border-amber-300/20 bg-amber-300/8 p-2.5 text-xs font-bold text-amber-100"><span className="text-amber-300">Order note:</span> {order.notes}</div> : null}
+    {order.notes ? <div className="mt-3 rounded-xl border border-[#C41E19]/20 bg-[#C41E19]/5 p-2.5 text-xs font-bold text-[#C41E19]"><span className="text-[#C41E19]">Order note:</span> {order.notes}</div> : null}
 
-    <div className="mt-4 flex items-center justify-between border-t border-white/8 pt-3 text-xs"><span className="font-bold text-white/45">{totalItems} total item{totalItems === 1 ? "" : "s"}</span>{order.customer ? <span title={order.customer} className="max-w-[140px] truncate text-white/30">Ref · {shortReference(order.customer)}</span> : null}</div>
+    <div className="mt-4 flex items-center justify-between border-t border-[#ECECEC] pt-3 text-xs"><span className="font-bold text-[#6B7280]">{totalItems} total item{totalItems === 1 ? "" : "s"}</span>{order.customer ? <span title={order.customer} className="max-w-[140px] truncate text-[#9CA3AF]">Ref · {shortReference(order.customer)}</span> : null}</div>
 
-    {action ? <button type="button" disabled={pending} onClick={() => onAdvance(order)} className={`mt-3 min-h-12 w-full rounded-xl border px-4 text-sm font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D7FB69] disabled:cursor-wait disabled:opacity-45 ${order.databaseStatus === "ready" ? "border-[#D7FB69]/25 bg-[#D7FB69] text-[#17200F]" : "border-white/10 bg-white/[.07] text-white hover:bg-white/[.12]"}`}>{pending ? "Updating…" : action.label}</button> : null}
-    {!pending && order.databaseStatus === "submitted" ? <button type="button" onClick={() => onReject(order)} className="mt-2 min-h-10 w-full rounded-xl text-xs font-bold text-red-300/75 hover:bg-red-500/8 hover:text-red-200">Reject order</button> : null}
-    {!pending && (order.databaseStatus === "accepted" || order.databaseStatus === "preparing") ? <button type="button" onClick={() => onCancel(order)} className="mt-2 min-h-10 w-full rounded-xl text-xs font-bold text-red-300/75 hover:bg-red-500/8 hover:text-red-200">Cancel order</button> : null}
-    {canDrag ? <p className="mt-2 flex items-center justify-center gap-1 text-[10px] text-white/20"><GripVertical size={12} />Drag to the next column · Enter to advance</p> : null}
+    {action ? <button type="button" disabled={pending} onClick={() => onAdvance(order)} className={`mt-3 min-h-12 w-full rounded-xl border px-4 text-sm font-black transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19] disabled:cursor-wait disabled:opacity-45 ${order.databaseStatus === "ready" ? "border-[#C41E19] bg-[#C41E19] text-white hover:bg-[#A8161A]" : "border-[#ECECEC] bg-[#F8F9FA] text-[#1F1F1F] hover:border-[#C41E19]/25 hover:bg-[#C41E19]/5 hover:text-[#C41E19]"}`}>{pending ? "Updating…" : action.label}</button> : null}
+    {!pending && order.databaseStatus === "submitted" ? <button type="button" onClick={() => onReject(order)} className="mt-2 min-h-10 w-full rounded-xl border border-[#C41E19]/20 bg-white text-xs font-bold text-[#C41E19] hover:border-[#C41E19]/30 hover:bg-[#C41E19]/5 hover:text-[#C41E19]">Reject order</button> : null}
+    {!pending && (order.databaseStatus === "accepted" || order.databaseStatus === "preparing") ? <button type="button" onClick={() => onCancel(order)} className="mt-2 min-h-10 w-full rounded-xl border border-[#C41E19]/20 bg-white text-xs font-bold text-[#C41E19] hover:border-[#C41E19]/30 hover:bg-[#C41E19]/5 hover:text-[#C41E19]">Cancel order</button> : null}
+    {canDrag ? <p className="mt-2 flex items-center justify-center gap-1 text-[10px] text-[#9CA3AF]"><GripVertical size={12} />Drag to the next column · Enter to advance</p> : null}
   </article>;
 });
 
 function ConnectionBadge({ status }: { status: string }) {
   const connected = status === "connected";
-  return <span className={`flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-bold ${connected ? "border-emerald-400/15 bg-emerald-400/8 text-emerald-300" : "border-amber-300/15 bg-amber-300/8 text-amber-200"}`}><span className={`size-2 rounded-full ${connected ? "bg-emerald-400" : "animate-pulse bg-amber-300"}`} />{connected ? "Live" : status}</span>;
+  return <span className={`flex min-h-10 shrink-0 items-center gap-2 rounded-xl border px-3 text-xs font-bold ${connected ? "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]" : "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]"}`}><span className={`size-2 rounded-full ${connected ? "bg-[#C41E19]/50" : "animate-pulse bg-[#C41E19]/50"}`} />{connected ? "Live" : status}</span>;
 }
 
 function Metric({ label, value, color }: { label: string; value: number; color: string }) {
-  return <div className="min-w-[66px] border-s border-white/8 px-2.5 py-2 text-center first:border-0 sm:min-w-[76px] sm:px-3"><p className={`text-lg font-black leading-none tabular-nums ${color}`}>{value}</p><p className="mt-1 whitespace-nowrap text-[8px] font-black uppercase tracking-[.1em] text-white/30 sm:text-[9px]">{label}</p></div>;
+  return <div className="min-w-[66px] border-s border-[#ECECEC] px-2.5 py-2 text-center first:border-0 sm:min-w-[76px] sm:px-3"><p className={`text-lg font-black leading-none tabular-nums ${color}`}>{value}</p><p className="mt-1 whitespace-nowrap text-[8px] font-black uppercase tracking-[.1em] text-[#9CA3AF] sm:text-[9px]">{label}</p></div>;
 }
 
-function Tag({ children }: { children: ReactNode }) { return <span className="rounded-md border border-white/8 bg-white/[.05] px-2 py-1 text-white/50">{children}</span>; }
+function Tag({ children }: { children: ReactNode }) { return <span className="rounded-md border border-[#ECECEC] bg-[#F8F9FA] px-2 py-1 text-[#6B7280]">{children}</span>; }
 function displayNumber(order: KitchenOrder) { return order.orderNumber ?? `#${order.number}`; }
 function sourceLabel(order: KitchenOrder) { return order.source === "cashier" ? "Cashier" : "Kiosk"; }
 function serviceLabel(type: KitchenOrder["type"]) { return type === "take_away" ? "Take Away" : "Dine In"; }

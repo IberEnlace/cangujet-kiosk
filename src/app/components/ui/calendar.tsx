@@ -16,12 +16,12 @@ function Calendar({
   return (
     <DayPicker
       showOutsideDays={showOutsideDays}
-      className={cn("p-3", className)}
+      className={cn("rounded-2xl bg-white p-4", className)}
       classNames={{
         months: "flex flex-col sm:flex-row gap-2",
         month: "flex flex-col gap-4",
         caption: "flex justify-center pt-1 relative items-center w-full",
-        caption_label: "text-sm font-medium",
+        caption_label: "text-sm font-semibold text-foreground",
         nav: "flex items-center gap-1",
         nav_button: cn(
           buttonVariants({ variant: "outline" }),
@@ -32,17 +32,17 @@ function Calendar({
         table: "w-full border-collapse space-x-1",
         head_row: "flex",
         head_cell:
-          "text-muted-foreground rounded-md w-8 font-normal text-[0.8rem]",
+          "text-muted-foreground w-9 rounded-lg font-medium text-[0.75rem]",
         row: "flex w-full mt-2",
         cell: cn(
-          "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-range-end)]:rounded-r-md",
+          "relative p-0 text-center text-sm focus-within:relative focus-within:z-20 [&:has([aria-selected])]:bg-accent [&:has([aria-selected].day-range-end)]:rounded-r-lg",
           props.mode === "range"
-            ? "[&:has(>.day-range-end)]:rounded-r-md [&:has(>.day-range-start)]:rounded-l-md first:[&:has([aria-selected])]:rounded-l-md last:[&:has([aria-selected])]:rounded-r-md"
-            : "[&:has([aria-selected])]:rounded-md",
+            ? "[&:has(>.day-range-end)]:rounded-r-lg [&:has(>.day-range-start)]:rounded-l-lg first:[&:has([aria-selected])]:rounded-l-lg last:[&:has([aria-selected])]:rounded-r-lg"
+            : "[&:has([aria-selected])]:rounded-lg",
         ),
         day: cn(
           buttonVariants({ variant: "ghost" }),
-          "size-8 p-0 font-normal aria-selected:opacity-100",
+          "size-9 rounded-lg p-0 font-normal aria-selected:opacity-100",
         ),
         day_range_start:
           "day-range-start aria-selected:bg-primary aria-selected:text-primary-foreground",

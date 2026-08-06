@@ -19,10 +19,10 @@ type Workspace = {
 
 const WORKSPACES: readonly Workspace[] = [
   { id: "customer", title: "Customer Kiosk", description: "Start a new guest order with a fast, guided self-service experience.", icon: TabletSmartphone, accent: "#C41E19", accentRgb: "196,30,25", defaultRemember: true },
-  { id: "admin", title: "Admin", description: "Manage performance, menus, locations, integrations, and platform settings.", icon: BarChart3, accent: "#3B82F6", accentRgb: "59,130,246", defaultRemember: false },
-  { id: "cashier", title: "Cashier", description: "Create orders, accept payments, print receipts, and manage the register.", icon: ReceiptText, accent: "#7C3AED", accentRgb: "124,58,237", defaultRemember: false },
-  { id: "kitchen", title: "Kitchen", description: "Receive live orders and manage preparation status from one focused view.", icon: ChefHat, accent: "#EA580C", accentRgb: "234,88,12", defaultRemember: false },
-  { id: "display", title: "Order Display", description: "Show preparing and ready order numbers on a clear public-facing screen.", icon: Monitor, accent: "#059669", accentRgb: "5,150,105", defaultRemember: true },
+  { id: "admin", title: "Admin", description: "Manage performance, menus, locations, integrations, and platform settings.", icon: BarChart3, accent: "#C41E19", accentRgb: "196,30,25", defaultRemember: false },
+  { id: "cashier", title: "Cashier", description: "Create orders, accept payments, print receipts, and manage the register.", icon: ReceiptText, accent: "#C41E19", accentRgb: "196,30,25", defaultRemember: false },
+  { id: "kitchen", title: "Kitchen", description: "Receive live orders and manage preparation status from one focused view.", icon: ChefHat, accent: "#C41E19", accentRgb: "196,30,25", defaultRemember: false },
+  { id: "display", title: "Order Display", description: "Show preparing and ready order numbers on a clear public-facing screen.", icon: Monitor, accent: "#C41E19", accentRgb: "196,30,25", defaultRemember: true },
 ] as const;
 
 const ease = [0.22, 1, 0.36, 1] as const;
@@ -41,7 +41,6 @@ function RestaurantBackground({ reducedMotion }: { reducedMotion: boolean }) {
       <defs>
         <radialGradient id="map-fade"><stop offset="54%" stopColor="white" /><stop offset="100%" stopColor="black" /></radialGradient>
         <mask id="map-mask"><rect width="1200" height="690" fill="url(#map-fade)" /></mask>
-        <filter id="map-pulse-glow"><feGaussianBlur stdDeviation="2.8" result="b" /><feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge></filter>
       </defs>
       <g mask="url(#map-mask)" className="restaurant-map__plan">
         <rect x="75" y="145" width="1050" height="430" rx="42" />
@@ -60,7 +59,7 @@ function RestaurantBackground({ reducedMotion }: { reducedMotion: boolean }) {
         <path id="service-flow" d="M207 300 C345 390 520 305 650 252 S865 205 1029 280" />
         <path id="admin-flow" d="M445 420 C590 555 835 555 1029 385" />
       </g>
-      {!reducedMotion && <g className="restaurant-map__pulses" filter="url(#map-pulse-glow)">
+      {!reducedMotion && <g className="restaurant-map__pulses">
         <circle r="3"><animateMotion dur="14s" repeatCount="indefinite"><mpath href="#order-flow" /></animateMotion></circle>
         <circle r="2.5"><animateMotion dur="12s" begin="-5s" repeatCount="indefinite"><mpath href="#service-flow" /></animateMotion></circle>
         <circle r="2"><animateMotion dur="16s" begin="-9s" repeatCount="indefinite"><mpath href="#admin-flow" /></animateMotion></circle>

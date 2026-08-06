@@ -9,9 +9,9 @@ import "./StaffLogin.css";
 type Props = { role: StaffRole; title: string; description: string; onSuccess: () => void; onBack: () => void };
 
 const ROLE_META = {
-  admin: { accent: "#3B82F6", rgb: "59,130,246", label: "Restaurant intelligence", statement: "See every signal. Shape every outcome.", icon: BarChart3 },
-  cashier: { accent: "#7C3AED", rgb: "124,58,237", label: "Point of sale", statement: "Every order, payment, and guest—moving together.", icon: ReceiptText },
-  kitchen: { accent: "#EA580C", rgb: "234,88,12", label: "Kitchen operations", statement: "From incoming ticket to ready for service.", icon: ChefHat },
+  admin: { accent: "#C41E19", rgb: "196,30,25", label: "Restaurant intelligence", statement: "See every signal. Shape every outcome.", icon: BarChart3 },
+  cashier: { accent: "#C41E19", rgb: "196,30,25", label: "Point of sale", statement: "Every order, payment, and guest—moving together.", icon: ReceiptText },
+  kitchen: { accent: "#C41E19", rgb: "196,30,25", label: "Kitchen operations", statement: "From incoming ticket to ready for service.", icon: ChefHat },
 } as const;
 
 function AdminEnvironment() {
@@ -58,7 +58,6 @@ export default function StaffLogin({ role, title, description, onSuccess, onBack
 
   return <main className={`auth-page auth-page--${role}`} style={{ "--role-accent": meta.accent, "--role-rgb": meta.rgb } as React.CSSProperties}>
     <section className="auth-environment-panel">
-      <div className="auth-ambient" aria-hidden="true"><i /><i /><span /></div>
       <motion.div {...enter(.04)} className="auth-brand"><CangujetLogo variant="full" priority className="auth-brand__logo" /><span>{meta.label}</span></motion.div>
       <motion.div {...enter(.08, 0, 12)} className="auth-role-scene"><RoleEnvironment role={role} /></motion.div>
       <motion.div {...enter(.18)} className="auth-environment-copy"><span><RoleIcon size={15} /> {role} workspace</span><h2>{meta.statement}</h2><p>cangujet kiosk platform</p></motion.div>
@@ -67,7 +66,6 @@ export default function StaffLogin({ role, title, description, onSuccess, onBack
     <section className="auth-form-panel">
       <motion.button {...enter(.08)} onClick={onBack} className="auth-back"><ArrowLeft size={15}/> Back to role selection</motion.button>
       <motion.form {...enter(.18, 18)} onSubmit={submit} className="auth-card">
-        <div className="auth-card__glow" aria-hidden="true" />
         <div className="auth-lock"><LockKeyhole size={19}/></div>
         <p className="auth-eyebrow">{role} workspace</p><h1>{title}</h1><p className="auth-description">{description}</p>
         <motion.div {...enter(.28, 0, 8)} className="auth-field"><label htmlFor={`${role}-email`}>Email or employee ID</label><input id={`${role}-email`} autoFocus value={email} onChange={e=>setEmail(e.target.value)} type="email" required placeholder={`${role}@cangujet.local`}/></motion.div>

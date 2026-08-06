@@ -188,7 +188,7 @@ function Application() {
     workspaceNavigationDiagnostic({ route: WORKSPACE_SELECTION_ROUTE, persistedWorkspace, selectionOverrideActive: true, redirectSource: source, redirectAllowed: true });
     navigateTo(WORKSPACE_SELECTION_ROUTE, true);
   }, [auth.clearDeviceMode, persistedWorkspace]);
-  const customerViewport = (child: ReactNode) => <div className="min-h-[100dvh] bg-[#050705]"><div className="mx-auto min-h-[100dvh] w-full max-w-[1080px] shadow-[0_0_80px_rgba(0,0,0,.35)]">{child}</div></div>;
+  const customerViewport = (child: ReactNode) => <div className="min-h-[100dvh] bg-[#F8F9FA]"><div className="mx-auto min-h-[100dvh] w-full max-w-[1080px] bg-white shadow-[0_16px_48px_rgba(31,31,31,.08)]">{child}</div></div>;
   const staffPage = (role: StaffRole, child: ReactNode) => <StaffLayout role={role} onLoggedOut={() => navigateTo(getLoginRouteForRole(role))} onChangeMode={() => enterWorkspaceSelection(`${role}_change_mode`)}>{child}</StaffLayout>;
 
   useEffect(() => {
@@ -320,5 +320,5 @@ function deviceCanOpenRoute(type: import("../shared/deviceBootstrap").BootstrapD
 
 function AdminSessionGate({ networkError, onRetry, onLogin }: { networkError: boolean; onRetry: () => void; onLogin: () => void }) {
   if (!networkError) return <DeviceLoadingScreen />;
-  return <main className="grid min-h-[100dvh] place-items-center bg-[#080c08] px-5 text-white"><section role="alert" className="w-full max-w-md rounded-3xl border border-amber-300/15 bg-[#101610] p-8 text-center shadow-2xl"><h1 className="text-2xl font-black tracking-[-.04em]">Unable to verify staff session</h1><p className="mt-3 text-sm leading-6 text-white/45">The authentication service could not be reached. Your session was not cleared.</p><div className="mt-6 flex justify-center gap-3"><button type="button" onClick={onRetry} className="min-h-12 rounded-2xl bg-[#d7fb69] px-5 text-sm font-black text-[#17200f]">Retry connection</button><button type="button" onClick={onLogin} className="min-h-12 rounded-2xl border border-white/10 px-5 text-sm font-bold text-white/60">Sign in again</button></div></section></main>;
+  return <main className="grid min-h-[100dvh] place-items-center bg-[#F8F9FA] px-5 text-[#1F1F1F]"><section role="alert" className="w-full max-w-md rounded-2xl border border-[#ECECEC] bg-white p-8 text-center shadow-[0_16px_40px_rgba(31,31,31,.08)]"><h1 className="text-2xl font-bold tracking-[-.03em]">Unable to verify staff session</h1><p className="mt-3 text-sm leading-6 text-[#6B7280]">The authentication service could not be reached. Your session was not cleared.</p><div className="mt-6 flex justify-center gap-3"><button type="button" onClick={onRetry} className="min-h-12 rounded-xl bg-[#C41E19] px-5 text-sm font-bold text-white shadow-sm transition hover:bg-[#A8161A] active:scale-[.98]">Retry connection</button><button type="button" onClick={onLogin} className="min-h-12 rounded-xl border border-[#ECECEC] bg-white px-5 text-sm font-semibold text-[#1F1F1F] shadow-sm transition hover:bg-[#F8F9FA] active:scale-[.98]">Sign in again</button></div></section></main>;
 }

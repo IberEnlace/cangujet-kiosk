@@ -1,12 +1,8 @@
-@custom-variant dark (&:is(.dark *));
-
 :root {
   --font-size: 16px;
-  /* Cangujet brand colors */
+  /* Cangujet brand color */
   --brand-red: #C41E19;
   --brand-red-hover: #A8161A;
-  --brand-green: #1B6B2D;
-  --brand-tan: #C5A063;
 
   /* Base theme — clean white */
   --background: #FFFFFF;
@@ -21,26 +17,26 @@
   --primary-foreground: #FFFFFF;
 
   /* Secondary */
-  --secondary: #F5F5F5;
+  --secondary: #F8F9FA;
   --secondary-foreground: #1F1F1F;
 
   /* Muted / subtle */
-  --muted: #F9FAFB;
+  --muted: #F8F9FA;
   --muted-foreground: #6B7280;
 
   /* Accent */
-  --accent: #FEF2F2;
+  --accent: #F8F9FA;
   --accent-foreground: #C41E19;
 
   /* Destructive */
-  --destructive: #EF4444;
+  --destructive: #C41E19;
   --destructive-foreground: #FFFFFF;
 
   /* Borders & inputs */
   --border: #ECECEC;
-  --input: #FFFFFF;
-  --input-background: #F9FAFB;
-  --switch-background: #D1D5DB;
+  --input: #ECECEC;
+  --input-background: #FFFFFF;
+  --switch-background: #ECECEC;
 
   /* Focus ring */
   --ring: #C41E19;
@@ -49,12 +45,12 @@
   --font-weight-medium: 500;
   --font-weight-normal: 400;
 
-  /* Charts (keep semantic colors) */
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
+  /* Charts use brand red and neutral tones only. */
+  --chart-1: #C41E19;
+  --chart-2: #A8161A;
+  --chart-3: #1F1F1F;
+  --chart-4: #6B7280;
+  --chart-5: #9CA3AF;
 
   /* Radius */
   --radius: 0.75rem;
@@ -64,7 +60,7 @@
   --sidebar-foreground: #1F1F1F;
   --sidebar-primary: #C41E19;
   --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #F5F5F5;
+  --sidebar-accent: #F8F9FA;
   --sidebar-accent-foreground: #1F1F1F;
   --sidebar-border: #ECECEC;
   --sidebar-ring: #C41E19;
@@ -103,6 +99,7 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 4px);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -119,7 +116,7 @@
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply min-h-screen bg-background text-foreground antialiased;
   }
 
   html {
@@ -161,7 +158,7 @@
     font-size: var(--text-sm);
     font-weight: 500;
     line-height: 1.5;
-    color: #374151;
+    color: var(--foreground);
   }
 
   button {
@@ -176,5 +173,24 @@
     font-weight: var(--font-weight-normal);
     line-height: 1.5;
     font-family: inherit;
+  }
+}
+
+@keyframes cangujet-card-enter {
+  from { opacity: 0; transform: translateY(4px) scale(.995); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes cangujet-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-slot] {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
 }

@@ -13,7 +13,7 @@ function Avatar({
     <AvatarPrimitive.Root
       data-slot="avatar"
       className={cn(
-        "relative flex size-10 shrink-0 overflow-hidden rounded-full",
+        "relative flex size-10 shrink-0 overflow-hidden rounded-full border border-border bg-white shadow-sm",
         className,
       )}
       {...props}
@@ -42,7 +42,7 @@ function AvatarFallback({
     <AvatarPrimitive.Fallback
       data-slot="avatar-fallback"
       className={cn(
-        "bg-muted flex size-full items-center justify-center rounded-full",
+        "bg-secondary text-muted-foreground flex size-full items-center justify-center rounded-full text-sm font-semibold",
         className,
       )}
       {...props}

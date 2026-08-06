@@ -53,19 +53,19 @@ export default function MockQrPayment({ sessionId }: { sessionId: string }) {
     : "—", [session]);
   const finished = session ? terminal(session.status) : false;
 
-  return <main className="min-h-[100dvh] bg-[#070a07] px-5 py-8 font-['Plus_Jakarta_Sans'] text-[#f4f5ef]">
+  return <main className="min-h-[100dvh] bg-[#F8F9FA] px-5 py-8 text-[#1F1F1F]">
     <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-xl flex-col">
       <header className="flex items-center justify-between gap-4">
         <MorrowLogo variant="full" priority className="h-auto w-36" />
-        <span className="rounded-full border border-amber-300/25 bg-amber-300/10 px-4 py-2 text-xs font-black uppercase tracking-wide text-amber-200">Development Mode — No Real Money</span>
+        <span className="rounded-full border border-[#C41E19]/25 bg-[#FFFFFF] px-4 py-2 text-xs font-black uppercase tracking-wide text-[#C41E19] shadow-[0_3px_10px_rgba(31,31,31,.04)]">Development Mode — No Real Money</span>
       </header>
 
       <section className="my-auto py-10 text-center" aria-live="polite">
         <div className="mx-auto grid size-20 place-items-center rounded-[24px] bg-[#C41E19]/10 text-[#C41E19]"><TestTube2 size={38} /></div>
         <h1 className="mt-6 text-4xl font-black tracking-[-.04em]">MORROW Mock Payment</h1>
-        <p className="mt-2 text-white/45">Local payment simulator for development and testing.</p>
+        <p className="mt-2 text-[#6B7280]">Local payment simulator for development and testing.</p>
 
-        {session ? <div className="mt-8 rounded-[28px] border border-white/10 bg-white/[.045] p-6 text-start shadow-2xl shadow-black/30">
+        {session ? <div className="mt-8 rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] p-6 text-start shadow-[0_8px_24px_rgba(31,31,31,.06)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(31,31,31,.08)]">
           <div className="grid grid-cols-2 gap-5">
             <Detail label="Order number" value={session.orderNumber} />
             <Detail label="Amount" value={money} accent />
@@ -75,16 +75,16 @@ export default function MockQrPayment({ sessionId }: { sessionId: string }) {
           {session.status === "paid" ? <Status icon={<Check size={34} />} title="Payment simulated successfully" copy="The kiosk will continue to the receipt and Kitchen will receive the submitted order." success /> : null}
           {session.status === "failed" || session.status === "expired" ? <Status icon={<XCircle size={34} />} title={session.status === "expired" ? "Session expired" : "Payment failed"} copy="No payment was captured and the order was not submitted." /> : null}
           {session.status === "cancelled" ? <Status icon={<Ban size={34} />} title="Payment cancelled" copy="The order remains outside Kitchen." /> : null}
-        </div> : <div className="mt-10 flex items-center justify-center gap-3 text-white/55"><Loader2 className="animate-spin" />Loading mock session…</div>}
+        </div> : <div className="mt-10 flex items-center justify-center gap-3 text-[#6B7280]"><Loader2 className="animate-spin text-[#C41E19]" />Loading mock session…</div>}
 
-        {error ? <p role="alert" className="mt-5 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">{error}</p> : null}
+        {error ? <p role="alert" className="mt-5 rounded-2xl border border-[#C41E19]/25 bg-[#C41E19]/5 px-4 py-3 text-sm text-[#C41E19]">{error}</p> : null}
       </section>
 
-      {session && !finished ? <footer className="grid gap-3 border-t border-white/10 pt-5">
-        <button type="button" disabled={busy} onClick={() => void act("success")} className="min-h-16 rounded-2xl bg-[#C41E19] px-5 text-lg font-black text-[#FFFFFF] disabled:opacity-50">{busy ? <Loader2 size={20} className="me-2 inline animate-spin" /> : <Check size={20} className="me-2 inline" />}Simulate Payment Success</button>
+      {session && !finished ? <footer className="grid gap-3 border-t border-[#ECECEC] pt-5">
+        <button type="button" disabled={busy} onClick={() => void act("success")} className="min-h-16 rounded-2xl bg-[#C41E19] px-5 text-lg font-black text-[#FFFFFF] shadow-[0_8px_20px_rgba(196,30,25,.18)] transition hover:-translate-y-0.5 hover:bg-[#A8161A] active:scale-[.98] disabled:opacity-50">{busy ? <Loader2 size={20} className="me-2 inline animate-spin" /> : <Check size={20} className="me-2 inline" />}Simulate Payment Success</button>
         <div className="grid grid-cols-2 gap-3">
-          <button type="button" disabled={busy} onClick={() => void act("fail")} className="min-h-14 rounded-2xl border border-red-400/20 bg-red-500/10 px-4 font-bold text-red-200 disabled:opacity-50">Simulate Failure</button>
-          <button type="button" disabled={busy} onClick={() => void act("cancel")} className="min-h-14 rounded-2xl border border-white/15 bg-white/[.04] px-4 font-bold disabled:opacity-50">Cancel Payment</button>
+          <button type="button" disabled={busy} onClick={() => void act("fail")} className="min-h-14 rounded-2xl border border-[#C41E19] bg-[#FFFFFF] px-4 font-bold text-[#C41E19] transition hover:-translate-y-0.5 hover:bg-[#C41E19] hover:text-[#FFFFFF] active:scale-[.98] disabled:opacity-50">Simulate Failure</button>
+          <button type="button" disabled={busy} onClick={() => void act("cancel")} className="min-h-14 rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] px-4 font-bold text-[#1F1F1F] transition hover:-translate-y-0.5 hover:bg-[#F8F9FA] active:scale-[.98] disabled:opacity-50">Cancel Payment</button>
         </div>
       </footer> : null}
     </div>
@@ -92,11 +92,11 @@ export default function MockQrPayment({ sessionId }: { sessionId: string }) {
 }
 
 function Detail({ label, value, accent = false, icon }: { label: string; value: string; accent?: boolean; icon?: React.ReactNode }) {
-  return <div><p className="text-xs font-bold uppercase tracking-[.16em] text-white/35">{label}</p><p className={`mt-1 flex items-center gap-2 text-xl font-black capitalize ${accent ? "text-[#C41E19]" : ""}`}>{icon}{value}</p></div>;
+  return <div><p className="text-xs font-bold uppercase tracking-[.16em] text-[#9CA3AF]">{label}</p><p className={`mt-1 flex items-center gap-2 text-xl font-black capitalize ${accent ? "text-[#C41E19]" : "text-[#1F1F1F]"}`}>{icon}{value}</p></div>;
 }
 
 function Status({ icon, title, copy, success = false }: { icon: React.ReactNode; title: string; copy: string; success?: boolean }) {
-  return <div className={`mt-6 rounded-2xl border p-4 text-center ${success ? "border-[#C41E19]/20 bg-[#C41E19]/8 text-[#C41E19]" : "border-white/10 bg-black/15 text-white/70"}`}><div className="flex justify-center">{icon}</div><p className="mt-2 font-black">{title}</p><p className="mt-1 text-sm opacity-70">{copy}</p></div>;
+  return <div className={`mt-6 rounded-2xl border p-4 text-center ${success ? "border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]" : "border-[#C41E19]/25 bg-[#FFFFFF] text-[#C41E19]"}`}><div className="flex justify-center">{icon}</div><p className="mt-2 font-black">{title}</p><p className="mt-1 text-sm text-[#6B7280]">{copy}</p></div>;
 }
 
 function terminal(status: QrPaymentSession["status"]) { return ["paid", "expired", "cancelled", "failed"].includes(status); }

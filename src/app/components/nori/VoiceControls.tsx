@@ -2,7 +2,7 @@ import { MessageSquareText, Pause, Play, Square, X } from "lucide-react";
 import type { VoiceStatus } from "../../hooks/useNoriVoiceSession";
 import type { NoriCopy } from "../../pages/nori/noriCopy";
 
-const controlClass = "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-semibold text-white/80 transition hover:border-white/20 hover:bg-white/8 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#D7FB69]/70 disabled:cursor-not-allowed disabled:opacity-35";
+const controlClass = "inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-[#ECECEC] bg-white px-4 text-sm font-semibold text-[#1F1F1F] shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#C41E19]/25 hover:bg-[#F8F9FA] hover:shadow-md active:translate-y-0 active:scale-[.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#C41E19]/10 disabled:cursor-not-allowed disabled:opacity-40";
 
 export function VoiceControls({ copy, status, canResume, onPause, onResume, onStopSpeaking, onEnd, onChat }: {
   copy: NoriCopy;

@@ -27,17 +27,17 @@ export default function NoriVoiceConversation({ onBack, onText, onEnd }: {
   };
 
   return (
-    <main dir={direction} className="flex min-h-[100dvh] min-w-0 flex-col overflow-x-hidden bg-[#0B0D0A] font-['DM_Sans'] text-white">
-      <header className="flex items-center gap-3 border-b border-white/8 px-4 py-3 sm:px-7 sm:py-5">
-        <button type="button" onClick={() => leave(onBack)} aria-label={text.back} className="grid size-11 place-items-center rounded-xl border border-white/8 bg-white/5 transition hover:bg-white/8 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#D7FB69]/70">
+    <main dir={direction} className="flex min-h-[100dvh] min-w-0 flex-col overflow-x-hidden bg-[#F8F9FA] text-[#1F1F1F]">
+      <header className="flex items-center gap-3 border-b border-[#ECECEC] bg-white px-4 py-3 shadow-sm sm:px-7 sm:py-5">
+        <button type="button" onClick={() => leave(onBack)} aria-label={text.back} className="grid size-11 place-items-center rounded-xl border border-[#ECECEC] bg-white shadow-sm transition hover:bg-[#F8F9FA] active:scale-[.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#C41E19]/10">
           <ArrowLeft aria-hidden="true" />
         </button>
-        <span className="grid size-11 place-items-center rounded-xl border border-[#D7FB69]/15 bg-[#D7FB69]/10 text-[#D7FB69]"><Sparkles aria-hidden="true" /></span>
+        <span className="grid size-11 place-items-center rounded-xl border border-[#C41E19]/15 bg-[#C41E19]/5 text-[#C41E19]"><Sparkles aria-hidden="true" /></span>
         <div>
           <h1 className="font-bold">Nori AI</h1>
-          <p className="text-xs text-white/40">{text.voice}</p>
+          <p className="text-xs text-[#6B7280]">{text.voice}</p>
         </div>
-        <button type="button" onClick={() => leave(onEnd)} aria-label={text.end} className="ms-auto grid size-11 place-items-center rounded-xl border border-white/8 bg-white/5 transition hover:bg-white/8 focus-visible:outline focus-visible:outline-4 focus-visible:outline-[#D7FB69]/70">
+        <button type="button" onClick={() => leave(onEnd)} aria-label={text.end} className="ms-auto grid size-11 place-items-center rounded-xl border border-[#ECECEC] bg-white shadow-sm transition hover:bg-[#F8F9FA] active:scale-[.98] focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-[#C41E19]/10">
           <X aria-hidden="true" />
         </button>
       </header>

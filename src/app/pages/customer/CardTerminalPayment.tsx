@@ -155,7 +155,7 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
 
   const isActive = status === "waiting" || status === "reading" || status === "processing";
   const canRetry = status === "declined" || status === "timeout" || status === "terminal_unavailable";
-  const statusIcon = status === "approved" ? <Check size={36} /> : canRetry ? <X size={32} /> : <span className="size-4 animate-pulse rounded-full bg-[#d7ff7a]" />;
+  const statusIcon = status === "approved" ? <Check size={36} /> : canRetry ? <X size={32} /> : <span className="size-4 animate-pulse rounded-full bg-[#C41E19]" />;
 
   useEffect(() => {
     if (!animation) return;
@@ -164,11 +164,11 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
   }, [animation, isActive, status]);
 
   return (
-    <main dir={direction} className="min-h-[100dvh] bg-[#080b08] font-['Plus_Jakarta_Sans'] text-[#f0f0eb]">
+    <main dir={direction} className="min-h-[100dvh] bg-[#F8F9FA] text-[#1F1F1F]">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[900px] flex-col px-5 py-6 sm:px-10 sm:py-10">
         <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3"><MorrowLogo variant="symbol" priority className="size-12 object-contain" /><p className="text-xs text-white/40">Secure terminal payment</p></div>
-          <p className="text-xl font-bold text-[#d7ff7a] sm:text-2xl">{currency.format(authoritativeTotal)}</p>
+          <div className="flex items-center gap-3"><MorrowLogo variant="symbol" priority className="size-12 object-contain" /><p className="text-xs text-[#6B7280]">Secure terminal payment</p></div>
+          <p className="text-xl font-bold text-[#C41E19] sm:text-2xl">{currency.format(authoritativeTotal)}</p>
         </header>
 
         <section className="flex flex-1 flex-col items-center justify-center py-10 text-center">
@@ -182,20 +182,20 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
               style={{ width: "100%", height: "100%", objectFit: "contain", background: "transparent" }}
             />
           </div>
-          <h1 className="mt-7 max-w-2xl text-4xl font-bold leading-[1.05] tracking-[-.045em] text-white sm:text-6xl">{copy.instruction}</h1>
-          <p className="mt-5 max-w-xl text-base leading-7 text-white/45 sm:text-xl">{copy.helper}</p>
+          <h1 className="mt-7 max-w-2xl text-4xl font-bold leading-[1.05] tracking-[-.045em] text-[#1F1F1F] sm:text-6xl">{copy.instruction}</h1>
+          <p className="mt-5 max-w-xl text-base leading-7 text-[#6B7280] sm:text-xl">{copy.helper}</p>
 
-          <div role="status" aria-live="polite" className={`mt-7 flex min-h-20 w-full max-w-2xl items-center justify-center gap-4 rounded-2xl border px-5 ${status === "approved" ? "border-[#d7ff7a]/30 bg-[#d7ff7a]/10 text-[#d7ff7a]" : canRetry ? "border-red-400/25 bg-red-500/10 text-red-300" : "border-white/10 bg-white/[.04]"}`}>
+          <div role="status" aria-live="polite" className={`mt-7 flex min-h-20 w-full max-w-2xl items-center justify-center gap-4 rounded-2xl border bg-[#FFFFFF] px-5 shadow-[0_8px_24px_rgba(31,31,31,.06)] ${status === "approved" ? "border-[#C41E19]/30 text-[#C41E19]" : canRetry ? "border-[#C41E19]/30 text-[#C41E19]" : "border-[#ECECEC] text-[#1F1F1F]"}`}>
             {statusIcon}<div className="text-start"><p className="text-lg font-bold">{statusLabels[status]}</p>{status === "approved" && <p className="text-sm opacity-70">{copy.paid}: {currency.format(authoritativeTotal)}</p>}{status === "declined" && <p className="max-w-md text-xs opacity-70">{copy.declinedHelp}</p>}{status === "timeout" && <p className="max-w-md text-xs opacity-70">{copy.timeoutHelp}</p>}</div>
           </div>
         </section>
 
         <div className="grid gap-3 sm:grid-cols-2">
-          {canRetry && <button type="button" onClick={startTerminalPayment} className="min-h-16 rounded-2xl bg-[#d7ff7a] px-6 text-lg font-bold text-[#FFFFFF]">{copy.tryAgain}</button>}
-          <button type="button" onClick={cancel} disabled={status === "approved"} className={`min-h-16 rounded-2xl border border-white/15 px-6 text-lg font-bold transition hover:bg-white/10 disabled:opacity-30 ${canRetry ? "" : "sm:col-span-2"}`}><ArrowLeft className="me-2 inline" size={20} />{isActive ? copy.cancel : copy.backToPaymentMethods}</button>
+          {canRetry && <button type="button" onClick={startTerminalPayment} className="min-h-16 rounded-2xl bg-[#C41E19] px-6 text-lg font-bold text-[#FFFFFF] shadow-[0_8px_20px_rgba(196,30,25,.18)] transition hover:-translate-y-0.5 hover:bg-[#A8161A] active:scale-[.98]">{copy.tryAgain}</button>}
+          <button type="button" onClick={cancel} disabled={status === "approved"} className={`min-h-16 rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] px-6 text-lg font-bold text-[#1F1F1F] transition hover:-translate-y-0.5 hover:bg-[#F8F9FA] active:scale-[.98] disabled:opacity-30 ${canRetry ? "" : "sm:col-span-2"}`}><ArrowLeft className="me-2 inline" size={20} />{isActive ? copy.cancel : copy.backToPaymentMethods}</button>
         </div>
 
-        {import.meta.env.DEV && isActive && <div className="mt-4 flex justify-center gap-2 opacity-45"><button type="button" onClick={() => terminal.simulate("approved")} className="rounded-lg border border-white/10 px-3 py-2 text-xs">Approve</button><button type="button" onClick={() => terminal.simulate("declined")} className="rounded-lg border border-white/10 px-3 py-2 text-xs">Decline</button><button type="button" onClick={() => terminal.simulate("terminal_unavailable")} className="rounded-lg border border-white/10 px-3 py-2 text-xs">Unavailable</button></div>}
+        {import.meta.env.DEV && isActive && <div className="mt-4 flex justify-center gap-2 opacity-60"><button type="button" onClick={() => terminal.simulate("approved")} className="rounded-xl border border-[#ECECEC] bg-[#FFFFFF] px-3 py-2 text-xs text-[#6B7280] transition hover:-translate-y-0.5 hover:bg-[#F8F9FA] hover:text-[#1F1F1F] active:scale-[.98]">Approve</button><button type="button" onClick={() => terminal.simulate("declined")} className="rounded-xl border border-[#ECECEC] bg-[#FFFFFF] px-3 py-2 text-xs text-[#6B7280] transition hover:-translate-y-0.5 hover:bg-[#F8F9FA] hover:text-[#1F1F1F] active:scale-[.98]">Decline</button><button type="button" onClick={() => terminal.simulate("terminal_unavailable")} className="rounded-xl border border-[#ECECEC] bg-[#FFFFFF] px-3 py-2 text-xs text-[#6B7280] transition hover:-translate-y-0.5 hover:bg-[#F8F9FA] hover:text-[#1F1F1F] active:scale-[.98]">Unavailable</button></div>}
       </div>
     </main>
   );

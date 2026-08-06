@@ -61,38 +61,38 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
   const totalPrice = unitPrice * quantity;
 
   return (
-    <main className="min-h-screen bg-[#090b08] text-[#f7f5ee] font-['DM_Sans'] flex flex-col justify-between relative selection:bg-[#d7ff7a]/30">
+    <main className="relative flex min-h-screen flex-col justify-between bg-[#F8F9FA] text-[#1F1F1F] selection:bg-[#C41E19]/10">
       
       {/* Background Ambience */}
-      <div className="absolute top-0 right-1/4 w-[700px] h-[700px] bg-[#d7ff7a]/5 rounded-full blur-[140px] pointer-events-none" />
-      <div className="absolute bottom-1/4 left-1/4 w-[500px] h-[500px] bg-[#ff9e3b]/3 rounded-full blur-[120px] pointer-events-none" />
+      <div className="pointer-events-none absolute right-1/4 top-0 size-[700px] rounded-full bg-[#C41E19]/[.025]" />
+      <div className="pointer-events-none absolute bottom-1/4 left-1/4 size-[500px] rounded-full bg-white" />
 
       {/* Header */}
-      <header className="w-full max-w-7xl mx-auto px-6 py-6 flex items-center justify-between border-b border-white/5 relative z-10">
+      <header className="relative z-10 mx-auto flex w-full max-w-7xl items-center justify-between border-b border-[#ECECEC] bg-white px-6 py-6">
         <div className="flex items-center gap-4">
           {onBackToSelection && (
             <button 
               onClick={onBackToSelection}
-              className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl text-white/80 transition flex items-center justify-center border border-white/10"
+              className="flex items-center justify-center rounded-xl border border-[#ECECEC] bg-white p-3 text-[#1F1F1F] shadow-sm transition hover:bg-[#F8F9FA] hover:shadow-md active:scale-[.98]"
             >
               <ChevronLeft size={20} />
             </button>
           )}
           <div>
             <h1 className="text-xl font-bold tracking-tight">The Crispy Nori Burger</h1>
-            <p className="text-xs text-[#d7ff7a] font-mono tracking-widest uppercase">Gourmet Customizer</p>
+            <p className="text-xs font-semibold uppercase tracking-widest text-[#C41E19]">Gourmet Customizer</p>
           </div>
         </div>
 
         <div className="flex items-center gap-3">
-          <span className="text-xs bg-white/5 border border-white/10 px-3.5 py-2 rounded-full font-mono text-white/60 flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-emerald-500 animate-pulse" /> Live Stock: 14 left
+          <span className="flex items-center gap-1.5 rounded-full border border-[#ECECEC] bg-white px-3.5 py-2 text-xs font-medium text-[#6B7280]">
+            <span className="size-2 rounded-full bg-[#C41E19]" /> Live Stock: 14 left
           </span>
           <button 
             onClick={() => setIsLiked(!isLiked)}
-            className="p-3 bg-white/5 hover:bg-white/10 rounded-2xl text-white/80 transition flex items-center justify-center border border-white/10"
+            className="flex items-center justify-center rounded-xl border border-[#ECECEC] bg-white p-3 text-[#1F1F1F] shadow-sm transition hover:bg-[#F8F9FA] hover:shadow-md active:scale-[.98]"
           >
-            <Heart size={20} className={isLiked ? "fill-red-500 text-red-500" : "text-white/60"} />
+            <Heart size={20} className={isLiked ? "fill-[#C41E19] text-[#C41E19]" : "text-[#6B7280]"} />
           </button>
         </div>
       </header>
@@ -104,14 +104,14 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
         <div className="lg:col-span-5 space-y-6 lg:sticky lg:top-8">
           
           {/* Main Large Hero Image */}
-          <div className="relative overflow-hidden rounded-[32px] border border-white/10 bg-white/[0.02] aspect-square shadow-2xl group">
+          <div className="group relative aspect-square overflow-hidden rounded-2xl border border-[#ECECEC] bg-white shadow-[0_8px_24px_rgba(31,31,31,.08)]">
             <img 
               src={images[activeImageIdx]} 
               alt="Crispy Nori Burger" 
               className="size-full object-cover transition-transform duration-700 group-hover:scale-105"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-transparent" />
-            <span className="absolute bottom-6 left-6 bg-[#d7ff7a]/15 border border-[#d7ff7a]/30 text-[#d7ff7a] text-xs font-mono px-3.5 py-1.5 rounded-full uppercase tracking-wider backdrop-blur-md flex items-center gap-2">
+            <span className="absolute bottom-6 left-6 flex items-center gap-2 rounded-full border border-[#C41E19]/20 bg-white/90 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wider text-[#C41E19] backdrop-blur-md">
               <Award size={14} /> Signature Selection
             </span>
           </div>
@@ -122,10 +122,10 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
               <button 
                 key={idx}
                 onClick={() => setActiveImageIdx(idx)}
-                className={`overflow-hidden rounded-2xl border transition-all aspect-video relative bg-white/[0.02] ${
+                className={`relative aspect-video overflow-hidden rounded-2xl border bg-white transition-all ${
                   activeImageIdx === idx 
-                    ? "border-[#d7ff7a] shadow-lg shadow-[#d7ff7a]/5 scale-[1.02]" 
-                    : "border-white/10 opacity-60 hover:opacity-100"
+                    ? "scale-[1.02] border-[#C41E19] shadow-md"
+                    : "border-[#ECECEC] opacity-60 hover:opacity-100"
                 }`}
               >
                 <img src={img} alt="burger thumbnail" className="size-full object-cover" />
@@ -134,22 +134,22 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
           </div>
 
           {/* Core Info & Metadata */}
-          <div className="p-6 rounded-[28px] border border-white/10 bg-white/[0.02] space-y-4">
+          <div className="space-y-4 rounded-2xl border border-[#ECECEC] bg-white p-6 shadow-sm transition hover:shadow-md">
             <div className="flex justify-between items-center text-sm">
-              <span className="text-white/45 flex items-center gap-1.5"><Clock size={16} className="text-[#d7ff7a]"/> Prep Time</span>
-              <b className="text-white font-semibold">8–12 minutes</b>
+              <span className="flex items-center gap-1.5 text-[#6B7280]"><Clock size={16} className="text-[#C41E19]"/> Prep Time</span>
+              <b className="font-semibold text-[#1F1F1F]">8–12 minutes</b>
             </div>
             
             <div className="flex justify-between items-center text-sm">
-              <span className="text-white/45 flex items-center gap-1.5"><Star size={16} className="text-[#d7ff7a] fill-[#d7ff7a]"/> Rating & Reviews</span>
-              <b className="text-white font-semibold">4.9 <span className="text-white/40 font-normal">(184 reviews)</span></b>
+              <span className="flex items-center gap-1.5 text-[#6B7280]"><Star size={16} className="fill-[#C41E19] text-[#C41E19]"/> Rating & Reviews</span>
+              <b className="font-semibold text-[#1F1F1F]">4.9 <span className="font-normal text-[#6B7280]">(184 reviews)</span></b>
             </div>
 
             <div className="flex justify-between items-start text-sm">
-              <span className="text-white/45 flex items-center gap-1.5 shrink-0"><AlertTriangle size={16} className="text-[#d7ff7a]"/> Allergens</span>
+              <span className="flex shrink-0 items-center gap-1.5 text-[#6B7280]"><AlertTriangle size={16} className="text-[#C41E19]"/> Allergens</span>
               <div className="flex flex-wrap justify-end gap-1.5">
                 {["Gluten", "Sesame", "Soy"].map(a => (
-                  <span key={a} className="bg-red-500/10 border border-red-500/20 text-red-400 text-[10px] font-bold px-2 py-0.5 rounded">
+                  <span key={a} className="rounded border border-[#C41E19]/25 bg-white px-2 py-0.5 text-[10px] font-bold text-[#C41E19]">
                     {a}
                   </span>
                 ))}
@@ -160,15 +160,15 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
           {/* Nutrition Info Cards */}
           <div className="grid grid-cols-4 gap-3">
             {[
-              { label: "Calories", value: "520 kcal", sub: "26% DV", color: "text-[#d7ff7a]" },
-              { label: "Protein", value: "32g", sub: "64% DV", color: "text-[#d7ff7a]" },
-              { label: "Fat", value: "18g", sub: "23% DV", color: "text-white/70" },
-              { label: "Carbs", value: "48g", sub: "16% DV", color: "text-white/70" }
+              { label: "Calories", value: "520 kcal", sub: "26% DV", color: "text-[#C41E19]" },
+              { label: "Protein", value: "32g", sub: "64% DV", color: "text-[#C41E19]" },
+              { label: "Fat", value: "18g", sub: "23% DV", color: "text-[#1F1F1F]" },
+              { label: "Carbs", value: "48g", sub: "16% DV", color: "text-[#1F1F1F]" }
             ].map(nut => (
-              <div key={nut.label} className="p-4 rounded-2xl border border-white/5 bg-white/[0.01] text-center">
-                <span className="text-[10px] text-white/40 uppercase block tracking-wider">{nut.label}</span>
+              <div key={nut.label} className="rounded-2xl border border-[#ECECEC] bg-white p-4 text-center shadow-sm">
+                <span className="block text-[10px] uppercase tracking-wider text-[#6B7280]">{nut.label}</span>
                 <b className={`text-sm block mt-1.5 ${nut.color}`}>{nut.value}</b>
-                <span className="text-[9px] text-white/30 block mt-0.5">{nut.sub}</span>
+                <span className="mt-0.5 block text-[9px] text-[#9CA3AF]">{nut.sub}</span>
               </div>
             ))}
           </div>
@@ -180,15 +180,15 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
           
           {/* Title & Description */}
           <div className="space-y-4">
-            <h2 className="text-4xl font-bold tracking-tight text-white leading-tight">The Crispy Nori Burger</h2>
-            <p className="text-white/60 text-base leading-relaxed">
+            <h2 className="text-4xl font-bold leading-tight tracking-tight text-[#1F1F1F]">The Crispy Nori Burger</h2>
+            <p className="text-base leading-relaxed text-[#6B7280]">
               Crispy seasoned chicken breast, premium toasted bun, fresh kelp seaweed sheets, crunchy pickled cucumber slices, and our house-formulated spicy roasted garlic signature mayonnaise.
             </p>
             <div>
-              <span className="text-xs font-mono tracking-widest text-[#d7ff7a] uppercase font-bold block">Standard Ingredients</span>
+              <span className="block text-xs font-bold uppercase tracking-widest text-[#C41E19]">Standard Ingredients</span>
               <div className="flex flex-wrap gap-2 mt-2">
                 {["Artisan Bun", "Seasoned Chicken Breast", "Kelp Seaweed Sheets", "Pickled Cucumber", "Roasted Garlic Mayo"].map((ing) => (
-                  <span key={ing} className="bg-white/5 border border-white/10 px-3.5 py-2 rounded-xl text-xs text-white/80">
+                  <span key={ing} className="rounded-xl border border-[#ECECEC] bg-white px-3.5 py-2 text-xs text-[#1F1F1F] shadow-sm">
                     {ing}
                   </span>
                 ))}
@@ -198,8 +198,8 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
 
           {/* 1. Bun Customization */}
           <div className="space-y-3">
-            <h3 className="text-sm font-mono tracking-widest text-[#d7ff7a] uppercase font-bold flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-[#d7ff7a]" /> 1. Select Bakery Bread
+            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#C41E19]">
+              <span className="size-1.5 rounded-full bg-[#C41E19]" /> 1. Select Bakery Bread
             </h3>
             <div className="grid grid-cols-3 gap-3">
               {[
@@ -210,14 +210,14 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
                 <button
                   key={x.id}
                   onClick={() => setBread(x.id)}
-                  className={`p-4 rounded-2xl border text-left transition-all ${
+                  className={`rounded-2xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
                     bread === x.id 
-                      ? "border-[#d7ff7a] bg-[#d7ff7a]/5" 
-                      : "border-white/10 bg-white/[0.02] hover:bg-white/5"
+                      ? "border-[#C41E19] bg-[#C41E19]/5"
+                      : "border-[#ECECEC] bg-white hover:bg-[#F8F9FA]"
                   }`}
                 >
-                  <b className="text-sm text-white block">{x.label}</b>
-                  <span className="text-xs text-[#d7ff7a] font-mono block mt-1">{x.extra}</span>
+                  <b className="block text-sm text-[#1F1F1F]">{x.label}</b>
+                  <span className="mt-1 block text-xs font-medium text-[#C41E19]">{x.extra}</span>
                 </button>
               ))}
             </div>
@@ -225,8 +225,8 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
 
           {/* 2. Size Customization */}
           <div className="space-y-3">
-            <h3 className="text-sm font-mono tracking-widest text-[#d7ff7a] uppercase font-bold flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-[#d7ff7a]" /> 2. Choose Burger Size
+            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#C41E19]">
+              <span className="size-1.5 rounded-full bg-[#C41E19]" /> 2. Choose Burger Size
             </h3>
             <div className="grid grid-cols-3 gap-3">
               {[
@@ -237,14 +237,14 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
                 <button
                   key={x.id}
                   onClick={() => setSize(x.id)}
-                  className={`p-4 rounded-2xl border text-left transition-all ${
+                  className={`rounded-2xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
                     size === x.id 
-                      ? "border-[#d7ff7a] bg-[#d7ff7a]/5" 
-                      : "border-white/10 bg-white/[0.02] hover:bg-white/5"
+                      ? "border-[#C41E19] bg-[#C41E19]/5"
+                      : "border-[#ECECEC] bg-white hover:bg-[#F8F9FA]"
                   }`}
                 >
-                  <b className="text-sm text-white block">{x.label}</b>
-                  <span className="text-xs text-[#d7ff7a] font-mono block mt-1">{x.extra}</span>
+                  <b className="block text-sm text-[#1F1F1F]">{x.label}</b>
+                  <span className="mt-1 block text-xs font-medium text-[#C41E19]">{x.extra}</span>
                 </button>
               ))}
             </div>
@@ -252,8 +252,8 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
 
           {/* 3. Cheese Customization */}
           <div className="space-y-3">
-            <h3 className="text-sm font-mono tracking-widest text-[#d7ff7a] uppercase font-bold flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-[#d7ff7a]" /> 3. Add Premium Cheese (+$0.80 each)
+            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#C41E19]">
+              <span className="size-1.5 rounded-full bg-[#C41E19]" /> 3. Add Premium Cheese (+$0.80 each)
             </h3>
             <div className="grid grid-cols-3 gap-3">
               {[
@@ -268,17 +268,17 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
                     onClick={() => {
                       setCheese(prev => isActive ? prev.filter(c => c !== x.id) : [...prev, x.id]);
                     }}
-                    className={`p-4 rounded-2xl border text-left transition-all flex justify-between items-start ${
+                    className={`flex items-start justify-between rounded-2xl border p-4 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
                       isActive 
-                        ? "border-[#d7ff7a] bg-[#d7ff7a]/5" 
-                        : "border-white/10 bg-white/[0.02] hover:bg-white/5"
+                      ? "border-[#C41E19] bg-[#C41E19]/5"
+                      : "border-[#ECECEC] bg-white hover:bg-[#F8F9FA]"
                     }`}
                   >
                     <div>
-                      <b className="text-sm text-white block">{x.label}</b>
-                      <span className="text-xs text-[#d7ff7a]/70 font-mono block mt-1">+$0.80</span>
+                      <b className="block text-sm text-[#1F1F1F]">{x.label}</b>
+                      <span className="mt-1 block text-xs font-medium text-[#C41E19]">+$0.80</span>
                     </div>
-                    <span className={`w-4 h-4 rounded border flex items-center justify-center shrink-0 mt-0.5 ${isActive ? "bg-[#d7ff7a] border-[#d7ff7a] text-black" : "border-white/30"}`}>
+                    <span className={`mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border ${isActive ? "border-[#C41E19] bg-[#C41E19] text-white" : "border-[#ECECEC]"}`}>
                       {isActive && <Check size={10} strokeWidth={3} />}
                     </span>
                   </button>
@@ -289,8 +289,8 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
 
           {/* 4. Sauce Preferences */}
           <div className="space-y-3">
-            <h3 className="text-sm font-mono tracking-widest text-[#d7ff7a] uppercase font-bold flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-[#d7ff7a]" /> 4. Select Sauces (First free, extra +$0.30)
+            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#C41E19]">
+              <span className="size-1.5 rounded-full bg-[#C41E19]" /> 4. Select Sauces (First free, extra +$0.30)
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
@@ -307,14 +307,14 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
                     onClick={() => {
                       setSauces(prev => isActive ? prev.filter(s => s !== x.id) : [...prev, x.id]);
                     }}
-                    className={`p-4 rounded-2xl border text-center transition-all ${
+                    className={`rounded-2xl border p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
                       isActive 
-                        ? "border-[#d7ff7a] bg-[#d7ff7a]/5 text-white" 
-                        : "border-white/10 bg-white/[0.02] hover:bg-white/5 text-white/70"
+                        ? "border-[#C41E19] bg-[#C41E19]/5 text-[#1F1F1F]"
+                        : "border-[#ECECEC] bg-white text-[#6B7280] hover:bg-[#F8F9FA]"
                     }`}
                   >
                     <b className="text-xs block truncate">{x.label}</b>
-                    <span className="text-[10px] text-white/40 block mt-1">{isExtraCost ? "+$0.30" : "Free"}</span>
+                    <span className="mt-1 block text-[10px] text-[#6B7280]">{isExtraCost ? "+$0.30" : "Free"}</span>
                   </button>
                 );
               })}
@@ -322,24 +322,24 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
           </div>
 
           {/* 5. Extra Meat Patty */}
-          <div className="p-6 rounded-[28px] border border-white/10 bg-white/[0.02] flex items-center justify-between">
+          <div className="flex items-center justify-between rounded-2xl border border-[#ECECEC] bg-white p-6 shadow-sm transition hover:shadow-md">
             <div>
-              <h3 className="text-sm font-mono tracking-widest text-[#d7ff7a] uppercase font-bold flex items-center gap-2">
+            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#C41E19]">
                 Extra Crispy Patty
               </h3>
-              <p className="text-xs text-white/45 mt-1">Add additional hand-breaded chicken breast (+$3.00 each)</p>
+              <p className="mt-1 text-xs text-[#6B7280]">Add additional hand-breaded chicken breast (+$3.00 each)</p>
             </div>
-            <div className="flex items-center gap-4 bg-white/5 border border-white/10 p-2 rounded-xl">
+            <div className="flex items-center gap-4 rounded-xl border border-[#ECECEC] bg-[#F8F9FA] p-2">
               <button 
                 onClick={() => setExtraMeat(prev => Math.max(0, prev - 1))}
-                className="size-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 text-white transition"
+                className="flex size-8 items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-[#1F1F1F] transition hover:border-[#C41E19]/25 hover:text-[#C41E19] active:scale-[.96]"
               >
                 <Minus size={14} />
               </button>
-              <b className="w-6 text-center text-sm font-mono text-white">{extraMeat}</b>
+              <b className="w-6 text-center text-sm text-[#1F1F1F]">{extraMeat}</b>
               <button 
                 onClick={() => setExtraMeat(prev => prev + 1)}
-                className="size-8 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 text-white transition"
+                className="flex size-8 items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-[#1F1F1F] transition hover:border-[#C41E19]/25 hover:text-[#C41E19] active:scale-[.96]"
               >
                 <Plus size={14} />
               </button>
@@ -348,8 +348,8 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
 
           {/* 6. Fresh Vegetables */}
           <div className="space-y-3">
-            <h3 className="text-sm font-mono tracking-widest text-[#d7ff7a] uppercase font-bold flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-[#d7ff7a]" /> 5. Fresh Vegetables (Included)
+            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#C41E19]">
+              <span className="size-1.5 rounded-full bg-[#C41E19]" /> 5. Fresh Vegetables (Included)
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               {[
@@ -365,14 +365,14 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
                     onClick={() => {
                       setVegetables(prev => isActive ? prev.filter(v => v !== x.id) : [...prev, x.id]);
                     }}
-                    className={`p-4 rounded-2xl border text-center transition-all ${
+                    className={`rounded-2xl border p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
                       isActive 
-                        ? "border-[#d7ff7a] bg-[#d7ff7a]/5 text-white" 
-                        : "border-white/10 bg-white/[0.02] hover:bg-white/5 text-white/50"
+                        ? "border-[#C41E19] bg-[#C41E19]/5 text-[#1F1F1F]"
+                        : "border-[#ECECEC] bg-white text-[#6B7280] hover:bg-[#F8F9FA]"
                     }`}
                   >
                     <b className="text-xs block">{x.label}</b>
-                    <span className="text-[10px] text-[#d7ff7a] block mt-1">{isActive ? "Added" : "Excluded"}</span>
+                    <span className="mt-1 block text-[10px] text-[#C41E19]">{isActive ? "Added" : "Excluded"}</span>
                   </button>
                 );
               })}
@@ -381,8 +381,8 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
 
           {/* 7. Cooking Preference */}
           <div className="space-y-3">
-            <h3 className="text-sm font-mono tracking-widest text-[#d7ff7a] uppercase font-bold flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-[#d7ff7a]" /> 6. Patty Cooking Doneness
+            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#C41E19]">
+              <span className="size-1.5 rounded-full bg-[#C41E19]" /> 6. Patty Cooking Doneness
             </h3>
             <div className="grid grid-cols-3 gap-3">
               {[
@@ -393,10 +393,10 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
                 <button
                   key={x.id}
                   onClick={() => setCookingPref(x.id)}
-                  className={`p-4 rounded-2xl border text-center transition-all ${
+                  className={`rounded-2xl border p-4 text-center shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md ${
                     cookingPref === x.id 
-                      ? "border-[#d7ff7a] bg-[#d7ff7a]/5 text-white" 
-                      : "border-white/10 bg-white/[0.02] hover:bg-white/5 text-white/55"
+                      ? "border-[#C41E19] bg-[#C41E19]/5 text-[#1F1F1F]"
+                      : "border-[#ECECEC] bg-white text-[#6B7280] hover:bg-[#F8F9FA]"
                   }`}
                 >
                   <b className="text-xs block">{x.label}</b>
@@ -407,15 +407,15 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
 
           {/* 8. Special Preparation Notes */}
           <div className="space-y-3">
-            <h3 className="text-sm font-mono tracking-widest text-[#d7ff7a] uppercase font-bold flex items-center gap-2">
-              <span className="size-1.5 rounded-full bg-[#d7ff7a]" /> 7. Special Notes
+            <h3 className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-[#C41E19]">
+              <span className="size-1.5 rounded-full bg-[#C41E19]" /> 7. Special Notes
             </h3>
             <textarea 
               rows={3}
               placeholder="E.g., No sauce on bottom bun, extra wrap, cut in half..."
               value={specialNotes}
               onChange={e => setSpecialNotes(e.target.value)}
-              className="w-full bg-white/[0.02] border border-white/10 rounded-2xl p-4 text-sm text-white placeholder:text-white/35 focus:border-[#d7ff7a] focus:bg-white/[0.04] outline-none transition"
+              className="w-full rounded-xl border border-[#ECECEC] bg-white p-4 text-sm text-[#1F1F1F] outline-none transition placeholder:text-[#9CA3AF] focus:border-[#C41E19] focus:ring-4 focus:ring-[#C41E19]/10"
             />
           </div>
 
@@ -424,32 +424,32 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
       </section>
 
       {/* Sticky Bottom Add To Cart Bar */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[#0c0f0a]/90 backdrop-blur-lg border-t border-white/10 py-6 px-8 z-50 shadow-2xl">
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-[#ECECEC] bg-white/95 px-8 py-6 shadow-[0_-8px_24px_rgba(31,31,31,.08)] backdrop-blur-lg">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
           
           {/* Quantity Selector & Item Cost */}
           <div className="flex items-center gap-6">
-            <div className="flex items-center gap-4 bg-white/5 border border-white/10 p-2 rounded-xl">
+            <div className="flex items-center gap-4 rounded-xl border border-[#ECECEC] bg-[#F8F9FA] p-2">
               <button 
                 onClick={() => setQuantity(prev => Math.max(1, prev - 1))}
-                className="size-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 text-white transition active:scale-95"
+                className="flex size-10 items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-[#1F1F1F] transition hover:border-[#C41E19]/25 hover:text-[#C41E19] active:scale-95"
               >
                 <Minus size={16} />
               </button>
-              <b className="w-8 text-center text-base font-mono text-white">{quantity}</b>
+              <b className="w-8 text-center text-base text-[#1F1F1F]">{quantity}</b>
               <button 
                 onClick={() => setQuantity(prev => prev + 1)}
-                className="size-10 rounded-lg bg-white/5 border border-white/10 flex items-center justify-center hover:bg-white/10 text-white transition active:scale-95"
+                className="flex size-10 items-center justify-center rounded-lg border border-[#ECECEC] bg-white text-[#1F1F1F] transition hover:border-[#C41E19]/25 hover:text-[#C41E19] active:scale-95"
               >
                 <Plus size={16} />
               </button>
             </div>
 
             <div>
-              <span className="text-xs text-white/45 block uppercase tracking-wider font-mono">Customized Total</span>
+              <span className="block text-xs font-medium uppercase tracking-wider text-[#6B7280]">Customized Total</span>
               <div className="flex items-baseline gap-2 mt-0.5">
-                <b className="text-3xl font-mono text-[#d7ff7a]">${totalPrice.toFixed(2)}</b>
-                <span className="text-xs text-white/40">(${unitPrice.toFixed(2)} each)</span>
+                <b className="text-3xl text-[#C41E19]">${totalPrice.toFixed(2)}</b>
+                <span className="text-xs text-[#6B7280]">(${unitPrice.toFixed(2)} each)</span>
               </div>
             </div>
           </div>
@@ -459,7 +459,7 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
             {onBackToSelection && (
               <button 
                 onClick={onBackToSelection}
-                className="flex-1 sm:flex-none px-6 py-4 rounded-2xl border border-white/10 bg-white/5 hover:bg-white/10 text-white font-semibold text-sm transition"
+                className="flex-1 rounded-xl border border-[#ECECEC] bg-white px-6 py-4 text-sm font-semibold text-[#1F1F1F] shadow-sm transition hover:bg-[#F8F9FA] hover:shadow-md active:scale-[.98] sm:flex-none"
               >
                 Cancel
               </button>
@@ -470,7 +470,7 @@ export default function FoodDetails({ onBackToSelection }: { onBackToSelection?:
                 for (let index = 0; index < quantity; index += 1) addItem({ id: `custom-nori-${JSON.stringify(customizations)}`, name: "Customized Crispy Nori Burger", price: unitPrice, basePrice, image: images[0], category: "burger", customizations });
                 if (onBackToSelection) onBackToSelection();
               }}
-              className="flex-2 sm:flex-none px-10 py-4 rounded-2xl bg-[#d7ff7a] text-[#17200f] font-bold text-sm hover:bg-[#c9f05a] transition shadow-lg shadow-[#d7ff7a]/20 flex items-center justify-center gap-2 group active:scale-[0.98]"
+              className="group flex flex-2 items-center justify-center gap-2 rounded-xl bg-[#C41E19] px-10 py-4 text-sm font-bold text-white shadow-[0_8px_20px_rgba(196,30,25,.18)] transition hover:-translate-y-0.5 hover:bg-[#A8161A] hover:shadow-md active:translate-y-0 active:scale-[0.98] sm:flex-none"
             >
               <ShoppingBag size={18} /> Add to Order <ArrowRight size={16} className="group-hover:translate-x-1 transition-transform" />
             </button>
