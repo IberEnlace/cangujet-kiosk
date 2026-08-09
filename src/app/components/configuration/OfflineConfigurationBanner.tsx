@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { CloudOff, RefreshCw } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
-import { WORKSPACE_SELECTION_ROUTE } from "../../auth/roleConfig";
+import { ROUTES, WORKSPACE_SELECTION_ROUTE } from "../../auth/roleConfig";
 import { isKnownRoute } from "../../auth/routeGuards";
 import { routeRequiresDeviceSession } from "../../auth/workspaceRequirements";
 import { useBootstrap } from "../../context/BootstrapContext";
@@ -15,7 +15,7 @@ export default function OfflineConfigurationBanner() {
     window.addEventListener("hashchange", update);
     return () => window.removeEventListener("hashchange", update);
   }, []);
-  const route = isKnownRoute(path) ? path : WORKSPACE_SELECTION_ROUTE;
+  const route = path === WORKSPACE_SELECTION_ROUTE ? ROUTES.deviceSetup : isKnownRoute(path) ? path : ROUTES.deviceSetup;
   const deviceRequired = routeRequiresDeviceSession(route, auth.currentRole, auth.isAuthenticated);
   if (!bootstrap.offline || !deviceRequired || auth.sessionInvalidated) return null;
   return <aside role="status" className="fixed inset-x-0 top-0 z-[100] flex min-h-11 items-center justify-center gap-3 border-b border-[#C41E19]/20 bg-[#FFFFFF] px-4 py-2 text-center text-xs font-bold text-[#C41E19] shadow-[0_4px_16px_rgba(31,31,31,.06)]">

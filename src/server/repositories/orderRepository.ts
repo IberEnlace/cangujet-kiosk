@@ -86,7 +86,7 @@ export type PersistPaymentInput = {
 };
 
 export interface OrderRepository {
-  authenticateStaff(accessToken: string): Promise<OrderActor | null>;
+  authenticateStaff(accessToken: string): Promise<OrderActor | "forbidden" | null>;
   loadPricingContext(actor: OrderActor): Promise<OrderPricingContext | null>;
   createOrder(input: PersistOrderInput): Promise<{ order: ProductionOrder; duplicate: boolean }>;
   getOrder(actor: OrderActor, orderId: string): Promise<ProductionOrder | null>;
@@ -147,18 +147,24 @@ export class IdempotencyConflictError extends Error {
 export class SupabaseOrderRepository implements OrderRepository {
   constructor(private readonly client: SupabaseClient<Database>) {}
 
-  async authenticateStaff(accessToken: string): Promise<OrderActor | null> {
+  async authenticateStaff(accessToken: string): Promise<OrderActor | "forbidden" | null> {
     const user = await this.client.auth.getUser(accessToken);
-    if (user.error || !user.data.user) return null;
+    if (user.error) {
+      if (user.error.status === 401 || user.error.status === 403) return null;
+      throw queryFailure("authenticateStaff.user", "auth.getUser", user.error);
+    }
+    if (!user.data.user) return null;
     const userId = user.data.user.id;
     const membership = await this.client.from("staff_memberships").select("*")
       .eq("user_id", userId).eq("is_active", true).maybeSingle();
-    if (membership.error || !membership.data) return null;
+    if (membership.error) throw queryFailure("authenticateStaff.membership", "staff_memberships.select", membership.error);
+    if (!membership.data) return "forbidden";
     const profile = await this.client.from("profiles").select("*")
       .eq("id", userId).eq("is_active", true).maybeSingle();
-    if (profile.error || !profile.data) return null;
+    if (profile.error) throw queryFailure("authenticateStaff.profile", "profiles.select", profile.error);
+    if (!profile.data) return "forbidden";
     const branchId = profile.data.branch_id ?? membership.data.branch_id;
-    if (!branchId && profile.data.role !== "admin") return null;
+    if (!branchId && profile.data.role !== "admin") return "forbidden";
     return {
       actorType: "staff",
       actorId: userId,

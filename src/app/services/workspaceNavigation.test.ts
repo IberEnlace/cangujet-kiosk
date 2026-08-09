@@ -33,7 +33,7 @@ for (const [label, deviceType] of [
   test(`${label} remains on intentional workspace selection`, () => {
     beginIntentionalWorkspaceSelection();
     const decision = initialWorkspaceResumeDecision({
-      route: WORKSPACE_SELECTION_ROUTE,
+      route: ROUTES.deviceSetup,
       initializationStatus: "authenticated",
       assignedDeviceType: deviceType,
       selectionOverrideActive: isWorkspaceSelectionOverrideActive(),
@@ -44,7 +44,7 @@ for (const [label, deviceType] of [
 
 test("a saved Kitchen device resumes once on fresh startup", () => {
   const decision = initialWorkspaceResumeDecision({
-    route: WORKSPACE_SELECTION_ROUTE,
+    route: ROUTES.deviceSetup,
     initializationStatus: "authenticated",
     assignedDeviceType: "kitchen_display",
     selectionOverrideActive: false,
@@ -67,14 +67,16 @@ test("initial route resolution is one-shot and cannot reintroduce a redirect loo
   assert.match(app, /if \(initialRouteResolvedRef\.current\) return/);
   assert.match(app, /initialRouteResolvedRef\.current = true/);
   assert.match(app, /enterWorkspaceSelection\(`\$\{loginRole\}_login_back`\)/);
+  assert.match(app, /navigateTo\(ROUTES\.deviceSetup, true\)/);
 });
 
-test("legacy selection routes canonicalize without choosing a workspace", () => {
+test("legacy selection routes redirect to device setup without choosing a workspace", () => {
   for (const route of LEGACY_WORKSPACE_SELECTION_ROUTES) assert.equal(isLegacyWorkspaceSelectionRoute(route), true);
   assert.equal(WORKSPACE_SELECTION_ROUTE, "/workspace-selection");
   const app = readFileSync("src/app/App.tsx", "utf8");
   assert.match(app, /isLegacyWorkspaceSelectionRoute\(initialPath\)/);
   assert.match(app, /beginIntentionalWorkspaceSelection\(\)/);
-  assert.match(app, /navigateTo\(WORKSPACE_SELECTION_ROUTE, true\)/);
-  assert.doesNotMatch(app, /pages\/RoleSelection/);
+  assert.match(app, /initialPath === WORKSPACE_SELECTION_ROUTE \|\| isLegacyWorkspaceSelectionRoute\(initialPath\)/);
+  assert.match(app, /navigateTo\(ROUTES\.deviceSetup, true\)/);
+  assert.doesNotMatch(app, /pages\/(?:Role|Workspace)Selection/);
 });

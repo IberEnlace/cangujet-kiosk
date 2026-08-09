@@ -36,5 +36,9 @@ export function shouldInitializeDeviceSession(
   role: UserRole | null,
   staffAuthenticated: boolean,
 ) {
-  return route === WORKSPACE_SELECTION_ROUTE || routeRequiresDeviceSession(route, role, staffAuthenticated);
+  // Cashier always restores device state first because an authoritative
+  // cashier-terminal assignment takes precedence over any loaded staff profile.
+  return route === WORKSPACE_SELECTION_ROUTE
+    || route === ROUTES.cashier
+    || routeRequiresDeviceSession(route, role, staffAuthenticated);
 }

@@ -2,7 +2,7 @@ import localCatalog from "../../data/morrow-menu-ai.json";
 import type { DeviceMenuResponse } from "../../../shared/deviceBootstrap";
 import type { NormalizedMenu, NormalizedMenuProduct } from "./menuModels";
 import { repositoryFailure, type RepositoryResult } from "./repositoryResult";
-import { DEVICE_ACCESS_TOKEN_STORAGE_KEY } from "../device/DeviceConfigurationService";
+import { DeviceTokenRefreshError, readDeviceAccessToken, refreshDeviceAccessToken } from "../device/deviceTokenManager";
 
 const CACHE_MS = 30_000;
 let cached: { key: string; expires: number; result: RepositoryResult<NormalizedMenu> } | null = null;
@@ -35,20 +35,22 @@ async function loadPreferredMenu(
   signal?: AbortSignal,
   expected?: { menuId: string; menuVersion: number; currency: string },
 ): Promise<RepositoryResult<NormalizedMenu>> {
-  const accessToken = typeof sessionStorage === "undefined"
-    ? null
-    : sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+  let accessToken = readDeviceAccessToken();
   if (!accessToken) return repositoryFailure("unauthorized", "The device session is not authenticated.");
   let response: Response;
   try {
-    response = await globalThis.fetch("/api/v1/device/menu", {
-      headers: { authorization: `Bearer ${accessToken}` },
-      credentials: "include",
-      signal,
-    });
+    response = await requestDeviceMenu(accessToken, signal);
+    if (response.status === 401) {
+      accessToken = await refreshDeviceAccessToken();
+      if (!accessToken) return repositoryFailure("unauthorized", "The device session is not authenticated.");
+      response = await requestDeviceMenu(accessToken, signal);
+    }
   } catch (cause) {
     if (signal?.aborted) {
       return repositoryFailure("aborted", "Menu request was cancelled.", cause);
+    }
+    if (cause instanceof DeviceTokenRefreshError && cause.kind === "forbidden") {
+      return repositoryFailure("unauthorized", "The device is not authorized to load this menu.", cause);
     }
     if (import.meta.env?.DEV) console.error("[MORROW] Device menu request failed:", cause);
     return repositoryFailure("network", "Menu could not be loaded from the database.", cause);
@@ -81,6 +83,14 @@ async function loadPreferredMenu(
   );
   if (!validateMenu(mapped)) return repositoryFailure("invalid_data", "The database returned an invalid menu.");
   return { ok: true, data: mapped, source: "supabase" };
+}
+
+function requestDeviceMenu(accessToken: string, signal?: AbortSignal) {
+  return globalThis.fetch("/api/v1/device/menu", {
+    headers: { authorization: `Bearer ${accessToken}` },
+    credentials: "include",
+    signal,
+  });
 }
 
 type LocalProduct = (typeof localCatalog.products)[number];

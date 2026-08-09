@@ -1,4 +1,4 @@
-import { ROUTES, WORKSPACE_SELECTION_ROUTE, type AppRoute, type StaffRole, type UserRole, getHomeRouteForRole, getLoginRouteForRole, isStaffRole } from "./roleConfig";
+import { ROUTES, type AppRoute, type StaffRole, type UserRole, getHomeRouteForRole, getLoginRouteForRole, isStaffRole } from "./roleConfig";
 
 const CUSTOMER_ROUTES: AppRoute[] = [ROUTES.idle, ROUTES.language, ROUTES.service, ROUTES.categories, ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice, ROUTES.kiosk, ROUTES.cart, ROUTES.payment, ROUTES.cardPayment, ROUTES.qrPayment, ROUTES.payAtCashierConfirmation, ROUTES.orderConfirmation, ROUTES.tracking];
 const LOGIN_ROLE: Partial<Record<AppRoute, StaffRole>> = {
@@ -16,7 +16,7 @@ export function isKnownRoute(route: string): route is AppRoute {
 }
 
 export function guardRoute(route: AppRoute, role: UserRole | null, authenticated: boolean): AppRoute {
-  const publicUtilityRoutes: AppRoute[] = [WORKSPACE_SELECTION_ROUTE, ROUTES.deviceSetup, ROUTES.deviceInfo, ROUTES.mockQrPayment];
+  const publicUtilityRoutes: AppRoute[] = [ROUTES.deviceSetup, ROUTES.deviceInfo, ROUTES.mockQrPayment];
   if (publicUtilityRoutes.includes(route)) return route;
   if (CUSTOMER_ROUTES.includes(route)) return route;
   const loginRole = LOGIN_ROLE[route];
@@ -25,7 +25,7 @@ export function guardRoute(route: AppRoute, role: UserRole | null, authenticated
     return route;
   }
   const required = HOME_ROLE[route];
-  if (!required) return WORKSPACE_SELECTION_ROUTE;
+  if (!required) return ROUTES.deviceSetup;
   if (required === "display") return route;
   if (!authenticated || !role) return getLoginRouteForRole(required as StaffRole);
   return role === required ? route : getHomeRouteForRole(role);

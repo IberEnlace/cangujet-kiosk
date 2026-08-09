@@ -13,7 +13,7 @@ import type {
   PersistPaymentInput,
 } from "../repositories/orderRepository";
 import { calculateQuote, OrderDomainFailure, OrderDomainService } from "./orderDomainService";
-import type { DeviceIdentityApplication } from "./deviceIdentityService";
+import { DeviceApiFailure, type DeviceIdentityApplication } from "./deviceIdentityService";
 
 const DEVICE: OrderActor = {
   actorType: "device", actorId: "device-a", restaurantId: "restaurant-a",
@@ -43,6 +43,26 @@ test("server quote calculates valid one-item quote without modifiers when not re
   assert.equal(quote.taxTotal, "0.80");
   assert.equal(quote.total, "10.80");
   assert.equal(quote.items.length, 1);
+});
+
+test("authentication keeps invalid credentials at 401, authorization at 403, and dependencies at 503", async () => {
+  const invalidRepository = new MemoryOrderRepository();
+  const invalid = new OrderDomainService(invalidRepository, failingIdentity(new DeviceApiFailure("invalid_device_session", 401, "invalid")));
+  await assert.rejects(invalid.authenticate("bad-token"), statusFailure(401));
+
+  const forbiddenRepository = new MemoryOrderRepository();
+  forbiddenRepository.authenticateStaff = async () => "forbidden";
+  const forbidden = new OrderDomainService(forbiddenRepository, failingIdentity(new DeviceApiFailure("invalid_device_session", 401, "invalid")));
+  await assert.rejects(forbidden.authenticate("valid-but-unassigned-staff"), statusFailure(403));
+
+  const unavailableRepository = new MemoryOrderRepository();
+  const unavailable = new OrderDomainService(unavailableRepository, failingIdentity(new Error("database unavailable")));
+  await assert.rejects(unavailable.authenticate("device-token"), statusFailure(503));
+
+  const staffUnavailableRepository = new MemoryOrderRepository();
+  staffUnavailableRepository.authenticateStaff = async () => { throw new Error("supabase unavailable"); };
+  const staffUnavailable = new OrderDomainService(staffUnavailableRepository, failingIdentity(new DeviceApiFailure("invalid_device_session", 401, "not a device token")));
+  await assert.rejects(staffUnavailable.authenticate("staff-token"), statusFailure(503));
 });
 
 test("server quote validates item with required modifiers", () => {
@@ -199,6 +219,28 @@ test("cashier terminal can capture deferred card payment and kiosk card flow sta
   assert.equal(kioskCard.order.status, "paid");
 });
 
+test("cashier terminal can create, collect, submit, and cancel Cashier-owned orders", async () => {
+  const repository = new MemoryOrderRepository();
+  const service = new OrderDomainService(repository, deviceIdentity());
+  const created = await service.create(CASHIER_TERMINAL, {
+    ...request(["modifier-cheese"]),
+    idempotencyKey: "99999999-9999-4999-8999-999999999999",
+  });
+  assert.equal(created.order.source, "cashier");
+  const paid = await service.pay(CASHIER_TERMINAL, created.order.id, {
+    idempotencyKey: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    method: "cash",
+    amountReceived: "20.00",
+  });
+  assert.equal((await service.submit(CASHIER_TERMINAL, paid.order.id, paid.order.version)).status, "submitted");
+
+  const cancellable = await service.create(CASHIER_TERMINAL, {
+    ...request(["modifier-cheese"]),
+    idempotencyKey: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+  });
+  assert.equal((await service.cancel(CASHIER_TERMINAL, cancellable.order.id, cancellable.order.version, "Customer cancelled")).status, "cancelled");
+});
+
 test("failed or cancelled deferred orders cannot be sent to production", async () => {
   const repository = new MemoryOrderRepository();
   const service = new OrderDomainService(repository, deviceIdentity());
@@ -226,7 +268,7 @@ class MemoryOrderRepository implements OrderRepository {
   readonly events: ProductionOrderStatus[] = [];
   paymentCount = 0;
 
-  async authenticateStaff() { return null; }
+  async authenticateStaff(): Promise<OrderActor | "forbidden" | null> { return null; }
   async loadPricingContext() { return pricing(); }
   async createOrder(input: PersistOrderInput) {
     const existing = this.idempotency.get(input.idempotencyKey);
@@ -360,4 +402,14 @@ function deviceIdentity() {
       branchId: DEVICE.branchId, deviceType: "customer_kiosk" as const,
     }),
   } as unknown as DeviceIdentityApplication;
+}
+
+function failingIdentity(error: Error) {
+  return {
+    authorize: async () => { throw error; },
+  } as unknown as DeviceIdentityApplication;
+}
+
+function statusFailure(status: number) {
+  return (error: unknown) => error instanceof OrderDomainFailure && error.status === status;
 }

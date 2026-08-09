@@ -4,7 +4,7 @@ import {
   signInStaff, signOutStaff, verifyStaffSession as verifyPersistedStaffSession,
   type AuthFailure, type StaffIdentity, type StaffSessionVerification,
 } from "../services/supabase/authService";
-import { DEVICE_MODE_KEY, ROUTES, WORKSPACE_SELECTION_ROUTE, getHomeRouteForRole, isDeviceMode, isStaffRole, type AppRoute, type DeviceMode, type StaffRole, type UserRole } from "./roleConfig";
+import { DEVICE_MODE_KEY, ROUTES, getHomeRouteForRole, isDeviceMode, isStaffRole, type AppRoute, type DeviceMode, type StaffRole, type UserRole } from "./roleConfig";
 import { canRoleAccess } from "./routeGuards";
 
 interface AuthContextValue {
@@ -104,7 +104,7 @@ export function useAuth() {
 }
 
 export function getDefaultRouteForDevice(mode: DeviceMode, role: UserRole | null, authenticated: boolean): AppRoute {
-  if (mode === "unassigned") return WORKSPACE_SELECTION_ROUTE;
+  if (mode === "unassigned") return ROUTES.deviceSetup;
   if (isStaffRole(mode)) return authenticated && role === mode ? getHomeRouteForRole(mode) : `/${mode}/login` as AppRoute;
   return mode === "customer" ? ROUTES.idle : getHomeRouteForRole(mode);
 }

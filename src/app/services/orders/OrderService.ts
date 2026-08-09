@@ -12,8 +12,17 @@ import type {
   OrderTransitionRequest,
   ProductionOrder,
 } from "../../../shared/orders";
-import { DEVICE_ACCESS_TOKEN_STORAGE_KEY } from "../device/DeviceConfigurationService";
-import { getStaffAccessToken } from "../supabase/authService";
+import {
+  DeviceTokenRefreshError,
+  markDeviceSessionInvalid,
+  readDeviceAccessToken,
+  refreshDeviceAccessToken,
+} from "../device/deviceTokenManager";
+import {
+  getStaffSessionCredential,
+  invalidateStaffSession,
+  refreshStaffSessionCredential,
+} from "../supabase/authService";
 
 export type OrderAuthentication = "device" | "staff" | "none";
 export type OrderRequestContext = {
@@ -24,7 +33,13 @@ export type OrderRequestContext = {
 export type OrderServiceOptions = {
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  credentialProvider?: OrderCredentialProvider;
 };
+export type OrderCredentialResult = { token: string | null; failure: "unauthenticated" | "unavailable" | "forbidden" | null };
+export type OrderCredentialProvider = (
+  authentication: Exclude<OrderAuthentication, "none">,
+  refresh: boolean,
+) => Promise<OrderCredentialResult>;
 
 export class OrderClientError extends Error {
   constructor(
@@ -45,12 +60,14 @@ export class OrderClientError extends Error {
 export class OrderService {
   private readonly fetchImpl: typeof fetch;
   private readonly timeoutMs: number;
+  private readonly credentialProvider: OrderCredentialProvider;
   /** Updated by OrderContext whenever the workflow attempt rotates. */
   private workflowAttemptId: string | null = null;
 
   constructor(options: OrderServiceOptions = {}) {
     this.fetchImpl = options.fetchImpl ?? ((input, init) => window.fetch(input, init));
     this.timeoutMs = options.timeoutMs ?? 15_000;
+    this.credentialProvider = options.credentialProvider ?? defaultCredentialProvider;
   }
 
   /** Called by OrderContext to bind the current workflow attempt ID to all requests. */
@@ -179,16 +196,63 @@ export class OrderService {
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       throw new OrderClientError("offline", "Ordering requires an internet connection. Your cart is safe.", 0);
     }
-    const token = await authorizationToken(authentication);
-    if (authentication !== "none" && !token) {
-      throw new OrderClientError("unauthorized", "Your session is no longer available. Please sign in again.", 401);
-    }
-    const controller = new AbortController();
-    const timer = globalThis.setTimeout(() => controller.abort(), this.timeoutMs);
     const requestId = crypto.randomUUID();
     const workflowAttemptId = context === undefined
       ? this.workflowAttemptId
       : context.workflowAttemptId ?? null;
+    let token: string | null = null;
+    if (authentication !== "none") {
+      const credential = await this.resolveCredential(authentication, false, requestId);
+      token = credential.token;
+      if (!token) token = (await this.resolveCredential(authentication, true, requestId)).token;
+      if (!token) throw unavailableSession(requestId);
+    }
+    let result = await this.execute(path, options, token, workflowAttemptId, requestId);
+    if (result.response.status === 401 && authentication !== "none") {
+      const latest = await this.resolveCredential(authentication, false, requestId);
+      const refreshed = latest.token && latest.token !== token
+        ? latest
+        : await this.resolveCredential(authentication, true, requestId);
+      if (!refreshed.token) throw unavailableSession(requestId);
+      result = await this.execute(path, options, refreshed.token, workflowAttemptId, requestId);
+      if (result.response.status === 401) await invalidateAuthentication(authentication);
+    }
+    if (result.response.status === 304) {
+      throw new OrderClientError("server_error", "The order service returned a stale cached response. Please retry.", 304, requestId);
+    }
+    if (!result.response.ok) {
+      throw toClientError(result.response.status, result.response.headers.get("x-request-id") ?? requestId, result.body);
+    }
+    if (result.body === null) {
+      throw new OrderClientError("server_error", "The order service returned an empty response.", result.response.status, requestId);
+    }
+    return result.body as T;
+  }
+
+  private async resolveCredential(
+    authentication: Exclude<OrderAuthentication, "none">,
+    refresh: boolean,
+    requestId: string,
+  ) {
+    const credential = await this.credentialProvider(authentication, refresh);
+    if (credential.failure === "unavailable") {
+      throw new OrderClientError("server_error", "The authentication service is temporarily unavailable.", 503, requestId);
+    }
+    if (credential.failure === "forbidden") {
+      throw new OrderClientError("unauthorized", "This device is not authorized for Cashier access.", 403, requestId);
+    }
+    return credential;
+  }
+
+  private async execute(
+    path: string,
+    options: { method?: string; body?: unknown },
+    token: string | null,
+    workflowAttemptId: string | null,
+    requestId: string,
+  ) {
+    const controller = new AbortController();
+    const timer = globalThis.setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const fetchImpl = this.fetchImpl;
       const response = await fetchImpl(`/api/v1${path}`, {
@@ -205,19 +269,7 @@ export class OrderService {
         },
         ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
       });
-      const text = await response.text();
-      const body = parseBody(text);
-      if (response.status === 304) {
-        throw new OrderClientError(
-          "server_error",
-          "The order service returned a stale cached response. Please retry.",
-          304,
-          requestId,
-        );
-      }
-      if (!response.ok) throw toClientError(response.status, response.headers.get("x-request-id") ?? requestId, body);
-      if (body === null) throw new OrderClientError("server_error", "The order service returned an empty response.", response.status, requestId);
-      return body as T;
+      return { response, body: parseBody(await response.text()) };
     } catch (error) {
       if (error instanceof OrderClientError) throw error;
       if (isAbortError(error)) {
@@ -237,10 +289,33 @@ export class OrderService {
 
 export const orderService = new OrderService();
 
-async function authorizationToken(authentication: OrderAuthentication) {
-  if (authentication === "none") return null;
-  if (authentication === "staff") return getStaffAccessToken();
-  return sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+async function defaultCredentialProvider(
+  authentication: Exclude<OrderAuthentication, "none">,
+  refresh: boolean,
+): Promise<OrderCredentialResult> {
+  if (authentication === "staff") {
+    const credential = refresh ? await refreshStaffSessionCredential() : await getStaffSessionCredential();
+    return { token: credential.token, failure: credential.failure === "network" ? "unavailable" : credential.failure };
+  }
+  if (!refresh) return { token: readDeviceAccessToken(), failure: null };
+  try {
+    const token = await refreshDeviceAccessToken();
+    return { token, failure: token ? null : "unauthenticated" };
+  } catch (error) {
+    if (error instanceof DeviceTokenRefreshError) {
+      return { token: null, failure: error.kind === "forbidden" ? "forbidden" : "unavailable" };
+    }
+    throw error;
+  }
+}
+
+async function invalidateAuthentication(authentication: Exclude<OrderAuthentication, "none">) {
+  if (authentication === "device") markDeviceSessionInvalid();
+  else await invalidateStaffSession();
+}
+
+function unavailableSession(requestId: string) {
+  return new OrderClientError("unauthorized", "Your session is no longer available. Please sign in again.", 401, requestId);
 }
 
 function parseBody(text: string): unknown {

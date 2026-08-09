@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { OrderStatusDisplayOrder, OrderTracking, ProductionOrder } from "../../shared/orders";
 import { useAuth } from "../auth/AuthContext";
+import { cashierQueriesMayRun, type CashierAuthentication } from "../auth/cashierAuthentication";
 import type { KitchenOrder } from "../context/CartContext";
 import { useBranch } from "../context/BootstrapContext";
 import { kitchenOrderService } from "../services/orders/KitchenOrderService";
@@ -181,64 +182,72 @@ export function usePublicOrderBoard() {
   };
 }
 
-export function useCashierOrders() {
-  const auth = useAuth();
-  const bootstrapBranch = useBranch();
-  const [orders, setOrders] = useState<ProductionOrder[]>([]);
-  const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
-  const branchId = auth.profile?.branch_id ?? bootstrapBranch?.id ?? null;
-  const authMode: OrderAuthentication = auth.profile ? "staff" : "device";
-  const fetchCurrent = useCallback(async () => {
-    try {
-      const currentOrders = await cashierReadService.listActive(authMode);
-      setOrders(current => reconcile(current, currentOrders));
-      setConnection("connected");
-    } catch {
-      setConnection(navigator.onLine ? "error" : "disconnected");
-    }
-  }, [authMode]);
-  useEffect(() => {
-    if (!branchId) { setConnection("disconnected"); return; }
-    void fetchCurrent();
-    const subscription = subscribeToBranchOrders({ branchId, audience: "cashier", onSignal: () => void fetchCurrent(), onStatus: setConnection });
-    const timer = window.setInterval(() => void fetchCurrent(), RECONCILIATION_MS);
-    return () => { window.clearInterval(timer); void subscription.unsubscribe(); };
-  }, [branchId, fetchCurrent]);
-  return { orders, connection, isDemo: false, refresh: fetchCurrent };
-}
-
-export function usePendingCashierOrders() {
-  const auth = useAuth();
-  const bootstrapBranch = useBranch();
-  const [orders, setOrders] = useState<ProductionOrder[]>([]);
+export function useCashierOrderQueries(authentication: CashierAuthentication) {
+  const [activeOrders, setActiveOrders] = useState<ProductionOrder[]>([]);
+  const [pendingOrders, setPendingOrders] = useState<ProductionOrder[]>([]);
   const [connection, setConnection] = useState<RealtimeConnectionStatus>("connecting");
   const [error, setError] = useState("");
-  const branchId = auth.profile?.branch_id ?? bootstrapBranch?.id ?? null;
-  const authMode: OrderAuthentication = auth.profile ? "staff" : "device";
+  const [blockedIdentity, setBlockedIdentity] = useState<string | null>(null);
+  const authenticationBlocked = blockedIdentity === authentication.identityKey;
+
   const fetchCurrent = useCallback(async () => {
-    try {
-      const current = await cashierReadService.listPendingCashierOrders(authMode);
-      setOrders(current);
-      setError("");
-      setConnection("connected");
-    } catch (caught) {
+    if (!cashierQueriesMayRun(authentication, blockedIdentity)) return;
+    const results = await Promise.allSettled([
+      cashierReadService.listActive(authentication.mode),
+      cashierReadService.listPendingCashierOrders(authentication.mode),
+    ]);
+    const failure = results.find((result): result is PromiseRejectedResult => result.status === "rejected");
+    if (failure) {
+      const caught = failure.reason;
       setError(message(caught));
       setConnection(navigator.onLine ? "error" : "disconnected");
+      if (caught instanceof OrderClientError && (caught.status === 401 || caught.status === 403)) {
+        setBlockedIdentity(authentication.identityKey);
+      }
+      return;
     }
-  }, [authMode]);
+    const [active, pending] = results as [PromiseFulfilledResult<ProductionOrder[]>, PromiseFulfilledResult<ProductionOrder[]>];
+    setActiveOrders(current => reconcile(current, active.value));
+    setPendingOrders(pending.value);
+    setError("");
+    setConnection("connected");
+  }, [authentication.branchId, authentication.identityKey, authentication.mode, authentication.ready, authenticationBlocked]);
+
   useEffect(() => {
-    if (!branchId) { setConnection("disconnected"); return; }
+    if (!cashierQueriesMayRun(authentication, blockedIdentity)) {
+      setConnection(authentication.status === "restoring" ? "connecting" : "error");
+      if (authentication.status === "unavailable") setError("Cashier authentication is unavailable. Restore the device session or sign in as Cashier.");
+      return;
+    }
     void fetchCurrent();
     const subscription = subscribeToBranchOrders({
-      branchId,
+      branchId: authentication.branchId!,
       audience: "cashier",
       onSignal: () => void fetchCurrent(),
       onStatus: setConnection,
     });
     const timer = window.setInterval(() => void fetchCurrent(), RECONCILIATION_MS);
-    return () => { window.clearInterval(timer); void subscription.unsubscribe(); };
-  }, [branchId, fetchCurrent]);
-  return { orders, connection, error, refresh: fetchCurrent };
+    const online = () => void fetchCurrent();
+    window.addEventListener("online", online);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("online", online);
+      void subscription.unsubscribe();
+    };
+  }, [authentication.branchId, authentication.ready, authentication.status, authenticationBlocked, fetchCurrent]);
+
+  return {
+    active: { orders: activeOrders, connection, error, isDemo: false, refresh: fetchCurrent },
+    pending: { orders: pendingOrders, connection, error, refresh: fetchCurrent },
+  };
+}
+
+export function useCashierOrders(queries: ReturnType<typeof useCashierOrderQueries>) {
+  return queries.active;
+}
+
+export function usePendingCashierOrders(queries: ReturnType<typeof useCashierOrderQueries>) {
+  return queries.pending;
 }
 
 export function useOrderTracking(_orderId: string, customerReference: string) {

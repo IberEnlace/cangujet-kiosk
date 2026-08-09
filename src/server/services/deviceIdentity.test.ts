@@ -169,6 +169,27 @@ test("refresh rotates the access token and revocation invalidates the device ses
   await assert.rejects(() => service.bootstrap(refreshed.accessToken), isFailure("invalid_device_session", 401));
 });
 
+test("refresh rejects expired sessions and revoked devices without weakening validation", async () => {
+  const generated = createDeviceSecretKey();
+  const repository = new MemoryDeviceRepository("test-secret-hash");
+  repository.publicKeyId = generated.publicKeyId;
+  const service = new DeviceIdentityService(
+    repository,
+    new DeviceTokenService("test-secret-with-at-least-thirty-two-bytes", 900, () => NOW.getTime()),
+    () => NOW,
+    matchesSecret(generated.secret),
+  );
+
+  const expired = await service.register(generated.secretKey);
+  repository.sessions[0].refresh_expires_at = NOW.toISOString();
+  await assert.rejects(() => service.refresh(expired.refreshToken), isFailure("invalid_device_session", 401));
+
+  const active = await service.register(generated.secretKey);
+  repository.device.status = "revoked";
+  repository.device.revoked_at = NOW.toISOString();
+  await assert.rejects(() => service.refresh(active.refreshToken), isFailure("device_revoked", 403));
+});
+
 test("device API exposes registration, refresh, bootstrap, and revocation without returning refresh secrets", async () => {
   const bootstrap = mapTestBootstrap();
   const registration: DeviceRegistrationResult = {
@@ -179,6 +200,8 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
     refreshExpiresAt: "2026-08-29T12:00:00.000Z",
     bootstrap,
   };
+  let receivedRefreshToken: string | null = null;
+  let refreshUnavailable = false;
   const fake: DeviceIdentityApplication = {
     async register() { return registration; },
     async verifyActivationKey() {
@@ -193,7 +216,9 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
         },
       };
     },
-    async refresh(): Promise<DeviceAccessTokenResponse> {
+    async refresh(refreshToken): Promise<DeviceAccessTokenResponse> {
+      receivedRefreshToken = refreshToken;
+      if (refreshUnavailable) throw new Error("database unavailable");
       return { accessToken: "new.header.signature", tokenType: "Bearer", expiresAt: registration.expiresAt };
     },
     async bootstrap() { return bootstrap; },
@@ -263,6 +288,33 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
     assert.equal(activationBody.secretKey, undefined);
     assert.match(activated.headers.get("set-cookie") ?? "", /Path=\/api\/v1/);
 
+    const refreshCookie = (activated.headers.get("set-cookie") ?? "").split(";", 1)[0];
+    const refreshed = await fetch(`http://127.0.0.1:${port}/api/v1/devices/session/refresh`, {
+      method: "POST",
+      headers: { cookie: refreshCookie },
+    });
+    assert.equal(refreshed.status, 200);
+    assert.equal(receivedRefreshToken, registration.refreshToken);
+    assert.equal((await refreshed.json() as DeviceAccessTokenResponse).accessToken, "new.header.signature");
+
+    const newTabRefresh = await fetch(`http://127.0.0.1:${port}/api/v1/devices/session/refresh`, {
+      method: "POST",
+      headers: { cookie: refreshCookie },
+    });
+    assert.equal(newTabRefresh.status, 200);
+
+    refreshUnavailable = true;
+    const unavailable = await fetch(`http://127.0.0.1:${port}/api/v1/devices/session/refresh`, {
+      method: "POST",
+      headers: { cookie: refreshCookie },
+    });
+    assert.equal(unavailable.status, 503);
+    assert.deepEqual(await unavailable.json(), {
+      code: "device_service_unavailable",
+      message: "The device service is unavailable.",
+    });
+    refreshUnavailable = false;
+
     const invalidRequest = await fetch(`http://127.0.0.1:${port}/api/v1/devices/register`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -294,6 +346,57 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
       customizationOptions: [],
     });
   } finally {
+    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+  }
+});
+
+test("production cookie security permits HTTP localhost and remains secure for HTTPS", async () => {
+  const bootstrap = mapTestBootstrap();
+  const registration: DeviceRegistrationResult = {
+    accessToken: "header.payload.signature",
+    tokenType: "Bearer",
+    expiresAt: "2026-07-30T12:15:00.000Z",
+    refreshToken: "drt_20000000-0000-4000-8000-000000000001_secret",
+    refreshExpiresAt: "2026-08-29T12:00:00.000Z",
+    bootstrap,
+  };
+  const fake: DeviceIdentityApplication = {
+    async register() { return registration; },
+    async verifyActivationKey() { return { restaurant: { name: "MORROW" }, branch: { name: "Main" }, allowedDeviceTypes: ["kiosk"] }; },
+    async activate() { return { ...registration, device: { id: bootstrap.device.id, name: bootstrap.device.name, deviceType: bootstrap.device.type, restaurantId: bootstrap.restaurant.id, branchId: bootstrap.branch.id, status: "active" } }; },
+    async refresh() { return { accessToken: registration.accessToken, tokenType: "Bearer", expiresAt: registration.expiresAt }; },
+    async bootstrap() { return bootstrap; },
+    async menu() { return { menuId: bootstrap.publishedMenuId, menuVersion: bootstrap.publishedMenuVersion, currency: bootstrap.currency, categories: [], products: [], customizationGroups: [], customizationOptions: [] }; },
+    async authorize() { return { deviceId: bootstrap.device.id, restaurantId: bootstrap.restaurant.id, branchId: bootstrap.branch.id, deviceType: bootstrap.device.type }; },
+    async revoke() { return; },
+    async heartbeat() { return { ok: true, configurationVersion: 7, configurationChanged: false, serverTime: NOW.toISOString() }; },
+  };
+  const previousNodeEnvironment = process.env.NODE_ENV;
+  process.env.NODE_ENV = "production";
+  const app = express();
+  app.use(express.json());
+  app.use("/api/v1", createDeviceRouter(() => fake));
+  const server = app.listen(0, "127.0.0.1");
+  await new Promise<void>(resolve => server.once("listening", resolve));
+  try {
+    const port = (server.address() as AddressInfo).port;
+    const request = (headers?: Record<string, string>) => fetch(`http://127.0.0.1:${port}/api/v1/devices/register`, {
+      method: "POST",
+      headers: { "content-type": "application/json", ...headers },
+      body: JSON.stringify({ secretKey: `mdk_${"a".repeat(24)}_${"b".repeat(43)}` }),
+    });
+
+    const localhost = await request();
+    assert.equal(localhost.status, 201);
+    assert.doesNotMatch(localhost.headers.get("set-cookie") ?? "", /; Secure(?:;|$)/);
+
+    const forwardedHttps = await request({ "x-forwarded-proto": "https" });
+    assert.equal(forwardedHttps.status, 201);
+    assert.match(forwardedHttps.headers.get("set-cookie") ?? "", /; Secure(?:;|$)/);
+
+  } finally {
+    if (previousNodeEnvironment === undefined) delete process.env.NODE_ENV;
+    else process.env.NODE_ENV = previousNodeEnvironment;
     await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
   }
 });

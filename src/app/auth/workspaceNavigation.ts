@@ -40,7 +40,7 @@ export function initialWorkspaceResumeDecision(input: {
   assignedDeviceType: BootstrapDeviceType | null;
   selectionOverrideActive: boolean;
 }) {
-  if (input.route !== WORKSPACE_SELECTION_ROUTE) return { resolved: true, target: null, reason: "different_route" } as const;
+  if (input.route !== ROUTES.deviceSetup && input.route !== WORKSPACE_SELECTION_ROUTE) return { resolved: true, target: null, reason: "different_route" } as const;
   if (input.selectionOverrideActive) return { resolved: true, target: null, reason: "selection_override" } as const;
   if (["initializing", "registering"].includes(input.initializationStatus)) {
     return { resolved: false, target: null, reason: "device_initializing" } as const;

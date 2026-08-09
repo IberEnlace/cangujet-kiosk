@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { SupabaseDeviceConfigurationService } from "../services/device/SupabaseDeviceConfigurationService";
 import type { BootstrapDeviceType, DeviceActivationKeyVerificationResponse } from "../../shared/deviceBootstrap";
+import { onDeviceSessionInvalidated } from "../services/device/deviceTokenManager";
 import {
   DeviceConfigurationError,
   type DeviceErrorStatus,
@@ -39,6 +40,16 @@ export function DeviceProvider({ children, enabled = true }: { children: ReactNo
   const configRef = useRef<KioskDeviceConfig | null>(null);
 
   useEffect(() => { configRef.current = config; }, [config]);
+
+  useEffect(() => onDeviceSessionInvalidated(() => {
+    initializationAbortRef.current?.abort();
+    initializationSequenceRef.current += 1;
+    setConfig(null);
+    setStatus("session_expired");
+    setInitializationError("session_expired");
+    setInitializationStatus("setup_required");
+    setLifecycleState("token_expired");
+  }), []);
 
   useEffect(() => {
     const sequence = ++initializationSequenceRef.current;

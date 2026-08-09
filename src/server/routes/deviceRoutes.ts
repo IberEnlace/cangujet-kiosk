@@ -56,7 +56,7 @@ export function createDeviceRouter(
       }
       diagnostic("activation_request_received");
       const result = await resolveService().activate({ secretKey, deviceFingerprint, deviceType: deviceType as DeviceActivationResponse["device"]["deviceType"], deviceName, appVersion, requestId });
-      setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
+      setRefreshCookie(request, response, result.refreshToken, result.refreshExpiresAt);
       const { refreshToken: _refreshToken, refreshExpiresAt: _refreshExpiresAt, ...publicResult } = result;
       diagnostic("activation_succeeded", result.device.id ? 201 : 200);
       response.status(201).json(publicResult);
@@ -74,7 +74,7 @@ export function createDeviceRouter(
       }
       diagnostic("registration_request_received");
       const result = await resolveService().register(secretKey);
-      setRefreshCookie(response, result.refreshToken, result.refreshExpiresAt);
+      setRefreshCookie(request, response, result.refreshToken, result.refreshExpiresAt);
       diagnostic("registration_succeeded", 201);
       response.status(201).json({
         accessToken: result.accessToken,
@@ -100,10 +100,10 @@ export function createDeviceRouter(
   router.delete("/devices/session", async (request: Request, response: Response<DeviceApiError>) => {
     try {
       await resolveService().revoke(readBearerToken(request));
-      clearRefreshCookie(response);
+      clearRefreshCookie(request, response);
       response.status(204).end();
     } catch (error) {
-      clearRefreshCookie(response);
+      clearRefreshCookie(request, response);
       sendError(response, error);
     }
   });
@@ -111,10 +111,10 @@ export function createDeviceRouter(
   router.post("/device/logout", async (request: Request, response: Response<DeviceApiError>) => {
     try {
       await resolveService().revoke(readBearerToken(request));
-      clearRefreshCookie(response);
+      clearRefreshCookie(request, response);
       response.status(204).end();
     } catch (error) {
-      clearRefreshCookie(response);
+      clearRefreshCookie(request, response);
       sendError(response, error);
     }
   });
@@ -177,23 +177,37 @@ function readCookie(request: Request, name: string) {
   return null;
 }
 
-function setRefreshCookie(response: Response, value: string, expiresAt: string) {
+function setRefreshCookie(request: Request, response: Response, value: string, expiresAt: string) {
   response.cookie(REFRESH_COOKIE, value, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: refreshCookieIsSecure(request),
     sameSite: "strict",
     path: "/api/v1",
     expires: new Date(expiresAt),
   });
 }
 
-function clearRefreshCookie(response: Response) {
+function clearRefreshCookie(request: Request, response: Response) {
   response.clearCookie(REFRESH_COOKIE, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
+    secure: refreshCookieIsSecure(request),
     sameSite: "strict",
     path: "/api/v1",
   });
+}
+
+function refreshCookieIsSecure(request: Request) {
+  const forwardedProtocol = request.header("x-forwarded-proto")?.split(",", 1)[0]?.trim().toLowerCase();
+  const httpsRequest = request.secure || forwardedProtocol === "https";
+  return httpsRequest || (process.env.NODE_ENV === "production" && !isLocalHostname(request.hostname));
+}
+
+function isLocalHostname(hostname: string) {
+  const normalized = hostname.trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return normalized === "localhost"
+    || normalized.endsWith(".localhost")
+    || normalized === "::1"
+    || /^127(?:\.\d{1,3}){3}$/.test(normalized);
 }
 
 function enforceRateLimit(

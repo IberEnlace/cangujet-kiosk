@@ -216,12 +216,12 @@ function BackgroundVideo({
 
   return (
     <div className={`absolute inset-0 overflow-hidden bg-white ${className}`} aria-hidden="true">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(196,30,25,.08),transparent_34%),linear-gradient(135deg,#FFFFFF,#F8F9FA_68%,#FFFFFF)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(230, 8, 0, 0.08),transparent_34%),linear-gradient(135deg,#FFFFFF,#F8F9FA_68%,#FFFFFF)]" />
       <video ref={video0Ref} src={layerSources[0]} className="absolute inset-0 size-full object-cover" style={getLayerStyle(0)}
         muted playsInline controls={false} disablePictureInPicture preload="auto" onCanPlay={() => handleCanPlay(0)} onError={event => handleError(0, event)} onContextMenu={event => event.preventDefault()} />
       <video ref={video1Ref} src={layerSources[1]} className="absolute inset-0 size-full object-cover" style={getLayerStyle(1)}
         muted playsInline controls={false} disablePictureInPicture preload="auto" onCanPlay={() => handleCanPlay(1)} onError={event => handleError(1, event)} onContextMenu={event => event.preventDefault()} />
-      <div className="pointer-events-none absolute inset-0 z-10 bg-white/[.72]" />
+      <div className="pointer-events-none absolute inset-0 z-10 bg-black/80" />
     </div>
     );
 }

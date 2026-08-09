@@ -8,6 +8,7 @@ export type StaffIdentity = { session: Session | null; profile: ProfileRow; isDe
 export type AuthFailure = "invalid_credentials" | "inactive_profile" | "missing_profile" | "wrong_workspace" | "service_error";
 export type StaffSessionVerification = "valid" | "unauthenticated" | "network_error";
 export const STAFF_SESSION_INVALIDATED_EVENT = "morrow:staff-session-invalidated";
+let staffRefreshPromise: Promise<{ token: string | null; failure: "unauthenticated" | "network" | null }> | null = null;
 
 export async function restoreStaffIdentity(): Promise<StaffIdentity | null> {
   if (!supabase) return null;
@@ -75,6 +76,16 @@ export async function getStaffAccessToken() {
   return (await getStaffSessionCredential()).token;
 }
 
+export function refreshStaffSessionCredential(): Promise<{ token: string | null; failure: "unauthenticated" | "network" | null }> {
+  if (staffRefreshPromise) return staffRefreshPromise;
+  const current = performStaffSessionRefresh();
+  staffRefreshPromise = current;
+  void current.finally(() => {
+    if (staffRefreshPromise === current) staffRefreshPromise = null;
+  }).catch(() => undefined);
+  return current;
+}
+
 export function onStaffAuthChange(callback: (identity: StaffIdentity | null) => void) {
   if (!supabase) return () => undefined;
   const { data } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -89,6 +100,25 @@ async function loadIdentity(session: Session, includeInactive = false): Promise<
   const { data, error } = await supabase.from("profiles").select("*").eq("id", session.user.id).maybeSingle();
   if (error || !data || (!includeInactive && !data.is_active)) return null;
   return { session, profile: data, isDemo: false };
+}
+
+async function performStaffSessionRefresh(): Promise<{ token: string | null; failure: "unauthenticated" | "network" | null }> {
+  if (!supabase) return { token: null, failure: "unauthenticated" };
+  try {
+    const { data, error } = await supabase.auth.refreshSession();
+    if (error) {
+      if (!isAuthenticationFailure(error)) return { token: null, failure: "network" };
+      await invalidateStaffSession();
+      return { token: null, failure: "unauthenticated" };
+    }
+    if (!data.session?.access_token) {
+      await invalidateStaffSession();
+      return { token: null, failure: "unauthenticated" };
+    }
+    return { token: data.session.access_token, failure: null };
+  } catch {
+    return { token: null, failure: "network" };
+  }
 }
 
 function demoProfile(role: StaffRole): ProfileRow {

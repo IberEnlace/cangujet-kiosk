@@ -4,7 +4,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { toast, Toaster } from "sonner";
 import MorrowLogo from "../components/branding/MorrowLogo";
 import CashierReceipt, { printCashierReceipt, type CashierReceiptData } from "../components/cashier/CashierReceipt";
-import { useCashierOrders, usePendingCashierOrders } from "../hooks/useRealtimeOrders";
+import { useCashierOrderQueries, useCashierOrders, usePendingCashierOrders } from "../hooks/useRealtimeOrders";
 import { OrderService } from "../services/orders/OrderService";
 import {
   buildCashierCreatePayload,
@@ -16,6 +16,7 @@ import {
   type CashierAttempt,
 } from "../services/orders/cashierAttempt";
 import { useAuth } from "../auth/AuthContext";
+import { useCashierAuthentication } from "../auth/cashierAuthentication";
 import type { NormalizedMenuProduct } from "../services/supabase/menuModels";
 import { useBootstrap } from "../context/BootstrapContext";
 import { MockPaymentTerminalService } from "../services/payment/MockPaymentTerminalService";
@@ -52,11 +53,14 @@ function ProductImage({ product, className }: { product: CashierMenuProduct; cla
 }
 
 export default function CashierDashboard() {
-  const liveOrders=useCashierOrders();
-  const pendingKiosk=usePendingCashierOrders();
+  const cashierAuthentication=useCashierAuthentication();
+  const cashierQueries=useCashierOrderQueries(cashierAuthentication);
+  const liveOrders=useCashierOrders(cashierQueries);
+  const pendingKiosk=usePendingCashierOrders(cashierQueries);
   const { profile }=useAuth();
-  const authentication: "staff"|"device"=profile?"staff":"device";
-  const { menu, restaurant, branch, kiosk }=useBootstrap();
+  const authentication=cashierAuthentication.mode;
+  const bootstrap=useBootstrap();
+  const { menu, restaurant, branch, kiosk }=bootstrap;
   const currency=useMemo(()=>new Intl.NumberFormat(undefined,{style:"currency",currency:branch?.currency??"USD"}),[branch?.currency]);
   const CURRENCY=currency;
   const [orderItems,setOrderItems]=useState<CashierOrderItem[]>([]);
@@ -86,7 +90,12 @@ export default function CashierDashboard() {
 
   const menuCategories=useMemo(()=>menu?.categories.map(item=>item.name)??[],[menu]);
   const menuProducts=useMemo<CashierMenuProduct[]>(()=>{const names=new Map(menu?.categories.map(item=>[item.slug,item.name])??[]);return (menu?.products??[]).map(product=>({...product,cashierCategory:names.get(product.category.replace(/_/g,"-"))??product.category,needsConfiguration:false}));},[menu]);
-  const menuLoading=!menu;
+  const menuLoading=!menu&&(cashierAuthentication.status==="restoring"||bootstrap.state==="loading_configuration"||bootstrap.state==="loading_menu");
+  const sessionMessage=cashierAuthentication.status==="restoring"
+    ? "Restoring the Cashier session before loading orders."
+    : cashierAuthentication.status==="unavailable"
+      ? "Cashier authentication is unavailable. Restore this device session or sign in as Cashier."
+      : liveOrders.error;
   const categories=useMemo(()=>["All",...menuCategories],[menuCategories]);
   const visibleProducts=useMemo(()=>{const query=search.trim().toLowerCase();return menuProducts.filter(product=>(product.needsConfiguration||product.available&&product.inStock)&&(category==="All"||product.cashierCategory===category)&&(!query||product.name.toLowerCase().includes(query)||product.cashierCategory.toLowerCase().includes(query)||product.keywords.some(keyword=>keyword.includes(query))));},[category,search,menuProducts]);
   const subtotal=orderItems.reduce((sum,item)=>sum+item.unitPrice*item.quantity,0);
@@ -114,6 +123,7 @@ export default function CashierDashboard() {
   const clearCurrentOrder=()=>{setOrderItems([]);setReceived("");setCashOpen(false);resetCashierAttempt();setClearConfirm(false);};
   const completeSale=async()=>{
     if(submitting)return;
+    if(!cashierAuthentication.ready){toast.error("Wait for Cashier authentication to finish.");return;}
     if(!orderItems.length){toast.error("Add at least one item before completing the sale.");return;}
     if(amountReceived<total){toast.error("Amount received is less than the total due.");return;}
     setSubmitting(true);
@@ -150,6 +160,7 @@ export default function CashierDashboard() {
   const openWaitingOrder=(order:ProductionOrder)=>{setPendingOrder(order);setPendingMethod("cash");setPendingReceived("");setPendingPayment(null);setTerminalStatus(null);};
   const collectWaitingOrder=async()=>{
     const order=pendingOrder;if(!order||submitting)return;
+    if(!cashierAuthentication.ready){toast.error("Wait for Cashier authentication to finish.");return;}
     if(pendingMethod==="cash"&&order.status!=="paid"&&Number(pendingReceived)<Number(order.total)){toast.error("Amount received must cover the authoritative total.");return;}
     setSubmitting(true);
     try{
@@ -180,6 +191,7 @@ export default function CashierDashboard() {
   };
   const cancelWaitingOrder=async(order:ProductionOrder)=>{
     const reason=window.prompt(`Cancel ${order.orderNumber}. Enter a reason:`)?.trim();if(!reason||submitting)return;
+    if(!cashierAuthentication.ready){toast.error("Wait for Cashier authentication to finish.");return;}
     setSubmitting(true);
     try{await cashierOrderService.cancel(order.id,order.version,reason,authentication);clearDeferredAttempt(order.id);await Promise.all([pendingKiosk.refresh(),liveOrders.refresh()]);toast.success(`${order.orderNumber} cancelled.`);}
     catch(error){toast.error(error instanceof Error?error.message:"Order could not be cancelled.");}
@@ -188,10 +200,11 @@ export default function CashierDashboard() {
 
   return <main className="cangujet-cashier flex min-h-screen flex-col bg-[#F8F9FA] text-[#1F1F1F]"><Toaster theme="light" position="top-right"/>
     <header className="flex items-center justify-between border-b border-[#ECECEC] bg-white px-4 py-4 shadow-sm sm:px-6"><div><MorrowLogo variant="full" priority className="h-auto w-36"/><p className="mt-1 text-xs text-[#6B7280]">{kiosk?.name} · {branch?.name} · Current shift</p><p className="mt-1 text-[10px] text-[#9CA3AF]">{liveOrders.isDemo?"Demo orders":`${liveOrders.orders.length} branch orders · ${liveOrders.connection}`}</p></div><button onClick={()=>registerOpen?setCloseConfirm(true):setRegisterOpen(true)} className={`cashier-button rounded-xl border px-4 py-2 text-xs font-bold ${registerOpen?"border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]":"border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]"}`}>{registerOpen?"Close Register":"Open Register"}</button></header>
+    {sessionMessage&&<p role="alert" className="border-b border-[#C41E19]/20 bg-[#C41E19]/5 px-6 py-3 text-xs font-semibold text-[#C41E19]">{sessionMessage}</p>}
     {pendingQueueOrders.length>0&&<section className="border-b border-[#C41E19]/20 bg-[#C41E19]/5 px-4 py-3 sm:px-6"><button onClick={()=>setTool("pending")} className="flex w-full items-center gap-3 text-left"><span className="grid size-10 place-items-center rounded-xl bg-white text-[#C41E19] shadow-sm"><Clock3 size={18}/></span><span><strong className="block text-sm text-[#C41E19]">Pending Kiosk Payments</strong><small className="text-[#C41E19]/70">{pendingQueueOrders.length} order{pendingQueueOrders.length===1?"":"s"} waiting for cashier confirmation</small></span><span className="ml-auto rounded-lg bg-[#C41E19] px-3 py-2 text-xs font-black text-white">Open queue</span></button></section>}
     <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_400px]"><section className="min-w-0 p-4 sm:p-6"><div className="relative"><Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#9CA3AF]"/><input ref={searchRef} value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search menu..." className="cashier-search h-12 w-full rounded-2xl pl-12 pr-20 text-sm outline-none"/>{!search&&<kbd className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rounded-md border border-[#ECECEC] bg-[#F8F9FA] px-2 py-1 text-[10px] font-bold text-[#9CA3AF]">/</kbd>}{search&&<button aria-label="Clear search" onClick={()=>{setSearch("");searchRef.current?.focus();}} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-[#9CA3AF] transition-colors hover:bg-[#C41E19]/5 hover:text-[#C41E19]"><X size={16}/></button>}</div>
       <div className="my-4 flex gap-2.5 overflow-x-auto pb-1" aria-label="Menu categories">{categories.map(label=><button key={label} onClick={()=>setCategory(label)} className={`cashier-category min-h-10 shrink-0 rounded-xl border px-4 text-sm font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/40 ${category===label?"border-[#C41E19] bg-[#C41E19] text-white":"border-[#ECECEC] bg-white text-[#6B7280] hover:border-[#C41E19]/25 hover:bg-[#C41E19]/5 hover:text-[#C41E19]"}`}>{label}</button>)}</div>
-      {menuLoading?<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{Array.from({length:8},(_,index)=><div key={index} className="cashier-skeleton min-h-52 rounded-2xl"/>)}</div>:visibleProducts.length===0?<div className="grid min-h-52 place-items-center rounded-2xl border border-dashed border-[#ECECEC] bg-white text-center"><div><Search size={24} className="mx-auto mb-3 text-[#9CA3AF]"/><p className="text-sm font-bold text-[#6B7280]">No menu items found</p><p className="mt-1 text-xs text-[#9CA3AF]">Try another search or category.</p></div></div>:<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{visibleProducts.map(product=><button key={product.id} disabled={!registerOpen||product.needsConfiguration||!product.available||!product.inStock} onClick={()=>chooseProduct(product)} className="cashier-product group relative min-h-52 overflow-hidden rounded-2xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/55 disabled:opacity-40"><span aria-hidden="true" className="cashier-product-add absolute right-3 top-3 z-10 grid size-9 place-items-center rounded-full bg-[#C41E19] text-white shadow-lg"><Plus size={17} strokeWidth={2.5}/></span><div className="aspect-[16/7.5] w-full overflow-hidden bg-[#F8F9FA]"><ProductImage product={product} className="cashier-product-image size-full object-contain p-2"/></div><div className="p-4"><div className="text-[11px] font-bold uppercase tracking-[.08em] text-[#C41E19]/70">{product.cashierCategory}</div><h3 className="mt-1 line-clamp-2 text-sm font-bold leading-5">{product.name}</h3>{product.needsConfiguration?<span className="mt-2 inline-flex rounded-full border border-[#C41E19]/20 bg-[#C41E19]/5 px-2 py-1 text-[10px] font-bold text-[#C41E19]">Needs configuration</span>:<p className="mt-2 text-[15px] font-black text-[#C41E19]">{CURRENCY.format(product.price)}</p>}</div></button>)}</div>}
+      {menuLoading?<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{Array.from({length:8},(_,index)=><div key={index} className="cashier-skeleton min-h-52 rounded-2xl"/>)}</div>:!menu?<div className="grid min-h-52 place-items-center rounded-2xl border border-dashed border-[#ECECEC] bg-white p-6 text-center"><div><Search size={24} className="mx-auto mb-3 text-[#9CA3AF]"/><p className="text-sm font-bold text-[#6B7280]">Menu unavailable</p><p className="mt-1 text-xs text-[#9CA3AF]">{bootstrap.error?.message??"Restore the device session to load the branch menu."}</p></div></div>:visibleProducts.length===0?<div className="grid min-h-52 place-items-center rounded-2xl border border-dashed border-[#ECECEC] bg-white text-center"><div><Search size={24} className="mx-auto mb-3 text-[#9CA3AF]"/><p className="text-sm font-bold text-[#6B7280]">No menu items found</p><p className="mt-1 text-xs text-[#9CA3AF]">Try another search or category.</p></div></div>:<div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">{visibleProducts.map(product=><button key={product.id} disabled={!cashierAuthentication.ready||!registerOpen||product.needsConfiguration||!product.available||!product.inStock} onClick={()=>chooseProduct(product)} className="cashier-product group relative min-h-52 overflow-hidden rounded-2xl text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/55 disabled:opacity-40"><span aria-hidden="true" className="cashier-product-add absolute right-3 top-3 z-10 grid size-9 place-items-center rounded-full bg-[#C41E19] text-white shadow-lg"><Plus size={17} strokeWidth={2.5}/></span><div className="aspect-[16/7.5] w-full overflow-hidden bg-[#F8F9FA]"><ProductImage product={product} className="cashier-product-image size-full object-contain p-2"/></div><div className="p-4"><div className="text-[11px] font-bold uppercase tracking-[.08em] text-[#C41E19]/70">{product.cashierCategory}</div><h3 className="mt-1 line-clamp-2 text-sm font-bold leading-5">{product.name}</h3>{product.needsConfiguration?<span className="mt-2 inline-flex rounded-full border border-[#C41E19]/20 bg-[#C41E19]/5 px-2 py-1 text-[10px] font-bold text-[#C41E19]">Needs configuration</span>:<p className="mt-2 text-[15px] font-black text-[#C41E19]">{CURRENCY.format(product.price)}</p>}</div></button>)}</div>}
       <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">{([{id:"pending",icon:Clock3,label:"Pending Kiosk Payments",value:`${pendingQueueOrders.length} waiting`},{id:"orders",icon:Receipt,label:"Recent Orders",value:`${shift.completedOrders} this shift`},{id:"receipts",icon:Printer,label:"Receipts",value:"View or reprint"},{id:"shift",icon:WalletCards,label:"Shift Sales",value:CURRENCY.format(shift.totalSales)}] as const).map(card=><button key={card.id} onClick={()=>setTool(card.id)} className="rounded-2xl border border-[#ECECEC] bg-white p-4 text-left shadow-sm transition hover:-translate-y-px hover:border-[#C41E19]/20 hover:bg-[#C41E19]/5 focus:outline-none focus:ring-2 focus:ring-[#C41E19]/40"><card.icon size={18} className={card.id==="pending"&&pendingQueueOrders.length?"text-[#C41E19]":"text-[#C41E19]"}/><strong className="mt-3 block text-sm text-[#1F1F1F]">{card.label}</strong><small className="text-[#6B7280]">{card.value}</small></button>)}</div>
     </section>
     <aside className="cashier-order-panel flex min-h-[560px] flex-col border-t border-[#ECECEC] px-5 pb-24 pt-5 lg:sticky lg:top-0 lg:h-screen lg:border-l lg:border-t-0"><div className="mb-5 flex items-center justify-between"><h2 className="flex items-center gap-2 text-lg font-black tracking-[-.025em]"><ShoppingCart size={18} className="text-[#C41E19]"/>Current Order</h2><button disabled={!orderItems.length} onClick={()=>setClearConfirm(true)} className="rounded-lg border border-[#C41E19]/20 bg-white px-3 py-1.5 text-xs font-bold text-[#C41E19] transition-colors hover:border-[#C41E19]/30 hover:bg-[#C41E19]/5 hover:text-[#C41E19] disabled:opacity-30">Clear</button></div><div className="flex-1 space-y-3 overflow-auto pr-1">{orderItems.length===0?<div className="grid h-56 place-items-center rounded-2xl border border-dashed border-[#ECECEC] bg-[#F8F9FA] text-center"><div><ShoppingCart size={28} className="mx-auto mb-3 text-[#9CA3AF]"/><p className="text-sm font-bold text-[#1F1F1F]">No items yet</p><p className="mt-1 text-xs text-[#9CA3AF]">Select menu items to begin an order.</p></div></div>:<AnimatePresence initial={false}>{orderItems.map(item=><motion.div key={item.id} initial={{opacity:0,y:6}} animate={{opacity:1,y:0}} exit={{opacity:0,y:-4}} transition={{duration:.12,ease:"easeOut"}} className="cashier-cart-item rounded-[16px] p-3.5"><div className="flex justify-between gap-3"><div className="min-w-0"><strong className="line-clamp-2 text-sm">{item.name}</strong>{item.customizations.length>0&&<p className="mt-1 text-[11px] text-[#9CA3AF]">{item.customizations.join(" · ")}</p>}<p className="mt-1 text-xs text-[#9CA3AF]">{CURRENCY.format(item.unitPrice)} each</p></div><span className="shrink-0 text-sm font-black text-[#C41E19]">{CURRENCY.format(item.unitPrice*item.quantity)}</span></div><div className="mt-3 flex items-center gap-2"><button aria-label={`Decrease ${item.name}`} onClick={()=>updateQuantity(item.id,item.quantity-1)} className="cashier-quantity grid size-9 place-items-center rounded-xl"><Minus size={13}/></button><span className="w-7 text-center text-sm font-black tabular-nums">{item.quantity}</span><button aria-label={`Increase ${item.name}`} onClick={()=>updateQuantity(item.id,item.quantity+1)} className="cashier-quantity grid size-9 place-items-center rounded-xl"><Plus size={13}/></button><button aria-label={`Remove ${item.name}`} onClick={()=>updateQuantity(item.id,0)} className="ml-auto rounded-xl p-2.5 text-[#9CA3AF] transition-colors hover:bg-[#C41E19]/5 hover:text-[#C41E19] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C41E19]/40"><Trash2 size={15}/></button></div></motion.div>)}</AnimatePresence>}</div>

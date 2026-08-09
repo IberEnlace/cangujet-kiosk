@@ -18,7 +18,7 @@ import type {
   PricingModifier,
 } from "../repositories/orderRepository";
 import { IdempotencyConflictError } from "../repositories/orderRepository";
-import type { DeviceIdentityApplication } from "./deviceIdentityService";
+import { DeviceApiFailure, type DeviceIdentityApplication } from "./deviceIdentityService";
 
 const MAX_LINES = 50;
 const MAX_ITEM_QUANTITY = 20;
@@ -81,10 +81,30 @@ export class OrderDomainService {
         role: "device",
         deviceType: identity.deviceType,
       };
-    } catch {
+    } catch (error) {
+      if (error instanceof DeviceApiFailure && error.status !== 401) {
+        throw new OrderDomainFailure(
+          error.status === 403 ? "unauthorized" : "server_error",
+          error.status === 403 ? 403 : 503,
+          error.status === 403 ? error.message : "The authentication service is unavailable.",
+          undefined,
+          undefined,
+          undefined,
+          error,
+        );
+      }
+      if (!(error instanceof DeviceApiFailure)) {
+        throw new OrderDomainFailure("server_error", 503, "The authentication service is unavailable.", undefined, undefined, undefined, error);
+      }
+    }
+    try {
       const staff = await this.repository.authenticateStaff(accessToken);
+      if (staff === "forbidden") throw new OrderDomainFailure("unauthorized", 403, "Cashier access is required.");
       if (staff) return staff;
       throw new OrderDomainFailure("unauthorized", 401, "Authentication is required.");
+    } catch (error) {
+      if (error instanceof OrderDomainFailure) throw error;
+      throw new OrderDomainFailure("server_error", 503, "The authentication service is unavailable.", undefined, undefined, undefined, error);
     }
   }
 
@@ -98,7 +118,7 @@ export class OrderDomainService {
 
   async create(actor: OrderActor, request: OrderCreateRequest) {
     assertIdempotencyKey(request.idempotencyKey);
-    const source = actor.role === "cashier" ? "cashier" : request.source === "nori" ? "nori" : "kiosk";
+    const source = isCashierPaymentActor(actor) ? "cashier" : request.source === "nori" ? "nori" : "kiosk";
     const fingerprint = fingerprintOrderCreatePayload(request, source);
     let existingOrderId: string | null = null;
     let existingFingerprint: string | null = null;
@@ -456,7 +476,7 @@ function validateSelections(
 function enforceTransitionRole(actor: OrderActor, order: ProductionOrder, next: ProductionOrderStatus) {
   if (actor.role === "device") {
     const canSubmit = next === "submitted" && (actor.deviceType === "kiosk" || actor.deviceType === "cashier_terminal");
-    const canCancel = next === "cancelled" && actor.deviceType === "kiosk";
+    const canCancel = next === "cancelled" && (actor.deviceType === "kiosk" || actor.deviceType === "cashier_terminal");
     const allowed = canSubmit || canCancel;
     if (!allowed || (next === "cancelled" && !["draft", "awaiting_payment", "paid", "submitted"].includes(order.status))) {
       throw new OrderDomainFailure("unauthorized", 403, "The device cannot perform this transition.");
@@ -471,7 +491,7 @@ function enforceTransitionRole(actor: OrderActor, order: ProductionOrder, next: 
 }
 
 function requireOrderingActor(actor: OrderActor) {
-  if (actor.role === "device" && actor.deviceType !== "kiosk") {
+  if (actor.role === "device" && actor.deviceType !== "kiosk" && actor.deviceType !== "cashier_terminal") {
     throw new OrderDomainFailure("unauthorized", 403, "This device is not authorized to place orders.");
   }
 }

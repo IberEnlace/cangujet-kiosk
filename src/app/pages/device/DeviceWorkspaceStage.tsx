@@ -20,10 +20,10 @@ export type WorkspaceDefinition = {
 
 export const workspaceDefinitions: WorkspaceDefinition[] = [
   { type: "kiosk", title: "Customer Kiosk", category: "Guest Ordering", description: "A polished self-service journey from welcome to payment.", action: "Use as Customer Kiosk", backgroundWord: "ORDER", previewId: "customer", icon: TabletSmartphone },
-  { type: "kitchen_display", title: "Kitchen", category: "Food Preparation", description: "Live tickets, clear priorities, and a focused production flow.", action: "Configure Kitchen", backgroundWord: "PREPARE", previewId: "kitchen", icon: ChefHat },
-  { type: "cashier_terminal", title: "Cashier", category: "Point of Sale", description: "Fast order entry, payments, receipts, and register control.", action: "Launch Cashier", backgroundWord: "SELL", previewId: "cashier", icon: ReceiptText },
-  { type: "admin_terminal", title: "Admin", category: "Management", description: "Restaurant intelligence, menus, settings, and operations.", action: "Open Admin Setup", backgroundWord: "MANAGE", previewId: "admin", icon: BarChart3 },
-  { type: "order_display", title: "Order Display", category: "Pickup Screen", description: "A calm, legible view of preparing and ready orders.", action: "Configure Order Display", backgroundWord: "DISPLAY", previewId: "display", icon: Monitor },
+  { type: "kitchen_display", title: "Kitchen", category: "Food Preparation", description: "Live tickets, clear priorities, and a focused production flow.", action: "Use as Kitchen", backgroundWord: "PREPARE", previewId: "kitchen", icon: ChefHat },
+  { type: "cashier_terminal", title: "Cashier", category: "Point of Sale", description: "Fast order entry, payments, receipts, and register control.", action: "Use as Cashier", backgroundWord: "SELL", previewId: "cashier", icon: ReceiptText },
+  { type: "admin_terminal", title: "Admin", category: "Management", description: "Restaurant intelligence, menus, settings, and operations.", action: "Use as Admin", backgroundWord: "MANAGE", previewId: "admin", icon: BarChart3 },
+  { type: "order_display", title: "Order Display", category: "Pickup Screen", description: "A calm, legible view of preparing and ready orders.", action: "Use as Order Display", backgroundWord: "DISPLAY", previewId: "display", icon: Monitor },
 ];
 
 const particles = [
@@ -37,17 +37,18 @@ export function workspaceLayoutId(workspace: Pick<WorkspaceDefinition, "previewI
 
 type StageProps = {
   verification: DeviceActivationKeyVerificationResponse;
+  initialType?: BootstrapDeviceType;
   selectedType: BootstrapDeviceType | null;
   busy: boolean;
   error: readonly [string, string] | null;
-  onBack: () => void;
-  onActivate: (type: BootstrapDeviceType) => Promise<void>;
+  onBack?: () => void;
+  onActivate: (type: BootstrapDeviceType) => void | Promise<void>;
 };
 
-export default function DeviceWorkspaceStage({ verification, selectedType, busy, error, onBack, onActivate }: StageProps) {
+export default function DeviceWorkspaceStage({ verification, initialType, selectedType, busy, error, onBack, onActivate }: StageProps) {
   const reducedMotion = Boolean(useReducedMotion());
   const available = workspaceDefinitions.filter(workspace => verification.allowedDeviceTypes.includes(workspace.type));
-  const [choice, setChoice] = useState<BootstrapDeviceType | null>(() => available[0]?.type ?? null);
+  const [choice, setChoice] = useState<BootstrapDeviceType | null>(() => initialType && available.some(workspace => workspace.type === initialType) ? initialType : available[0]?.type ?? null);
   const [direction, setDirection] = useState(1);
   const navigationRefs = useRef<Partial<Record<BootstrapDeviceType, HTMLButtonElement | null>>>({});
   const activeType = selectedType ?? choice ?? available[0]?.type ?? null;
@@ -94,7 +95,7 @@ export default function DeviceWorkspaceStage({ verification, selectedType, busy,
         <li className="is-active" aria-current="step"><span>02</span><b>Workspace</b></li>
         <li><span>03</span><b>Configure</b></li>
       </ol>
-      <button type="button" className="morrow-workspace__back" onClick={onBack} disabled={busy}><ArrowLeft size={15}/><span>Change key</span></button>
+      {onBack && <button type="button" className="morrow-workspace__back" onClick={onBack} disabled={busy}><ArrowLeft size={15}/><span>Change key</span></button>}
     </header>
 
     <div className="morrow-workspace__heading">

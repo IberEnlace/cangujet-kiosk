@@ -16,13 +16,17 @@ import {
   type KioskDeviceConfig,
 } from "../../types/device";
 import {
-  DEVICE_ACCESS_TOKEN_STORAGE_KEY,
   DEVICE_CONFIG_STORAGE_KEY,
-  LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY,
   LEGACY_DEVICE_CONFIG_STORAGE_KEY,
   type DeviceRequestOptions,
   type DeviceConfigurationService,
 } from "./DeviceConfigurationService";
+import {
+  clearDeviceAccessToken,
+  readDeviceAccessToken,
+  shareDeviceSessionRefresh,
+  storeDeviceAccessToken,
+} from "./deviceTokenManager";
 
 type Fetcher = typeof fetch;
 const DEFAULT_REQUEST_TIMEOUT_MS = 12_000;
@@ -239,7 +243,7 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
     }
     const attempt = ++this.refreshAttempt;
     diagnostic("refresh_attempted", { path: "/api/v1/devices/session/refresh", attempt, credentialType: "cookie", credentialsAttached: true });
-    const operation = this.performRefresh(attempt, signal);
+    const operation = shareDeviceSessionRefresh(() => this.performRefresh(attempt, signal));
     this.refreshPromise = operation;
     try { return await operation; }
     finally { if (this.refreshPromise === operation) this.refreshPromise = null; }
@@ -341,23 +345,15 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
   }
 
   private saveAccessToken(accessToken: string) {
-    sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, accessToken);
-    sessionStorage.removeItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    storeDeviceAccessToken(accessToken);
   }
 
   private readAccessToken() {
-    const current = sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
-    if (current) return current;
-    const legacy = sessionStorage.getItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY);
-    if (!legacy) return null;
-    sessionStorage.setItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY, legacy);
-    sessionStorage.removeItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY);
-    return legacy;
+    return readDeviceAccessToken();
   }
 
   private clearDeviceAccessToken() {
-    sessionStorage.removeItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY);
-    sessionStorage.removeItem(LEGACY_DEVICE_ACCESS_TOKEN_STORAGE_KEY);
+    clearDeviceAccessToken();
   }
 
   private clearLocalConfiguration() {

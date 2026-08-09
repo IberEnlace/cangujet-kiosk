@@ -21,7 +21,14 @@ type SetupLanguage = SupportedLanguage;
 type ErrorStatus = Exclude<DeviceStatus, "checking" | "unconfigured" | "connecting" | "configured">;
 const errorStatuses: ErrorStatus[] = ["invalid_request", "invalid_key", "network_error", "timeout", "session_expired", "disabled", "expired", "revoked", "already_used", "conflict", "server_error", "protocol_error", "configuration_error"];
 const setupSteps = ["Verifying device", "Loading branch settings", "Loading menu", "Preparing workspace"];
-export default function DeviceSetup({ onConfigured, onDeviceInfo }: { onConfigured: () => void; onDeviceInfo: () => void }) {
+type DeviceSetupProps = {
+  onConfigured: () => void;
+  onDeviceInfo: () => void;
+  workspaceSelection?: boolean;
+  onWorkspaceSelected?: (type: BootstrapDeviceType) => void;
+};
+
+export default function DeviceSetup({ onConfigured, onDeviceInfo, workspaceSelection = false, onWorkspaceSelected }: DeviceSetupProps) {
   const { status, initializationStatus, config, verifyActivationKey, configureDevice, clearDeviceConfiguration } = useDevice();
   const [language, setLanguage] = useState<SetupLanguage>("en");
   const [secretKey, setSecretKey] = useState("");
@@ -32,12 +39,18 @@ export default function DeviceSetup({ onConfigured, onDeviceInfo }: { onConfigur
   const text = copy[language];
   const error = errorStatuses.includes(status as ErrorStatus) ? text[status as ErrorStatus] : null;
   const displayedError = validationError ? ["This device key is invalid.", validationError] as const : error;
+  const provisionedVerification: DeviceActivationKeyVerificationResponse | null = workspaceSelection && config ? {
+    restaurant: { name: config.restaurantName },
+    branch: { name: config.branchName },
+    allowedDeviceTypes: workspaceDefinitions.map(workspace => workspace.type),
+  } : null;
+  const stageVerification = provisionedVerification ?? verifiedKey;
 
   useEffect(() => {
-    if (status !== "configured" || !config) return;
+    if (workspaceSelection || status !== "configured" || !config) return;
     const timer = window.setTimeout(onConfigured, 2600);
     return () => window.clearTimeout(timer);
-  }, [config, onConfigured, status]);
+  }, [config, onConfigured, status, workspaceSelection]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -60,6 +73,10 @@ export default function DeviceSetup({ onConfigured, onDeviceInfo }: { onConfigur
   };
 
   const activate = async (deviceType: BootstrapDeviceType) => {
+    if (workspaceSelection && config) {
+      onWorkspaceSelected?.(deviceType);
+      return;
+    }
     if (initializationStatus === "registering") return;
     setSelectedType(deviceType);
     const success = await configureDevice(secretKey.trim(), deviceType);
@@ -74,13 +91,13 @@ export default function DeviceSetup({ onConfigured, onDeviceInfo }: { onConfigur
     setValidationError("");
   };
 
-  const workspaceMode = Boolean(verifiedKey && status !== "configured");
+  const workspaceMode = Boolean(stageVerification && (workspaceSelection || status !== "configured"));
 
   return <main dir="ltr" className={`device-setup-page ${workspaceMode ? "device-setup-page--workspace" : ""} min-h-[100dvh] bg-[#F8F9FA] px-5 py-8 text-[#1F1F1F] sm:px-10`}>
     <div className={`device-setup-shell mx-auto flex min-h-[calc(100dvh-4rem)] w-full flex-col ${workspaceMode ? "max-w-[1180px]" : "max-w-2xl"}`}>
       {!workspaceMode && <header className="device-setup-header flex items-center justify-between"><MorrowLogo variant="full" priority className="h-auto w-44" /><div className="device-setup-languages flex gap-1 rounded-xl border border-[#ECECEC] bg-[#FFFFFF] p-1 shadow-[0_3px_10px_rgba(31,31,31,.04)]">{SUPPORTED_LANGUAGE_CODES.map(item => <button type="button" key={item} onClick={() => setLanguage(item)} className={`min-h-10 rounded-lg px-3 text-xs font-bold uppercase transition active:scale-[.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#C41E19] ${language === item ? "bg-[#C41E19] text-[#FFFFFF] shadow-[0_4px_12px_rgba(196,30,25,.16)]" : "text-[#6B7280] hover:bg-[#F8F9FA] hover:text-[#1F1F1F]"}`}>{item}</button>)}</div></header>}
       <section className={workspaceMode ? "device-workspace-stage" : "my-auto rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] p-[clamp(1.5rem,5vw,3rem)] shadow-[0_10px_30px_rgba(31,31,31,.07)] transition duration-300 hover:shadow-[0_14px_36px_rgba(31,31,31,.09)]"}>
-        {status === "configured" && config ? <ConfiguredState config={config} text={text.connected} selectedType={selectedType} /> : verifiedKey ? <DeviceWorkspaceStage verification={verifiedKey} selectedType={selectedType} busy={initializationStatus === "registering"} error={displayedError} onBack={resetVerification} onActivate={activate} /> : <>
+        {!workspaceSelection && status === "configured" && config ? <ConfiguredState config={config} text={text.connected} selectedType={selectedType} /> : stageVerification ? <DeviceWorkspaceStage verification={stageVerification} initialType={workspaceSelection ? config?.bootstrap.device.type : undefined} selectedType={selectedType} busy={!workspaceSelection && initializationStatus === "registering"} error={displayedError} onBack={workspaceSelection ? undefined : resetVerification} onActivate={activate} /> : <>
           <p className="text-[10px] font-bold uppercase tracking-[.3em] text-[#C41E19]">Device provisioning</p><h1 className="mt-4 text-[clamp(2rem,6vw,3.5rem)] font-bold tracking-[-.05em]">{text.title}</h1><p className="mt-3 text-[#6B7280]">{text.description}</p>
           <form onSubmit={submit} className="mt-8"><label className="text-sm font-semibold text-[#1F1F1F]">{text.label}<div className="relative mt-2"><input type={visible ? "text" : "password"} value={secretKey} onChange={event => { const value = event.target.value; setSecretKey(/^\s*morrow/i.test(value) ? normalizeDeviceActivationKey(value) : value); }} autoCapitalize="characters" autoCorrect="off" spellCheck={false} autoComplete="off" placeholder={text.placeholder} aria-describedby="device-key-help" className="min-h-16 w-full rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] px-5 pe-28 text-base uppercase tracking-[.08em] text-[#1F1F1F] outline-none transition placeholder:text-[#9CA3AF] hover:border-[#C41E19]/25 focus:border-[#C41E19] focus:ring-4 focus:ring-[#C41E19]/10 sm:text-lg" /><button type="button" onClick={() => setVisible(value => !value)} className="absolute end-3 top-3 flex min-h-10 items-center gap-2 rounded-xl px-3 text-xs text-[#6B7280] transition hover:bg-[#F8F9FA] hover:text-[#1F1F1F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#C41E19]">{visible ? <EyeOff size={17}/> : <Eye size={17}/>} {visible ? text.hide : text.show}</button></div><span id="device-key-help" className="mt-2 block text-xs font-normal text-[#9CA3AF]">Paste is supported. The key is removed after activation.</span></label>
             {displayedError && <ErrorPanel error={displayedError} />}

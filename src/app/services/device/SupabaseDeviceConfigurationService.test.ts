@@ -152,6 +152,7 @@ test("startup restores a session through the HttpOnly refresh cookie and reloads
     "/api/v1/devices/session/refresh",
     "/api/v1/device/bootstrap",
   ]);
+  assert.equal(sessionStorage.getItem(DEVICE_ACCESS_TOKEN_STORAGE_KEY), "refreshed-token");
   assert.equal(calls[1].init.headers && (calls[1].init.headers as Record<string, string>).authorization, "Bearer refreshed-token");
   assert.equal(calls[0].init.credentials, "include");
 });
