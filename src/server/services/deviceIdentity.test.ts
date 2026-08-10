@@ -81,7 +81,7 @@ test("registration validates the credential, creates a revocable session, and re
   );
   repository.publicKeyId = generated.publicKeyId;
   const result = await service.register(generated.secretKey);
-  assert.equal(result.bootstrap.restaurant.name, "MORROW");
+  assert.equal(result.bootstrap.restaurant.name, "cangujet");
   assert.equal(result.bootstrap.branch.code, "MAIN");
   assert.equal(result.bootstrap.device.configVersion, 7);
   assert.equal(result.bootstrap.publishedMenuId, repository.bootstrap.menu.id);
@@ -205,7 +205,7 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
   const fake: DeviceIdentityApplication = {
     async register() { return registration; },
     async verifyActivationKey() {
-      return { restaurant: { name: "MORROW" }, branch: { name: "Main" }, allowedDeviceTypes: ["kiosk", "cashier_terminal"] };
+      return { restaurant: { name: "cangujet" }, branch: { name: "Main" }, allowedDeviceTypes: ["kiosk", "cashier_terminal"] };
     },
     async activate() {
       return {
@@ -265,10 +265,17 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
     const verified = await fetch(`http://127.0.0.1:${port}/api/v1/device/activation-key/verify`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ secretKey: "MORROW-ABCD-EFGH-JKLM-NPQR-STUV-WXYZ" }),
+      body: JSON.stringify({ secretKey: "CANGUJET-ABCD-EFGH-JKLM-NPQR-STUV-WXYZ" }),
     });
     assert.equal(verified.status, 200);
     assert.deepEqual((await verified.json() as { allowedDeviceTypes: string[] }).allowedDeviceTypes, ["kiosk", "cashier_terminal"]);
+
+    const invalidPrefix = await fetch(`http://127.0.0.1:${port}/api/v1/device/activation-key/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ secretKey: "OTHER-ABCD-EFGH-JKLM-NPQR-STUV-WXYZ" }),
+    });
+    assert.equal(invalidPrefix.status, 400);
 
     const activated = await fetch(`http://127.0.0.1:${port}/api/v1/device/activate`, {
       method: "POST",
@@ -330,7 +337,7 @@ test("device API exposes registration, refresh, bootstrap, and revocation withou
       headers: { authorization: "Bearer header.payload.signature" },
     });
     assert.equal(bootstrapped.status, 200);
-    assert.equal((await bootstrapped.json() as DeviceBootstrap).device.name, "Morrow Kiosk");
+    assert.equal((await bootstrapped.json() as DeviceBootstrap).device.name, "cangujet Kiosk");
 
     const menu = await fetch(`http://127.0.0.1:${port}/api/v1/device/menu`, {
       headers: { authorization: "Bearer header.payload.signature" },
@@ -362,7 +369,7 @@ test("production cookie security permits HTTP localhost and remains secure for H
   };
   const fake: DeviceIdentityApplication = {
     async register() { return registration; },
-    async verifyActivationKey() { return { restaurant: { name: "MORROW" }, branch: { name: "Main" }, allowedDeviceTypes: ["kiosk"] }; },
+    async verifyActivationKey() { return { restaurant: { name: "cangujet" }, branch: { name: "Main" }, allowedDeviceTypes: ["kiosk"] }; },
     async activate() { return { ...registration, device: { id: bootstrap.device.id, name: bootstrap.device.name, deviceType: bootstrap.device.type, restaurantId: bootstrap.restaurant.id, branchId: bootstrap.branch.id, status: "active" } }; },
     async refresh() { return { accessToken: registration.accessToken, tokenType: "Bearer", expiresAt: registration.expiresAt }; },
     async bootstrap() { return bootstrap; },
@@ -456,7 +463,7 @@ class MemoryDeviceRepository implements DeviceRepository {
     restaurant_id: "30000000-0000-4000-8000-000000000001",
     branch_id: "40000000-0000-4000-8000-000000000001",
     device_type: "kiosk",
-    name: "Morrow Kiosk",
+    name: "cangujet Kiosk",
     status: "active",
     config_version: 7,
     last_seen_at: null,
@@ -531,7 +538,7 @@ class MemoryDeviceRepository implements DeviceRepository {
 function bootstrapData(device: DeviceRow): DeviceBootstrapData {
   return {
     restaurant: {
-      id: device.restaurant_id, name: "MORROW", slug: "morrow", logo_url: null, status: "active",
+      id: device.restaurant_id, name: "cangujet", slug: "morrow", logo_url: null, status: "active",
       created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
     },
     branch: {
@@ -543,7 +550,7 @@ function bootstrapData(device: DeviceRow): DeviceBootstrapData {
     device,
     theme: {
       id: "60000000-0000-4000-8000-000000000001", restaurant_id: device.restaurant_id,
-      name: "MORROW Default", tokens: { primary: "#D7FB69" }, is_active: true,
+      name: "cangujet Default", tokens: { primary: "#D7FB69" }, is_active: true,
       created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
     },
     languageAssignments: [
@@ -566,14 +573,14 @@ function bootstrapData(device: DeviceRow): DeviceBootstrapData {
     },
     idle: {
       branch_id: device.branch_id, timeout_seconds: 300, video_interval_ms: 9000,
-      minimum_playback_ms: 4000, transition_ms: 500, title: "MORROW",
+      minimum_playback_ms: 4000, transition_ms: 500, title: "cangujet",
       slogan: "Fresh. Fast. Delicious.", description: "Start your delicious journey",
       button_label: "START ORDER", touch_label: "Touch anywhere to begin", videos: [],
       created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
     },
     menu: {
       id: "70000000-0000-4000-8000-000000000001", restaurant_id: device.restaurant_id,
-      name: "MORROW Default Menu", status: "published", version: 1, published_at: NOW.toISOString(),
+      name: "cangujet Default Menu", status: "published", version: 1, published_at: NOW.toISOString(),
       created_at: NOW.toISOString(), updated_at: NOW.toISOString(),
     },
   };
@@ -581,12 +588,12 @@ function bootstrapData(device: DeviceRow): DeviceBootstrapData {
 
 function mapTestBootstrap(): DeviceBootstrap {
   return {
-    restaurant: { id: "restaurant", name: "MORROW", slug: "morrow", logoUrl: null, brandColors: {} },
+    restaurant: { id: "restaurant", name: "cangujet", slug: "morrow", logoUrl: null, brandColors: {} },
     branch: {
       id: "branch", name: "Main Branch", code: "MAIN", address: null, phone: null, currency: "EUR", taxRate: 0.08,
       timezone: "Europe/Istanbul", serviceModes: ["dine_in", "take_away"], openingHours: [],
     },
-    device: { id: "device", type: "kiosk", name: "Morrow Kiosk", status: "active", configVersion: 7, lastSeenAt: null, mode: "kiosk", defaultLanguage: "en", featureFlags: {}, printerConfiguration: {} },
+    device: { id: "device", type: "kiosk", name: "cangujet Kiosk", status: "active", configVersion: 7, lastSeenAt: null, mode: "kiosk", defaultLanguage: "en", featureFlags: {}, printerConfiguration: {} },
     configuration: { configVersion: 7, lastUpdated: NOW.toISOString(), checksum: "test-checksum" },
     configVersion: 7,
     theme: { id: "theme", name: "Default", tokens: {} },
@@ -597,7 +604,7 @@ function mapTestBootstrap(): DeviceBootstrap {
     noriConfiguration: { enabled: true, voiceEnabled: true, voiceSettings: {}, publicOptions: {} },
     idleScreenConfiguration: {
       timeoutSeconds: 300, videoIntervalMs: 9000, minimumPlaybackMs: 4000, transitionMs: 500,
-      title: "MORROW", slogan: "Fresh. Fast. Delicious.", description: "Start your delicious journey",
+      title: "cangujet", slogan: "Fresh. Fast. Delicious.", description: "Start your delicious journey",
       buttonLabel: "START ORDER", touchLabel: "Touch anywhere to begin", videos: [],
     },
     publishedMenuId: "menu", publishedMenuVersion: 1,

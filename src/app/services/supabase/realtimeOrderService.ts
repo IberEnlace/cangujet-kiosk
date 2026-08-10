@@ -62,6 +62,6 @@ function subscribe(channel: RealtimeChannel, refetch: () => void, update: (statu
     if (status === "SUBSCRIBED") { update(connected ? "reconnecting" : "connected"); connected = true; refetch(); queueMicrotask(() => update("connected")); }
     else if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") update(connected ? "reconnecting" : "error");
     else if (status === "CLOSED") update("disconnected");
-    if (import.meta.env?.DEV) console.debug(`[MORROW realtime] ${channel.topic}: ${status}`);
+    if (import.meta.env?.DEV) console.debug(`[cangujet realtime] ${channel.topic}: ${status}`);
   });
 }

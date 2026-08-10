@@ -7,7 +7,11 @@ import type {
   DeviceBootstrap,
   DeviceRegistrationResponse,
 } from "../../shared/deviceBootstrap";
-import { createSupabaseDeviceRepositoryFromEnvironment } from "../repositories/deviceRepository";
+import { isDeviceActivationKey } from "../../shared/deviceKey";
+import {
+  createSupabaseDeviceRepositoryFromEnvironment,
+  DeviceRepositoryDependencyFailure,
+} from "../repositories/deviceRepository";
 import {
   DeviceApiFailure,
   DeviceIdentityService,
@@ -32,12 +36,12 @@ export function createDeviceRouter(
     try {
       enforceRateLimit(attempts, request.ip || request.socket.remoteAddress || "unknown");
       const secretKey = typeof request.body?.secretKey === "string" ? request.body.secretKey.trim() : "";
-      if (!/^MORROW(?:-[A-Z0-9]{4}){6}$/i.test(secretKey)) {
+      if (!isDeviceActivationKey(secretKey)) {
         throw new DeviceApiFailure("invalid_setup_request", 400, "A valid device activation key is required.");
       }
       response.json(await resolveService().verifyActivationKey(secretKey));
     } catch (error) {
-      sendError(response, error);
+      sendError(request, response, error);
     }
   });
 
@@ -50,7 +54,7 @@ export function createDeviceRouter(
       const deviceName = typeof request.body?.deviceName === "string" ? request.body.deviceName.trim() : undefined;
       const appVersion = typeof request.body?.appVersion === "string" ? request.body.appVersion.trim() : undefined;
       const requestId = validUuid(request.body?.requestId) ? request.body.requestId : requestIdFrom(request);
-      if (!/^MORROW(?:-[A-Z0-9]{4}){6}$/i.test(secretKey) || !validInstallationId(deviceFingerprint) || !DEVICE_TYPES.has(deviceType)
+      if (!isDeviceActivationKey(secretKey) || !validInstallationId(deviceFingerprint) || !DEVICE_TYPES.has(deviceType)
         || (deviceName && deviceName.length > 120) || (appVersion && appVersion.length > 80)) {
         throw new DeviceApiFailure("invalid_setup_request", 400, "A valid device activation request is required.");
       }
@@ -61,7 +65,7 @@ export function createDeviceRouter(
       diagnostic("activation_succeeded", result.device.id ? 201 : 200);
       response.status(201).json(publicResult);
     } catch (error) {
-      sendError(response, error);
+      sendError(request, response, error);
     }
   });
 
@@ -83,7 +87,7 @@ export function createDeviceRouter(
         bootstrap: result.bootstrap,
       });
     } catch (error) {
-      sendError(response, error);
+      sendError(request, response, error);
     }
   });
 
@@ -93,7 +97,7 @@ export function createDeviceRouter(
       if (!refreshToken) throw new DeviceApiFailure("invalid_device_session", 401, "The device session is invalid or expired.");
       response.json(await resolveService().refresh(refreshToken));
     } catch (error) {
-      sendError(response, error);
+      sendError(request, response, error);
     }
   });
 
@@ -104,7 +108,7 @@ export function createDeviceRouter(
       response.status(204).end();
     } catch (error) {
       clearRefreshCookie(request, response);
-      sendError(response, error);
+      sendError(request, response, error);
     }
   });
 
@@ -115,7 +119,7 @@ export function createDeviceRouter(
       response.status(204).end();
     } catch (error) {
       clearRefreshCookie(request, response);
-      sendError(response, error);
+      sendError(request, response, error);
     }
   });
 
@@ -126,7 +130,7 @@ export function createDeviceRouter(
       const health = request.body?.connectionHealth === "degraded" ? "degraded" : "online";
       response.json(await resolveService().heartbeat(readBearerToken(request), Number.isSafeInteger(current) && current >= 0 ? current : 0, appVersion, health));
     } catch (error) {
-      sendError(response, error);
+      sendError(request, response, error);
     }
   });
 
@@ -134,7 +138,7 @@ export function createDeviceRouter(
     try {
       response.json(await resolveService().bootstrap(readBearerToken(request)));
     } catch (error) {
-      sendError(response, error);
+      sendError(request, response, error);
     }
   });
 
@@ -142,7 +146,7 @@ export function createDeviceRouter(
     try {
       response.json(await resolveService().menu(readBearerToken(request)));
     } catch (error) {
-      sendError(response, error);
+      sendError(request, response, error);
     }
   });
 
@@ -153,12 +157,23 @@ export const deviceRouter = createDeviceRouter();
 
 export function createDeviceIdentityServiceFromEnvironment() {
   const tokenSecret = process.env.MORROW_DEVICE_TOKEN_SECRET?.trim();
-  if (!tokenSecret) throw new Error("MORROW_DEVICE_TOKEN_SECRET is not configured.");
+  if (!tokenSecret) {
+    throw new DeviceRepositoryDependencyFailure("server_configuration", "device_token_service_initialization", "MORROW_DEVICE_TOKEN_SECRET");
+  }
   const rawTtl = Number(process.env.MORROW_DEVICE_ACCESS_TOKEN_TTL_SECONDS ?? 900);
-  return new DeviceIdentityService(
-    createSupabaseDeviceRepositoryFromEnvironment(),
-    new DeviceTokenService(tokenSecret, rawTtl),
-  );
+  try {
+    return new DeviceIdentityService(
+      createSupabaseDeviceRepositoryFromEnvironment(),
+      new DeviceTokenService(tokenSecret, rawTtl),
+    );
+  } catch (error) {
+    if (error instanceof DeviceRepositoryDependencyFailure) throw error;
+    throw new DeviceRepositoryDependencyFailure(
+      "server_configuration",
+      "device_token_service_initialization",
+      error instanceof Error ? error.name : "InvalidConfiguration",
+    );
+  }
 }
 
 function readBearerToken(request: Request) {
@@ -229,19 +244,40 @@ function enforceRateLimit(
   }
 }
 
-function sendError(response: Response<DeviceApiError>, error: unknown) {
+function sendError(request: Request, response: Response<DeviceApiError>, error: unknown) {
+  const requestId = requestIdFrom(request);
+  response.setHeader("x-request-id", requestId);
   if (error instanceof DeviceApiFailure) {
+    if (error.status >= 500) logDeviceDependencyFailure(request, requestId, error);
     diagnostic("device_request_failed", error.status, error.code);
     response.status(error.status).json({ code: error.code, message: error.message });
     return;
   }
-  if (process.env.NODE_ENV !== "production") console.error("[MORROW] Device API failure", error);
+  logDeviceDependencyFailure(request, requestId, error);
   diagnostic("device_request_failed", 503, "device_service_unavailable");
   response.status(503).json({ code: "device_service_unavailable", message: "The device service is unavailable." });
 }
 
+function logDeviceDependencyFailure(request: Request, requestId: string, error: unknown) {
+  const value = error && typeof error === "object"
+    ? error as { name?: unknown; code?: unknown; status?: unknown; cause?: { code?: unknown } }
+    : null;
+  console.error("[cangujet device API]", {
+    event: "device_dependency_failure",
+    requestId,
+    method: request.method,
+    path: request.path,
+    status: 503,
+    dependency: error instanceof DeviceRepositoryDependencyFailure ? error.dependency : "device_repository",
+    operation: error instanceof DeviceRepositoryDependencyFailure ? error.operation : "device_request",
+    errorName: typeof value?.name === "string" ? value.name : error instanceof Error ? error.name : "UnknownError",
+    errorCode: error instanceof DeviceRepositoryDependencyFailure ? error.upstreamCode : typeof value?.code === "string" ? value.code : typeof value?.cause?.code === "string" ? value.cause.code : null,
+    upstreamStatus: error instanceof DeviceRepositoryDependencyFailure ? error.upstreamStatus : typeof value?.status === "number" ? value.status : null,
+  });
+}
+
 function diagnostic(event: string, status?: number, code?: string) {
-  if (process.env.NODE_ENV !== "production") console.info("[MORROW device API]", { event, status, code });
+  if (process.env.NODE_ENV !== "production") console.info("[cangujet device API]", { event, status, code });
 }
 
 function validInstallationId(value: string) {

@@ -40,7 +40,7 @@ test("device setup submission is explicit, validates the shared key grammar, and
   assert.match(setup, /await verifyActivationKey\(trimmed\)/);
   assert.match(setup, /await configureDevice\(secretKey\.trim\(\), deviceType\)/);
   assert.match(workspaceStage, /Configure this device/);
-  assert.match(workspaceStage, /Select the workspace this device will run/);
+  assert.match(workspaceStage, /Choose how this device will be used\./);
   assert.match(workspaceStage, /AnimatePresence mode="wait"/);
   assert.match(workspaceStage, /role="tablist"/);
   assert.match(setup, /const displayedError = validationError \?/);

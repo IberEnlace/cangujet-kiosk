@@ -8,7 +8,7 @@ import {
 const branch = {
   id: "branch-1",
   restaurant_id: "restaurant-1",
-  name: "MORROW Main",
+  name: "cangujet Main",
   currency: "EUR",
   timezone: "Europe/Istanbul",
 };
@@ -19,13 +19,13 @@ test("successful report load uses the current production order and payment schem
   const client = reportClient({
     orders: [order({ id: "paid-1", status: "submitted", total: 20 })],
     order_payments: [payment({ order_id: "paid-1", method: "cash", amount: 20 })],
-    order_items: [{ order_id: "paid-1", product_id: "product-1", product_name_snapshot: "Morrow Burger", quantity: 2, line_total: 20 }],
+    order_items: [{ order_id: "paid-1", product_id: "product-1", product_name_snapshot: "cangujet Burger", quantity: 2, line_total: 20 }],
   });
   const result = await loadReportData(client, branch, "daily_sales_report", start, end);
   assert.equal(result.daily.totalOrders, 1);
   assert.equal(result.daily.submittedOrders, 1);
   assert.equal(result.daily.paidOrders, 1);
-  assert.deepEqual(result.daily.topProducts, [{ name: "Morrow Burger", quantity: 2, sales: "€20.00" }]);
+  assert.deepEqual(result.daily.topProducts, [{ name: "cangujet Burger", quantity: 2, sales: "€20.00" }]);
   const orderQuery = client.queries.find(query => query.table === "orders")!;
   assert.match(orderQuery.columns, /tax_total/);
   assert.match(orderQuery.columns, /service_mode/);
@@ -76,7 +76,7 @@ test("database failures log only safe Supabase diagnostics and retain a stable p
   } finally {
     console.error = original;
   }
-  assert.equal(diagnostics[0][0], "[MORROW notifications] report data query failed");
+  assert.equal(diagnostics[0][0], "[cangujet notifications] report data query failed");
   assert.deepEqual(diagnostics[0][1], {
     source: "orders",
     code: "42703",

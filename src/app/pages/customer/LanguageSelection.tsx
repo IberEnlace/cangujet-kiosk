@@ -4,7 +4,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { supportedLanguages, type SupportedLanguage } from "../../config/languages";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCustomerTranslation } from "../../hooks/useCustomerTranslation";
-import MorrowLogo from "../../components/branding/MorrowLogo";
+import CangujetLogo from "../../components/branding/CangujetLogo";
 import { useRestaurant } from "../../context/BootstrapContext";
 
 interface LanguageSelectionProps {
@@ -49,7 +49,7 @@ export default function LanguageSelection({ onBack, onContinue }: LanguageSelect
       <div className="relative z-10 mx-auto flex min-h-[100dvh] w-full max-w-[1080px] flex-col px-5 py-[clamp(1.5rem,4vh,4rem)] sm:px-9 lg:px-14">
         <header className="flex items-center justify-between">
           <motion.div initial={reducedMotion ? undefined : { opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }}>
-            <MorrowLogo variant="full" priority className="h-auto w-[clamp(8.5rem,22vw,12rem)]" />
+            <CangujetLogo variant="full" priority className="h-auto w-[clamp(8.5rem,22vw,12rem)]" />
           </motion.div>
           <button type="button" onClick={handleBack} className="flex min-h-12 items-center gap-2 rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] px-4 text-sm font-semibold text-[#1F1F1F] shadow-[0_4px_12px_rgba(31,31,31,.05)] transition hover:-translate-y-0.5 hover:bg-[#F8F9FA] active:scale-[.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C41E19] sm:px-5" aria-label={translation.back}>
             <BackArrow size={19} aria-hidden="true" /><span className="hidden sm:inline">{translation.back}</span>

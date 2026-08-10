@@ -5,13 +5,13 @@ import { buildTestNotificationEmail } from "../../../../supabase/functions/send-
 
 const edgeFunction = readFileSync("supabase/functions/send-notification-email/index.ts", "utf8");
 
-test("premium test email contains MORROW branding and the dark brand palette", () => {
+test("premium test email contains cangujet branding and the dark brand palette", () => {
   const email = buildTestNotificationEmail({ branchName: "Main Branch", recipient: "admin@example.com", timestamp: "2026-07-24T12:30:00.000Z" });
-  assert.match(email.html, /MORROW/);
+  assert.match(email.html, /cangujet/);
   assert.match(email.html, /RESTAURANT OPERATIONS/);
   assert.match(email.html, /#D7FB69/i);
   assert.match(email.html, /#0B0D0A/i);
-  assert.match(email.html, /Your MORROW email notifications are working/);
+  assert.match(email.html, /Your cangujet email notifications are working/);
   assert.match(email.html, /Resend accepted this message for delivery/);
 });
 
@@ -30,7 +30,7 @@ test("all dynamic HTML fields are escaped", () => {
 
 test("plain-text fallback includes operational details without markup", () => {
   const email = buildTestNotificationEmail({ branchName: "Main Branch", recipient: "admin@example.com", timestamp: "2026-07-24T12:30:00.000Z" });
-  assert.equal(email.subject, "MORROW Notification Test");
+  assert.equal(email.subject, "cangujet Notification Test");
   assert.match(email.text, /Branch: Main Branch/);
   assert.match(email.text, /Recipient: admin@example\.com/);
   assert.match(email.text, /Sent: Jul 24, 2026/);

@@ -58,7 +58,7 @@ Deno.serve(async request=>{
     const data=await loadAlertData(service,branchId,payload.eventId,type);
     email=buildOperationalEmail({type,branchName:branch.name,timestamp:now,...data});
   }
-  const resendKey=Deno.env.get("RESEND_API_KEY"),fromEmail=Deno.env.get("MORROW_NOTIFICATION_FROM_EMAIL"),fromName=Deno.env.get("MORROW_NOTIFICATION_FROM_NAME")||"MORROW",providerConfigured=Boolean(resendKey&&fromEmail);
+  const resendKey=Deno.env.get("RESEND_API_KEY"),fromEmail=Deno.env.get("MORROW_NOTIFICATION_FROM_EMAIL"),fromName=Deno.env.get("MORROW_NOTIFICATION_FROM_NAME")||"cangujet",providerConfigured=Boolean(resendKey&&fromEmail);
   if(!providerConfigured)diagnostic("email_provider_configuration_missing",requestId,{missing:[!resendKey&&"RESEND_API_KEY",!fromEmail&&"MORROW_NOTIFICATION_FROM_EMAIL"].filter(Boolean)});
   const results=[];
   for(const recipient of recipients){
@@ -92,4 +92,4 @@ function constantTimeEqual(a:string,b:string){if(a.length!==b.length)return fals
 function safeMessage(body:any){return typeof body?.message==="string"?body.message.slice(0,500):"Provider request failed."}
 function allowedOrigin(request:Request){const origin=request.headers.get("origin")||"";return allowedOrigins.has(origin)?origin:""}
 function corsHeaders(request:Request){const origin=allowedOrigin(request);return{"Access-Control-Allow-Headers":"authorization,x-client-info,apikey,content-type,x-morrow-internal-secret,x-morrow-request-id","Access-Control-Allow-Methods":"POST,OPTIONS","Vary":"Origin",...(origin?{"Access-Control-Allow-Origin":origin}:{})}}
-function diagnostic(event:string,requestId:string,details:Record<string,unknown>={}){console.error("[MORROW notifications]",{event,requestId,...details})}
+function diagnostic(event:string,requestId:string,details:Record<string,unknown>={}){console.error("[cangujet notifications]",{event,requestId,...details})}

@@ -278,7 +278,7 @@ function asyncRoute(
             : undefined;
           response.status(failure.status).json({ ...body, ...(existingOrderId ? { existingOrderId } : {}) });
         } catch (sendError) {
-          console.error("[MORROW order] Failed to send error response after socket closed", { requestId, sendError });
+          console.error("[cangujet order] Failed to send error response after socket closed", { requestId, sendError });
         }
       }
     }
@@ -322,7 +322,7 @@ function diagnostic(
   resultCode = "ok",
   extra?: Record<string, unknown>,
 ) {
-  console.info("[MORROW order]", {
+  console.info("[cangujet order]", {
     event,
     requestId,
     orderId,
@@ -382,7 +382,7 @@ function logInternalOrderError(
     operation: repositoryError?.operation ?? null,
     failingQuery: repositoryError?.query ?? null,
   };
-  console.error("[MORROW order internal error]", diagnosticData, chain[chain.length - 1]);
+  console.error("[cangujet order internal error]", diagnosticData, chain[chain.length - 1]);
 }
 
 function errorChain(error: unknown) {

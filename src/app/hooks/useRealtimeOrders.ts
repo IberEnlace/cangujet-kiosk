@@ -75,7 +75,7 @@ export function useKitchenOrders() {
       onStatus: status => {
         setConnection(status);
         if (status === "reconnecting" || status === "connected") {
-          console.info("[MORROW order]", { event: "realtime_reconnect", branchId, resultCode: status });
+          console.info("[cangujet order]", { event: "realtime_reconnect", branchId, resultCode: status });
         }
       },
     });

@@ -42,10 +42,10 @@ export function buildProviderResponse(toolCalls: AIToolCall[], request: NoriChat
   if (request.cart.length) actions.push({ type: "OPEN_CART", label: request.language === "tr" ? "Sepeti incele" : "Review cart" });
   const reply = request.language === "tr"
     ? products.length
-      ? `Morrow menüsünde ${products.length} uygun seçenek buldum.${warnings.length ? " Bir ürün eklemeden önce alerjen ve çapraz temas uyarılarını inceleyin." : ""}`
+      ? `cangujet menüsünde ${products.length} uygun seçenek buldum.${warnings.length ? " Bir ürün eklemeden önce alerjen ve çapraz temas uyarılarını inceleyin." : ""}`
       : "Bu isteğe uyan uygun bir menü ürünü bulamadım. Filtrelerden birini değiştirmeyi deneyin."
     : products.length
-      ? `I found ${products.length} available menu option${products.length === 1 ? "" : "s"} using the Morrow menu.${warnings.length ? " Please review the allergen and cross-contact warnings before adding an item." : ""}`
+      ? `I found ${products.length} available menu option${products.length === 1 ? "" : "s"} using the cangujet menu.${warnings.length ? " Please review the allergen and cross-contact warnings before adding an item." : ""}`
       : "I could not find an available menu item matching that request. Try changing one of your filters.";
   const conversationState = request.conversationState ?? {
     preferredLanguage: request.language,

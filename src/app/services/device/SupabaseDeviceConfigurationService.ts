@@ -249,11 +249,12 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
     finally { if (this.refreshPromise === operation) this.refreshPromise = null; }
   }
 
-  private async performRefresh(attempt: number, _signal?: AbortSignal) {
+  private async performRefresh(attempt: number, signal?: AbortSignal) {
     try {
       const result = await this.request<DeviceAccessTokenResponse>("/api/v1/devices/session/refresh", {
         method: "POST",
         credentials: "include",
+        signal,
       }, true);
       this.saveAccessToken(result.accessToken);
       diagnostic("refresh_succeeded", { path: "/api/v1/devices/session/refresh", attempt, credentialType: "cookie", credentialsAttached: true });
@@ -473,13 +474,13 @@ export class SupabaseDeviceConfigurationService implements DeviceConfigurationSe
 }
 
 function diagnostic(event: string, details: Record<string, unknown> = {}) {
-  if (import.meta.env?.DEV) console.info("[MORROW device]", { event, ...details });
+  if (import.meta.env?.DEV) console.info("[cangujet device]", { event, ...details });
 }
 
 function diagnosticError(event: string, error: unknown) {
   if (!import.meta.env?.DEV) return;
   const value = error instanceof Error ? error : null;
-  console.error("[MORROW device]", {
+  console.error("[cangujet device]", {
     event,
     constructor: value?.constructor?.name ?? typeof error,
     name: value?.name ?? null,

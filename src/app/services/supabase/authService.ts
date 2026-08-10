@@ -123,7 +123,7 @@ async function performStaffSessionRefresh(): Promise<{ token: string | null; fai
 
 function demoProfile(role: StaffRole): ProfileRow {
   const now = new Date().toISOString();
-  return { id: `demo-${role}`, full_name: `Morrow ${role}`, role, branch_id: "mock-main", is_active: true, created_at: now, updated_at: now };
+  return { id: `demo-${role}`, full_name: `cangujet ${role}`, role, branch_id: "mock-main", is_active: true, created_at: now, updated_at: now };
 }
 
 function isAuthenticationFailure(error: { status?: number; name?: string } | null) {

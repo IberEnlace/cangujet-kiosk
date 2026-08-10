@@ -21,7 +21,7 @@ import {
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { toast, Toaster } from "sonner";
 import type { KitchenOrder, OrderStatus } from "../context/CartContext";
-import MorrowLogo from "../components/branding/MorrowLogo";
+import CangujetLogo from "../components/branding/CangujetLogo";
 import { useKitchenOrders } from "../hooks/useRealtimeOrders";
 import { kitchenNotificationService } from "../services/orders/KitchenNotificationService";
 import {
@@ -182,7 +182,7 @@ export default function KitchenDisplay({ onNavigate: _onNavigate }: Props) {
     <header className="border-b border-[#ECECEC] bg-white px-4 py-3 shadow-sm lg:px-6">
       <div className="flex flex-wrap items-center gap-3 lg:gap-4">
         <div className="flex items-center gap-3">
-          <MorrowLogo variant="symbol" priority className="size-11 object-contain" />
+          <CangujetLogo variant="symbol" priority className="size-11 object-contain" />
           <h1 className="text-lg font-black tracking-[-.02em]">Kitchen Display</h1>
         </div>
         <div className="ms-auto flex max-w-full min-w-0 items-center justify-end gap-2 max-sm:w-full">

@@ -163,5 +163,5 @@ drop policy if exists "cashiers insert branch order items" on public.order_items
 
 -- Example development branch. Review tax_rate before production use.
 insert into public.branches(name, code, currency, timezone, tax_rate)
-values ('MORROW Main Branch', 'MAIN', 'EUR', 'Europe/Istanbul', 0.08)
+values ('cangujet Main Branch', 'MAIN', 'EUR', 'Europe/Istanbul', 0.08)
 on conflict (code) do nothing;

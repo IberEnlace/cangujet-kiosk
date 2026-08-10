@@ -74,7 +74,7 @@ test("printed ticket is 80mm, includes persisted items and totals, and exposes n
   const snapshot = savePayAtCashierConfirmation(order(), storage);
   const html = renderPayAtCashierTicketHtml(snapshot);
   assert.match(html, /@page\{size:80mm auto/);
-  assert.match(html, /MORROW/);
+  assert.match(html, /cangujet/);
   assert.match(html, /PAY AT CASHIER/);
   assert.match(html, /M110/);
   assert.match(html, /Snapshot Burger × 1/);

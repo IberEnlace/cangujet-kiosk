@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, LoaderCircle, Mic, MicOff, Plus, RefreshCw, ShoppingBag, X } from "lucide-react";
 import { useCart, type CartModifierSelection } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
-import MorrowLogo from "../../components/branding/MorrowLogo";
+import CangujetLogo from "../../components/branding/CangujetLogo";
 import { useBootstrap } from "../../context/BootstrapContext";
 import { useNoriConversation } from "../../context/NoriConversationContext";
 import { getLanguageOption, LANGUAGE_CONFIG, type SupportedLanguage } from "../../config/languages";
@@ -135,7 +135,7 @@ export default function MenuCatalog({ onBack, onCheckout, onLanguage, onNori, on
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_75%_10%,rgba(196,30,25,.035),transparent_30%)]" aria-hidden="true" />
         <header className="sticky top-0 z-30 flex h-[clamp(4.6rem,7vh,6rem)] items-center justify-between border-b border-[#ECECEC] bg-[#FFFFFF]/95 px-3 backdrop-blur-xl sm:px-5">
           <button type="button" onClick={onBack} aria-label="Back to service selection" className="grid size-12 place-items-center rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] text-[#1F1F1F] shadow-[0_3px_10px_rgba(31,31,31,.04)] transition hover:-translate-y-0.5 hover:bg-[#F8F9FA] active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#C41E19]"><BackIcon size={23} aria-hidden="true" /></button>
-          <div className="text-center" dir="ltr"><MorrowLogo variant="full" className="hidden h-auto w-28 sm:block" /><MorrowLogo variant="symbol" className="mx-auto size-9 object-contain sm:hidden" alt="" /><p className="mt-0.5 text-[10px] text-[#9CA3AF]">{language === "tr" ? "Yeni siparişiniz" : "Your new order"}</p></div>
+          <div className="text-center" dir="ltr"><CangujetLogo variant="full" className="hidden h-auto w-28 sm:block" /><CangujetLogo variant="symbol" className="mx-auto size-9 object-contain sm:hidden" alt="" /><p className="mt-0.5 text-[10px] text-[#9CA3AF]">{language === "tr" ? "Yeni siparişiniz" : "Your new order"}</p></div>
           <div className="flex items-center gap-2">{kiosk?.ai.enabled && <button type="button" onClick={onNori} className="hidden min-h-11 rounded-xl border border-[#C41E19]/25 bg-[#FFFFFF] px-3 text-xs font-bold text-[#C41E19] transition hover:bg-[#C41E19]/5 min-[560px]:block">Ask Nori</button>}<button type="button" onClick={onLanguage} className="min-h-11 min-w-11 rounded-xl border border-[#ECECEC] bg-[#FFFFFF] px-2 text-xs font-bold uppercase text-[#6B7280] transition hover:bg-[#F8F9FA] hover:text-[#1F1F1F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#C41E19]">{language}</button><button type="button" onClick={onCheckout} aria-label={`Open cart with ${count} items`} className="relative grid size-12 place-items-center rounded-2xl bg-[#C41E19] text-[#FFFFFF] shadow-[0_6px_16px_rgba(196,30,25,.18)] transition hover:-translate-y-0.5 hover:bg-[#A8161A] active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C41E19]"><ShoppingBag size={20} aria-hidden="true" />{count > 0 && <span className="absolute -end-1 -top-1 grid size-5 place-items-center rounded-full border border-[#C41E19] bg-[#FFFFFF] text-[10px] font-bold text-[#C41E19]">{count}</span>}</button></div>
         </header>
 

@@ -72,7 +72,7 @@ function route(handler: (request: Request, response: Response) => Promise<void>)
       const failure = caught instanceof QrPaymentFailure
         ? caught
         : new QrPaymentFailure("server_error", 500, "The QR payment service could not complete the request.");
-      if (failure.status >= 500) console.error("[MORROW QR payment]", { requestId, path: request.originalUrl, code: failure.code, error: caught });
+      if (failure.status >= 500) console.error("[cangujet QR payment]", { requestId, path: request.originalUrl, code: failure.code, error: caught });
       if (!response.headersSent) response.status(failure.status).json({ code: failure.code, message: failure.message, requestId });
     }
   };

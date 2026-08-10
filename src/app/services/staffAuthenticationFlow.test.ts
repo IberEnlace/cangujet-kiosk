@@ -33,12 +33,13 @@ test("one staff API client attaches both supported credential mechanisms without
   assert.match(client, /authorization: `Bearer \$\{token\}`/);
   assert.match(client, /credentials: "include"/);
   assert.match(client, /cache: requestOptions\.cache \?\? "no-store"/);
-  assert.match(client, /console\.debug\("\[MORROW staff API\]", \{ url, status, authorizationAttached, credentialsIncluded \}\)/);
+  assert.match(client, /console\.debug\("\[cangujet staff API\]", \{ url, status, authorizationAttached, credentialsIncluded \}\)/);
   assert.doesNotMatch(client, /console\.(?:debug|log)\([^\n]*token/);
 });
 
 test("staff API failures keep authentication, permission, network, and server states distinct", () => {
-  assert.match(client, /response\.status === 401[\s\S]*invalidateStaffSession/);
+  assert.match(client, /response\.status === 401[\s\S]*refreshCredential/);
+  assert.match(client, /response\.status === 401[\s\S]*dependencies\.invalidateSession/);
   assert.match(client, /response\.status === 403[\s\S]*"forbidden"/);
   assert.match(client, /response\.status >= 500[\s\S]*"server"/);
   assert.match(client, /"network"[\s\S]*Admin API is unreachable/);

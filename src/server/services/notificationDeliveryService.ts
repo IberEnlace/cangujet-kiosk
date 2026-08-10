@@ -181,7 +181,7 @@ function diagnostic(
   details?: Record<string, unknown>,
   error?: unknown,
 ) {
-  console.error("[MORROW notifications]", {
+  console.error("[cangujet notifications]", {
     event,
     requestId,
     ...details,

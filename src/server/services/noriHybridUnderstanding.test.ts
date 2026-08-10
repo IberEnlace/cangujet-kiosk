@@ -114,7 +114,7 @@ test("required Turkish candidate references resolve without guessing", async () 
 
 test("Turkish multi-customization language stays in the documented customization flow", async () => {
   const agent = new NoriAgentService();
-  const selected = await turn(agent, "Morrow Classic Beef Burger hakkında bilgi ver", "tr");
+  const selected = await turn(agent, "cangujet Classic Beef Burger hakkında bilgi ver", "tr");
   const result = await turn(agent, "Peyniri çıkarıp büyük boy yap", "tr", selected.conversationState);
   assert.equal(result.intent, "customization_question");
   assert.doesNotMatch(result.reply, genericFallback);

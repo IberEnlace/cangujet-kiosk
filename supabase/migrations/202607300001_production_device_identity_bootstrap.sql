@@ -1,5 +1,5 @@
 -- Phase 1: production restaurant, branch, configuration, and device identity.
--- This migration is additive and backfills the existing MORROW branch.
+-- This migration is additive and backfills the existing cangujet branch.
 
 create type public.device_type as enum (
   'kiosk',
@@ -22,7 +22,7 @@ create table public.restaurants (
 );
 
 insert into public.restaurants(name, slug)
-values ('MORROW', 'morrow')
+values ('cangujet', 'morrow')
 on conflict (slug) do nothing;
 
 alter table public.branches
@@ -135,7 +135,7 @@ create unique index themes_one_active_per_restaurant_uidx
   where is_active;
 
 insert into public.themes(restaurant_id, name, tokens, is_active)
-select id, 'MORROW Default', jsonb_build_object(
+select id, 'cangujet Default', jsonb_build_object(
   'background', '#080b08',
   'surface', '#111511',
   'primary', '#D7FB69',
@@ -194,7 +194,7 @@ create table public.idle_screen_configurations (
   video_interval_ms integer not null default 9000 check (video_interval_ms between 1000 and 3600000),
   minimum_playback_ms integer not null default 4000 check (minimum_playback_ms between 0 and 3600000),
   transition_ms integer not null default 500 check (transition_ms between 0 and 60000),
-  title text not null default 'MORROW',
+  title text not null default 'cangujet',
   slogan text not null default 'Fresh. Fast. Delicious.',
   description text not null default 'Start your delicious journey',
   button_label text not null default 'START ORDER',
@@ -227,14 +227,14 @@ create unique index menu_branches_one_active_uidx
   where is_active;
 
 insert into public.menus(restaurant_id, name, status, published_at)
-select id, 'MORROW Default Menu', 'published', now()
+select id, 'cangujet Default Menu', 'published', now()
 from public.restaurants where slug = 'morrow'
 on conflict (restaurant_id, name) do nothing;
 insert into public.menu_branches(menu_id, branch_id, is_active)
 select m.id, b.id, true
 from public.menus m
 join public.branches b on b.restaurant_id = m.restaurant_id
-where m.name = 'MORROW Default Menu'
+where m.name = 'cangujet Default Menu'
 on conflict (menu_id, branch_id) do nothing;
 
 insert into public.payment_configurations(branch_id)

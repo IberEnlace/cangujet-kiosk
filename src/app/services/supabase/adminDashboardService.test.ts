@@ -110,5 +110,5 @@ test("branch day boundaries honor timezone", () => {
 test("production query stays branch-scoped and introduces no mock fallback", () => {
   const source = readFileSync(new URL("./adminDashboardService.ts", import.meta.url), "utf8");
   assert.match(source, /\.from\("orders"\)[\s\S]*?\.eq\("branch_id", branchId\)/);
-  assert.doesNotMatch(source, /dashboardStats|adminMockData|Morrow Kiosk 01|KSK-001/);
+  assert.doesNotMatch(source, /dashboardStats|adminMockData|cangujet Kiosk 01|KSK-001/);
 });

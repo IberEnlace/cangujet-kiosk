@@ -3,7 +3,7 @@ import { motion, useReducedMotion } from "motion/react";
 import { ArrowLeft, BarChart3, ChefHat, Eye, EyeOff, LockKeyhole, ReceiptText } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import type { StaffRole } from "../../auth/roleConfig";
-import CangujetLogo from "../branding/MorrowLogo";
+import CangujetLogo from "../branding/CangujetLogo";
 import "./StaffLogin.css";
 
 type Props = { role: StaffRole; title: string; description: string; onSuccess: () => void; onBack: () => void };
@@ -64,11 +64,11 @@ export default function StaffLogin({ role, title, description, onSuccess, onBack
     </section>
 
     <section className="auth-form-panel">
-      <motion.button {...enter(.08)} onClick={onBack} className="auth-back"><ArrowLeft size={15}/> Back to role selection</motion.button>
+      <motion.button {...enter(.08)} onClick={onBack} className="auth-back"><ArrowLeft size={15}/> Back</motion.button>
       <motion.form {...enter(.18, 18)} onSubmit={submit} className="auth-card">
         <div className="auth-lock"><LockKeyhole size={19}/></div>
         <p className="auth-eyebrow">{role} workspace</p><h1>{title}</h1><p className="auth-description">{description}</p>
-        <motion.div {...enter(.28, 0, 8)} className="auth-field"><label htmlFor={`${role}-email`}>Email or employee ID</label><input id={`${role}-email`} autoFocus value={email} onChange={e=>setEmail(e.target.value)} type="email" required placeholder={`${role}@cangujet.local`}/></motion.div>
+        <motion.div {...enter(.28, 0, 8)} className="auth-field"><label htmlFor={`${role}-email`}>Email or employee ID</label><input id={`${role}-email`} autoFocus value={email} onChange={e=>setEmail(e.target.value)} type="email" required placeholder="name@example.com"/></motion.div>
         <motion.div {...enter(.34, 0, 8)} className="auth-field"><label htmlFor={`${role}-password`}>Password</label><div className="auth-password"><input id={`${role}-password`} value={password} onChange={e=>setPassword(e.target.value)} type={show?"text":"password"} required placeholder="Enter your password"/><button type="button" aria-label={show ? "Hide password" : "Show password"} onClick={()=>setShow(v=>!v)}>{show?<EyeOff size={18}/>:<Eye size={18}/>}</button></div></motion.div>
         {error && <motion.p initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="auth-error" role="alert">{error}</motion.p>}
         <motion.button {...enter(.4, 0, 8)} type="submit" disabled={loading} className="auth-submit"><span>{loading?"Signing in…":"Sign in securely"}</span>{loading && <i aria-hidden="true" />}</motion.button>

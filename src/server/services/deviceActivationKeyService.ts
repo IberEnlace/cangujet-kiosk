@@ -1,5 +1,9 @@
 import { createHmac, randomBytes } from "node:crypto";
-import { isDeviceActivationKey, normalizeDeviceActivationKey } from "../../shared/deviceKey";
+import {
+  DEVICE_ACTIVATION_KEY_PREFIX,
+  isDeviceActivationKey,
+  normalizeDeviceActivationKey,
+} from "../../shared/deviceKey";
 
 const ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
@@ -7,7 +11,7 @@ export function createDeviceActivationKey() {
   const random = randomBytes(24);
   let body = "";
   for (let index = 0; index < 24; index += 1) body += ALPHABET[random[index] & 31];
-  const secretKey = `MORROW-${body.match(/.{4}/g)!.join("-")}`;
+  const secretKey = `${DEVICE_ACTIVATION_KEY_PREFIX}-${body.match(/.{4}/g)!.join("-")}`;
   return { secretKey, keyHint: body.slice(-4) };
 }
 

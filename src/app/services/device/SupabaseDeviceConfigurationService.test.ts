@@ -11,7 +11,7 @@ import {
 import { SupabaseDeviceConfigurationService } from "./SupabaseDeviceConfigurationService";
 
 const VALID_DEVICE_KEY = `mdk_${"a".repeat(24)}_${"B".repeat(43)}`;
-const VALID_ACTIVATION_KEY = "MORROW-ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
+const VALID_ACTIVATION_KEY = "CANGUJET-ABCD-EFGH-JKLM-NPQR-STUV-WXYZ";
 
 class MemoryStorage implements Storage {
   private readonly values = new Map<string, string>();
@@ -105,7 +105,7 @@ test("device registration maps one bootstrap and never persists the raw key or a
 
   const config = await service.configureDevice(VALID_DEVICE_KEY);
 
-  assert.equal(config.restaurantName, "MORROW");
+  assert.equal(config.restaurantName, "cangujet");
   assert.equal(config.branchName, "Istanbul Branch");
   assert.equal(config.configVersion, 7);
   assert.equal(config.settings.defaultLanguage, "en");
@@ -121,7 +121,7 @@ test("device registration maps one bootstrap and never persists the raw key or a
 
 test("activation verifies the key first and submits the workspace selected on the device", async () => {
   const { fetcher, calls } = queuedFetch(
-    jsonResponse({ restaurant: { name: "MORROW" }, branch: { name: "Istanbul Branch" }, allowedDeviceTypes: ["kiosk", "kitchen_display"] }),
+    jsonResponse({ restaurant: { name: "cangujet" }, branch: { name: "Istanbul Branch" }, allowedDeviceTypes: ["kiosk", "kitchen_display"] }),
     jsonResponse({ accessToken: "activation-token", tokenType: "Bearer", expiresAt: "2026-07-30T12:15:00.000Z", bootstrap: bootstrap() }, 201),
   );
   const service = new SupabaseDeviceConfigurationService(fetcher);
@@ -467,7 +467,7 @@ function jsonResponse(value: unknown, status = 200) {
 
 function bootstrap(): DeviceBootstrap {
   return {
-    restaurant: { id: "restaurant-1", name: "MORROW", slug: "morrow", logoUrl: null, brandColors: { primary: "#D7FB69" } },
+    restaurant: { id: "restaurant-1", name: "cangujet", slug: "morrow", logoUrl: null, brandColors: { primary: "#D7FB69" } },
     branch: {
       id: "branch-1",
       name: "Istanbul Branch",
@@ -491,7 +491,7 @@ function bootstrap(): DeviceBootstrap {
     },
     configuration: { configVersion: 7, lastUpdated: "2026-07-30T12:00:00.000Z", checksum: "test-checksum" },
     configVersion: 7,
-    theme: { id: "theme-1", name: "MORROW Default", tokens: { primary: "#D7FB69" } },
+    theme: { id: "theme-1", name: "cangujet Default", tokens: { primary: "#D7FB69" } },
     logoUrl: null,
     languages: [
       { code: "en", name: "English", nativeName: "English", locale: "en-TR", direction: "ltr", default: true },
@@ -512,7 +512,7 @@ function bootstrap(): DeviceBootstrap {
       videoIntervalMs: 9000,
       minimumPlaybackMs: 4000,
       transitionMs: 500,
-      title: "MORROW",
+      title: "cangujet",
       slogan: "Fresh. Fast. Delicious.",
       description: "Start your delicious journey",
       buttonLabel: "START ORDER",

@@ -1,4 +1,4 @@
-import localCatalog from "../../data/morrow-menu-ai.json";
+import localCatalog from "../../data/cangujet-menu-ai.json";
 import type { DeviceMenuResponse } from "../../../shared/deviceBootstrap";
 import type { NormalizedMenu, NormalizedMenuProduct } from "./menuModels";
 import { repositoryFailure, type RepositoryResult } from "./repositoryResult";
@@ -52,7 +52,7 @@ async function loadPreferredMenu(
     if (cause instanceof DeviceTokenRefreshError && cause.kind === "forbidden") {
       return repositoryFailure("unauthorized", "The device is not authorized to load this menu.", cause);
     }
-    if (import.meta.env?.DEV) console.error("[MORROW] Device menu request failed:", cause);
+    if (import.meta.env?.DEV) console.error("[cangujet] Device menu request failed:", cause);
     return repositoryFailure("network", "Menu could not be loaded from the database.", cause);
   }
   if (!response.ok) {

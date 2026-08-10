@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ban, Check, Clock3, Loader2, TestTube2, XCircle } from "lucide-react";
 import type { QrPaymentSession } from "../../../shared/orders";
-import MorrowLogo from "../../components/branding/MorrowLogo";
+import CangujetLogo from "../../components/branding/CangujetLogo";
 import { mockQrPaymentClient } from "../../services/orders/MockQrPaymentService";
 
 export default function MockQrPayment({ sessionId }: { sessionId: string }) {
@@ -56,13 +56,13 @@ export default function MockQrPayment({ sessionId }: { sessionId: string }) {
   return <main className="min-h-[100dvh] bg-[#F8F9FA] px-5 py-8 text-[#1F1F1F]">
     <div className="mx-auto flex min-h-[calc(100dvh-4rem)] max-w-xl flex-col">
       <header className="flex items-center justify-between gap-4">
-        <MorrowLogo variant="full" priority className="h-auto w-36" />
+        <CangujetLogo variant="full" priority className="h-auto w-36" />
         <span className="rounded-full border border-[#C41E19]/25 bg-[#FFFFFF] px-4 py-2 text-xs font-black uppercase tracking-wide text-[#C41E19] shadow-[0_3px_10px_rgba(31,31,31,.04)]">Development Mode — No Real Money</span>
       </header>
 
       <section className="my-auto py-10 text-center" aria-live="polite">
         <div className="mx-auto grid size-20 place-items-center rounded-[24px] bg-[#C41E19]/10 text-[#C41E19]"><TestTube2 size={38} /></div>
-        <h1 className="mt-6 text-4xl font-black tracking-[-.04em]">MORROW Mock Payment</h1>
+        <h1 className="mt-6 text-4xl font-black tracking-[-.04em]">cangujet Mock Payment</h1>
         <p className="mt-2 text-[#6B7280]">Local payment simulator for development and testing.</p>
 
         {session ? <div className="mt-8 rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] p-6 text-start shadow-[0_8px_24px_rgba(31,31,31,.06)] transition duration-300 hover:-translate-y-0.5 hover:shadow-[0_12px_30px_rgba(31,31,31,.08)]">

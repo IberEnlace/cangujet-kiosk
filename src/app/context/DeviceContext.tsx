@@ -292,5 +292,5 @@ export function DeviceProvider({ children, enabled = true }: { children: ReactNo
 export function useDevice() { const value = useContext(DeviceContext); if (!value) throw new Error("useDevice must be used within DeviceProvider"); return value; }
 
 function diagnostic(event: string, details: Record<string, unknown> = {}) {
-  if (import.meta.env?.DEV) console.info("[MORROW device]", { event, ...details });
+  if (import.meta.env?.DEV) console.info("[cangujet device]", { event, ...details });
 }

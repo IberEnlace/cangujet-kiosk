@@ -204,7 +204,7 @@ function Application() {
     navigateTo(target);
   }, [assignedDeviceType, auth.selectDeviceMode, device.initializationStatus]);
   const customerViewport = (child: ReactNode) => <div className="min-h-[100dvh] bg-[#F8F9FA]"><div className="mx-auto min-h-[100dvh] w-full max-w-[1080px] bg-white shadow-[0_16px_48px_rgba(31,31,31,.08)]">{child}</div></div>;
-  const staffPage = (role: StaffRole, child: ReactNode) => <StaffLayout role={role} onLoggedOut={() => navigateTo(getLoginRouteForRole(role))} onChangeMode={() => enterWorkspaceSelection(`${role}_change_mode`)}>{child}</StaffLayout>;
+  const staffPage = (role: StaffRole, child: ReactNode) => <StaffLayout role={role} onLoggedOut={() => navigateTo(role === "admin" ? ROUTES.deviceSetup : getLoginRouteForRole(role))} onChangeMode={() => enterWorkspaceSelection(`${role}_change_mode`)}>{child}</StaffLayout>;
 
   useEffect(() => {
     if (!requiresDeviceSession || staffDeviceAlternativeRoute) return;
@@ -258,7 +258,7 @@ function Application() {
   if (protectedAdminRoute && auth.isAuthenticated && auth.currentRole === "admin" && (adminSessionGate?.route !== route || adminSessionGate.state !== "valid")) {
     return <AdminSessionGate networkError={adminSessionGate?.route === route && adminSessionGate.state === "network_error"} onRetry={() => setAdminSessionRetry(value => value + 1)} onLogin={() => { void auth.logout().then(() => navigateTo(ROUTES.adminLogin)); }} />;
   }
-  if (requiresDeviceSession && !staffDeviceAlternativeRoute && device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceRouteForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} />;
+  if (requiresDeviceSession && !staffDeviceAlternativeRoute && device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceRouteForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} onStaffSignIn={() => navigateTo(ROUTES.adminLogin)} />;
   if (requiresDeviceSession && device.initializationStatus === "authenticated" && ["waiting_for_device", "loading_configuration", "loading_menu", "error"].includes(bootstrap.state)) return <ConfigurationLoadingScreen />;
   if ([ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice].includes(route as "/nori" | "/nori/chat" | "/nori/voice") && !bootstrap.kiosk?.ai.enabled) return null;
   if (route === ROUTES.noriVoice && !bootstrap.kiosk?.ai.voiceEnabled) return null;
@@ -268,6 +268,7 @@ function Application() {
     onWorkspaceSelected={selectWorkspace}
     onConfigured={() => navigateTo(workspaceRouteForDevice(device.config?.bootstrap.device.type ?? "kiosk"))}
     onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)}
+    onStaffSignIn={() => navigateTo(ROUTES.adminLogin)}
   />;
   if (route === ROUTES.deviceInfo) return <DeviceInfo onBack={() => enterWorkspaceSelection("device_info_back")} onCleared={() => { completeIntentionalWorkspaceSelection(); navigateTo(ROUTES.deviceSetup); }} />;
   if (route === ROUTES.idle) return <IdleScreen onStart={startOrder} />;

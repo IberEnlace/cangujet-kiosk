@@ -367,7 +367,7 @@ function paymentMetrics(orders: Order[], allPayments: Payment[]) {
 async function queryRows<T>(source: string, query: PromiseLike<{ data: T[] | null; error: QueryError | null }>) {
   const { data, error } = await query;
   if (error) {
-    console.error("[MORROW notifications] report data query failed", {
+    console.error("[cangujet notifications] report data query failed", {
       source,
       code: error.code,
       message: error.message,

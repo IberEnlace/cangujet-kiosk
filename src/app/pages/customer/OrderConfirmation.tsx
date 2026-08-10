@@ -6,7 +6,7 @@ import { useCart } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { getCustomerTranslation } from "../../i18n/customerTranslations";
 import { MockReceiptPrinterService } from "../../services/printer/MockReceiptPrinterService";
-import MorrowLogo from "../../components/branding/MorrowLogo";
+import CangujetLogo from "../../components/branding/CangujetLogo";
 import type { ReceiptData, ReceiptPrintStatus } from "../../services/printer/ReceiptPrinterService";
 import { useDevice } from "../../context/DeviceContext";
 import { useOrderTracking } from "../../hooks/useRealtimeOrders";
@@ -64,7 +64,7 @@ export default function OrderConfirmation({ onReset }: { onReset: () => void }) 
     <main dir={direction} className="h-screen h-[100dvh] overflow-hidden bg-[#F8F9FA] text-[#1F1F1F]">
       <div className="confirmation-layout mx-auto grid h-full w-full max-w-[900px] grid-rows-[auto_minmax(0,1fr)_auto] px-4 pt-4 text-center sm:px-8 sm:pt-6">
         <header className="flex flex-col items-center">
-          <MorrowLogo variant="full" priority className="h-auto w-36" />
+          <CangujetLogo variant="full" priority className="h-auto w-36" />
           <h1 className="mt-3 text-[clamp(1.5rem,3.2vw,2.35rem)] font-bold tracking-[-.04em]">{copy.title}</h1>
           <p className="mt-1 text-[clamp(.78rem,1.45vw,1rem)] text-[#6B7280]">{copy.subtitle}</p>
         </header>

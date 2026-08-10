@@ -1,4 +1,4 @@
-# MORROW Supabase foundation
+# cangujet Supabase foundation
 
 This repository implements Phases 1–7: the typed browser client, schema/RLS, staff authentication, shared menu repository and seed tooling, and secure order creation. Realtime, Nori persistence, Storage, and payment-provider integration remain deferred.
 
@@ -53,7 +53,7 @@ in Resend, then configure server-side Edge Function secrets:
 ```sh
 supabase secrets set RESEND_API_KEY=...
 supabase secrets set MORROW_NOTIFICATION_FROM_EMAIL=notifications@your-verified-domain.example
-supabase secrets set MORROW_NOTIFICATION_FROM_NAME=MORROW
+supabase secrets set MORROW_NOTIFICATION_FROM_NAME=cangujet
 supabase secrets set MORROW_NOTIFICATION_INTERNAL_SECRET=a-random-value-of-at-least-24-characters
 supabase secrets set RESEND_WEBHOOK_SECRET=whsec_...
 supabase functions deploy send-notification-email

@@ -23,7 +23,7 @@ if (missingVariables.length) {
   throw new Error(`Missing ${missingVariables.join(" and ")} in the project root .env file (${projectEnvPath}). Never place the secret in .env.example or a VITE_ variable.`);
 }
 const client = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
-const catalog = JSON.parse(readFileSync(new URL("../src/app/data/morrow-menu-ai.json", import.meta.url), "utf8"));
+const catalog = JSON.parse(readFileSync(new URL("../src/app/data/cangujet-menu-ai.json", import.meta.url), "utf8"));
 const productImageById = JSON.parse(readFileSync(new URL("../src/app/data/productImages.generated.json", import.meta.url), "utf8"));
 validateCatalog(catalog);
 if (mode === "seed") await seed(); else if (mode === "repair-images") await repairImages(); else await verify();

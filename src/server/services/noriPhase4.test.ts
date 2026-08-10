@@ -102,7 +102,7 @@ test("phase4.1 impossible request offers choices without safe relaxation", async
 });
 test("phase4.1 remove cheese never selects no extra cheese", async () => {
   const agent = new NoriAgentService();
-  const selected = await agent.process(request("Tell me about the Morrow Classic Beef Burger."));
+  const selected = await agent.process(request("Tell me about the cangujet Classic Beef Burger."));
   const result = await agent.process(request("Can I remove the cheese?", selected.conversationState));
   assert.doesNotMatch(result.reply, /no extra cheese/i);
   assert.match(result.reply, /Removing cheddar cheese is documented/i);
@@ -115,7 +115,7 @@ test("phase4.1 unsupported base-cheese removal states the documented limitation"
 });
 test("phase4.1 unchanged nutrition transitions are omitted", async () => {
   const agent = new NoriAgentService();
-  const selected = await agent.process(request("Tell me about the Morrow Classic Beef Burger."));
+  const selected = await agent.process(request("Tell me about the cangujet Classic Beef Burger."));
   const result = await agent.process(request("No extra cheese.", selected.conversationState));
   assert.doesNotMatch(result.reply, /calories change|protein changes/i);
 });

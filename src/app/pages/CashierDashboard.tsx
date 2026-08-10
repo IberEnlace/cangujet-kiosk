@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Banknote, Clock3, CreditCard, Minus, Plus, Printer, Receipt, Search, ShoppingCart, Trash2, WalletCards, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { toast, Toaster } from "sonner";
-import MorrowLogo from "../components/branding/MorrowLogo";
+import CangujetLogo from "../components/branding/CangujetLogo";
 import CashierReceipt, { printCashierReceipt, type CashierReceiptData } from "../components/cashier/CashierReceipt";
 import { useCashierOrderQueries, useCashierOrders, usePendingCashierOrders } from "../hooks/useRealtimeOrders";
 import { OrderService } from "../services/orders/OrderService";
@@ -138,7 +138,7 @@ export default function CashierDashboard() {
       const attemptForRequest=resolveCashierCreateAttempt(attemptRef.current,requestSignature);
       storeAttempt(attemptForRequest);
       const requestContext={workflowAttemptId:attemptForRequest.workflowAttemptId};
-      if(import.meta.env.DEV)console.info("[MORROW cashier attempt]",{event:"create",createKey:attemptForRequest.createKey,requestSignature,workflowAttemptId:attemptForRequest.workflowAttemptId});
+      if(import.meta.env.DEV)console.info("[cangujet cashier attempt]",{event:"create",createKey:attemptForRequest.createKey,requestSignature,workflowAttemptId:attemptForRequest.workflowAttemptId});
       const created=await cashierOrderService.create({...createPayload,idempotencyKey:attemptForRequest.createKey},authentication,requestContext);
 
       const normalizedAmountReceived=amountReceived.toFixed(2);
@@ -146,7 +146,7 @@ export default function CashierDashboard() {
       const attemptForPayment=resolveCashierPaymentAttempt(attemptForRequest,paymentSignature);
       storeAttempt(attemptForPayment);
       const paymentContext={workflowAttemptId:attemptForPayment.workflowAttemptId};
-      if(import.meta.env.DEV)console.info("[MORROW cashier attempt]",{event:"payment",createKey:attemptForPayment.createKey,paymentKey:attemptForPayment.paymentKey,requestSignature,paymentSignature,workflowAttemptId:attemptForPayment.workflowAttemptId});
+      if(import.meta.env.DEV)console.info("[cangujet cashier attempt]",{event:"payment",createKey:attemptForPayment.createKey,paymentKey:attemptForPayment.paymentKey,requestSignature,paymentSignature,workflowAttemptId:attemptForPayment.workflowAttemptId});
       const payment=await cashierOrderService.pay(created.id,{idempotencyKey:attemptForPayment.paymentKey,method:"cash",amountReceived:normalizedAmountReceived},authentication,paymentContext);
       const submitted=await cashierOrderService.submit(created.id,payment.order.version,authentication,paymentContext);
       const now=new Date();const authoritativeSubtotal=Number(submitted.subtotal);const authoritativeTax=Number(submitted.taxTotal);const authoritativeTotal=Number(submitted.total);const authoritativeChange=Number(payment.change);
@@ -199,7 +199,7 @@ export default function CashierDashboard() {
   };
 
   return <main className="cangujet-cashier flex min-h-screen flex-col bg-[#F8F9FA] text-[#1F1F1F]"><Toaster theme="light" position="top-right"/>
-    <header className="flex items-center justify-between border-b border-[#ECECEC] bg-white px-4 py-4 shadow-sm sm:px-6"><div><MorrowLogo variant="full" priority className="h-auto w-36"/><p className="mt-1 text-xs text-[#6B7280]">{kiosk?.name} · {branch?.name} · Current shift</p><p className="mt-1 text-[10px] text-[#9CA3AF]">{liveOrders.isDemo?"Demo orders":`${liveOrders.orders.length} branch orders · ${liveOrders.connection}`}</p></div><button onClick={()=>registerOpen?setCloseConfirm(true):setRegisterOpen(true)} className={`cashier-button rounded-xl border px-4 py-2 text-xs font-bold ${registerOpen?"border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]":"border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]"}`}>{registerOpen?"Close Register":"Open Register"}</button></header>
+    <header className="flex items-center justify-between border-b border-[#ECECEC] bg-white px-4 py-4 shadow-sm sm:px-6"><div><CangujetLogo variant="full" priority className="h-auto w-36"/><p className="mt-1 text-xs text-[#6B7280]">{kiosk?.name} · {branch?.name} · Current shift</p><p className="mt-1 text-[10px] text-[#9CA3AF]">{liveOrders.isDemo?"Demo orders":`${liveOrders.orders.length} branch orders · ${liveOrders.connection}`}</p></div><button onClick={()=>registerOpen?setCloseConfirm(true):setRegisterOpen(true)} className={`cashier-button rounded-xl border px-4 py-2 text-xs font-bold ${registerOpen?"border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]":"border-[#C41E19]/20 bg-[#C41E19]/5 text-[#C41E19]"}`}>{registerOpen?"Close Register":"Open Register"}</button></header>
     {sessionMessage&&<p role="alert" className="border-b border-[#C41E19]/20 bg-[#C41E19]/5 px-6 py-3 text-xs font-semibold text-[#C41E19]">{sessionMessage}</p>}
     {pendingQueueOrders.length>0&&<section className="border-b border-[#C41E19]/20 bg-[#C41E19]/5 px-4 py-3 sm:px-6"><button onClick={()=>setTool("pending")} className="flex w-full items-center gap-3 text-left"><span className="grid size-10 place-items-center rounded-xl bg-white text-[#C41E19] shadow-sm"><Clock3 size={18}/></span><span><strong className="block text-sm text-[#C41E19]">Pending Kiosk Payments</strong><small className="text-[#C41E19]/70">{pendingQueueOrders.length} order{pendingQueueOrders.length===1?"":"s"} waiting for cashier confirmation</small></span><span className="ml-auto rounded-lg bg-[#C41E19] px-3 py-2 text-xs font-black text-white">Open queue</span></button></section>}
     <div className="grid min-h-0 flex-1 lg:grid-cols-[minmax(0,1fr)_400px]"><section className="min-w-0 p-4 sm:p-6"><div className="relative"><Search size={18} className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-[#9CA3AF]"/><input ref={searchRef} value={search} onChange={event=>setSearch(event.target.value)} placeholder="Search menu..." className="cashier-search h-12 w-full rounded-2xl pl-12 pr-20 text-sm outline-none"/>{!search&&<kbd className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 rounded-md border border-[#ECECEC] bg-[#F8F9FA] px-2 py-1 text-[10px] font-bold text-[#9CA3AF]">/</kbd>}{search&&<button aria-label="Clear search" onClick={()=>{setSearch("");searchRef.current?.focus();}} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-2 text-[#9CA3AF] transition-colors hover:bg-[#C41E19]/5 hover:text-[#C41E19]"><X size={16}/></button>}</div>

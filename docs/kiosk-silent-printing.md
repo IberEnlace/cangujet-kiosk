@@ -1,4 +1,4 @@
-# MORROW kiosk silent printing
+# cangujet kiosk silent printing
 
 The Pay at Cashier ticket is rendered as the existing 80mm receipt in an
 off-screen frame. Production Chrome must be started with `--kiosk-printing` so

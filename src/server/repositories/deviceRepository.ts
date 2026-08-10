@@ -104,6 +104,20 @@ export interface DeviceRepository {
   loadMenuConfiguration(scope: DeviceMenuScope): Promise<DeviceMenuData | null>;
 }
 
+export class DeviceRepositoryDependencyFailure extends Error {
+  constructor(
+    public readonly dependency: "server_configuration" | "supabase_rest",
+    public readonly operation: string,
+    public readonly upstreamCode: string | null = null,
+    public readonly upstreamStatus: number | null = null,
+  ) {
+    super(dependency === "server_configuration"
+      ? "Server-side device repository configuration is unavailable."
+      : "The device repository is unavailable.");
+    this.name = "DeviceRepositoryDependencyFailure";
+  }
+}
+
 export class SupabaseDeviceRepository implements DeviceRepository {
   constructor(private readonly client: SupabaseClient<Database>) {}
 
@@ -161,7 +175,7 @@ export class SupabaseDeviceRepository implements DeviceRepository {
 
   async getSessionByRefreshHash(refreshHash: string): Promise<DeviceSessionIdentity | null> {
     const session = await this.client.from("device_sessions").select("*").eq("refresh_token_hash", refreshHash).maybeSingle();
-    assertQuery(session.error, "Device refresh session lookup failed.");
+    assertQuery(session.error, "Device refresh session lookup failed.", "device_session_lookup");
     return session.data ? this.resolveSessionIdentity(session.data) : null;
   }
 
@@ -361,15 +375,32 @@ export class SupabaseDeviceRepository implements DeviceRepository {
 export function createSupabaseDeviceRepositoryFromEnvironment() {
   const url = process.env.SUPABASE_URL?.trim();
   const secret = (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)?.trim();
-  if (!url || !secret) throw new Error("Server-side Supabase device configuration is missing.");
-  const client = createClient<Database>(url, secret, {
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
-  return new SupabaseDeviceRepository(client);
+  if (!url || !secret) {
+    const missing = [!url && "SUPABASE_URL", !secret && "SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY"].filter(Boolean).join(",");
+    throw new DeviceRepositoryDependencyFailure("server_configuration", "device_repository_initialization", missing);
+  }
+  try {
+    const parsed = new URL(url);
+    if (!(["http:", "https:"] as string[]).includes(parsed.protocol)) throw new Error("unsupported_protocol");
+    const client = createClient<Database>(parsed.toString().replace(/\/$/, ""), secret, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    return new SupabaseDeviceRepository(client);
+  } catch (error) {
+    throw new DeviceRepositoryDependencyFailure(
+      "server_configuration",
+      "device_repository_initialization",
+      error instanceof Error ? error.name : "InvalidConfiguration",
+    );
+  }
 }
 
-function assertQuery(error: { message: string } | null, message: string): asserts error is null {
-  if (error) throw new Error(`${message} ${error.message}`);
+function assertQuery(
+  error: { message: string; code?: string; status?: number } | null,
+  _message: string,
+  operation = "device_repository_query",
+): asserts error is null {
+  if (error) throw new DeviceRepositoryDependencyFailure("supabase_rest", operation, error.code ?? null, error.status ?? null);
 }
 
 function activationError(error: { message: string }) {

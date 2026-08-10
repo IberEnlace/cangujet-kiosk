@@ -58,5 +58,5 @@ export function workspaceNavigationDiagnostic(input: {
   redirectSource: string;
   redirectAllowed: boolean;
 }) {
-  if (import.meta.env?.DEV) console.info("[MORROW workspace navigation]", input);
+  if (import.meta.env?.DEV) console.info("[cangujet workspace navigation]", input);
 }

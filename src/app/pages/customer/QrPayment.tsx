@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, Check, Clock3, Loader2, QrCode, RefreshCw, ShieldCheck, WifiOff } from "lucide-react";
 import type { QrPaymentSession } from "../../../shared/orders";
-import MorrowLogo from "../../components/branding/MorrowLogo";
+import CangujetLogo from "../../components/branding/CangujetLogo";
 import { useCart } from "../../context/CartContext";
 import { useOrderSubmission } from "../../context/OrderContext";
 import { orderService } from "../../services/orders/OrderService";
@@ -144,7 +144,7 @@ export default function QrPayment({ onComplete, onCancel, onInvalid }: {
   return <main className="min-h-[100dvh] bg-[#F8F9FA] px-5 py-6 text-[#1F1F1F]">
     <div className="mx-auto flex min-h-[calc(100dvh-3rem)] max-w-[780px] flex-col">
       <header className="flex items-center justify-between">
-        <MorrowLogo variant="full" priority className="h-auto w-36" />
+        <CangujetLogo variant="full" priority className="h-auto w-36" />
         <span className="flex items-center gap-2 rounded-full border border-[#C41E19]/20 bg-[#FFFFFF] px-4 py-2 text-xs font-bold text-[#C41E19] shadow-[0_3px_10px_rgba(31,31,31,.04)]"><ShieldCheck size={15} />Secure QR Payment</span>
       </header>
 

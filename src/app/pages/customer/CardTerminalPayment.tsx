@@ -7,7 +7,7 @@ import { LANGUAGE_CONFIG } from "../../config/languages";
 import { getCustomerTranslation } from "../../i18n/customerTranslations";
 import { MockPaymentTerminalService } from "../../services/payment/MockPaymentTerminalService";
 import type { CardPaymentStatus } from "../../types/payment";
-import MorrowLogo from "../../components/branding/MorrowLogo";
+import CangujetLogo from "../../components/branding/CangujetLogo";
 import { useBranch } from "../../context/BootstrapContext";
 import { useCurrentOrder, useOrderSubmission } from "../../context/OrderContext";
 
@@ -167,7 +167,7 @@ export default function CardTerminalPayment({ onBack, onApproved }: Props) {
     <main dir={direction} className="min-h-[100dvh] bg-[#F8F9FA] text-[#1F1F1F]">
       <div className="mx-auto flex min-h-[100dvh] w-full max-w-[900px] flex-col px-5 py-6 sm:px-10 sm:py-10">
         <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3"><MorrowLogo variant="symbol" priority className="size-12 object-contain" /><p className="text-xs text-[#6B7280]">Secure terminal payment</p></div>
+          <div className="flex items-center gap-3"><CangujetLogo variant="symbol" priority className="size-12 object-contain" /><p className="text-xs text-[#6B7280]">Secure terminal payment</p></div>
           <p className="text-xl font-bold text-[#C41E19] sm:text-2xl">{currency.format(authoritativeTotal)}</p>
         </header>
 

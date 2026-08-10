@@ -103,9 +103,9 @@ export class PayAtCashierTicketPrinterService {
 export function renderPayAtCashierTicketHtml(ticket: PayAtCashierConfirmationSnapshot) {
   const money = new Intl.NumberFormat(undefined, { style: "currency", currency: ticket.currency });
   const items = ticket.items.map(item => `<li><strong>${escapeHtml(item.name)} × ${item.quantity}</strong>${item.modifiers.length ? `<small>${item.modifiers.map(escapeHtml).join(", ")}</small>` : ""}</li>`).join("");
-  return `<!doctype html><html><head><meta charset="utf-8"><title>MORROW ${escapeHtml(ticket.orderNumber)}</title><style>
+  return `<!doctype html><html><head><meta charset="utf-8"><title>cangujet ${escapeHtml(ticket.orderNumber)}</title><style>
     @page{size:80mm auto;margin:0}*{box-sizing:border-box}body{width:80mm;margin:0;padding:7mm 5mm;background:#fff;color:#111;font:12px/1.4 ui-monospace,SFMono-Regular,Consolas,monospace}h1,h2,p{margin:0;text-align:center}h1{font:900 22px Arial,sans-serif;letter-spacing:.18em}h2{margin-top:2mm;font-size:14px}.number{margin:5mm 0;border-block:1px dashed #555;padding:4mm 0;font:900 34px Arial,sans-serif}ul{margin:4mm 0;padding:0;list-style:none}li{padding:2mm 0;border-bottom:1px dotted #aaa}small{display:block;color:#555;margin-top:1mm}.row{display:flex;justify-content:space-between;margin-top:1.5mm}.total{margin-top:2mm;border-top:2px solid #111;padding-top:2mm;font-weight:900;font-size:15px}.pending{margin:4mm 0 2mm;font-weight:900}.instruction{margin-top:4mm}.created{margin-top:4mm;color:#555;font-size:10px}</style></head><body>
-    <h1>MORROW</h1><h2>PAY AT CASHIER</h2><p>Order Number</p><p class="number">${escapeHtml(ticket.orderNumber)}</p><ul>${items}</ul>
+    <h1>cangujet</h1><h2>PAY AT CASHIER</h2><p>Order Number</p><p class="number">${escapeHtml(ticket.orderNumber)}</p><ul>${items}</ul>
     <div class="row"><span>Subtotal</span><span>${money.format(Number(ticket.subtotal))}</span></div><div class="row"><span>Tax</span><span>${money.format(Number(ticket.taxTotal))}</span></div><div class="row total"><span>Total</span><span>${money.format(Number(ticket.total))}</span></div>
     <p class="pending">Payment Status: Pending</p><p class="instruction">Please take this ticket to the cashier.</p><p class="created">${escapeHtml(new Date(ticket.createdAt).toLocaleString())}</p>
   </body></html>`;

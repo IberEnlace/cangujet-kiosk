@@ -8,7 +8,7 @@ alter table public.categories
     check (jsonb_typeof(localized_names) = 'object'),
   add column if not exists is_visible boolean not null default true;
 
--- Every category predating restaurant tenancy belongs to the single MORROW
+-- Every category predating restaurant tenancy belongs to the single cangujet
 -- menu created and assigned by 202607300001. Existing non-null ownership is
 -- never changed.
 do $$
@@ -19,13 +19,13 @@ begin
   from public.menus m
   join public.restaurants r on r.id = m.restaurant_id
   where r.slug = 'morrow'
-    and m.name = 'MORROW Default Menu'
+    and m.name = 'cangujet Default Menu'
   order by (m.status = 'published') desc, m.created_at, m.id
   limit 1;
 
   if exists (select 1 from public.categories where menu_id is null) then
     if v_legacy_menu_id is null then
-      raise exception 'The legacy MORROW menu required to preserve existing categories is missing.';
+      raise exception 'The legacy cangujet menu required to preserve existing categories is missing.';
     end if;
     update public.categories
     set menu_id = v_legacy_menu_id

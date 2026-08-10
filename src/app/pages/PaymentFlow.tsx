@@ -4,7 +4,7 @@ import {
   Shield, Lock, Receipt, RefreshCw
 } from "lucide-react";
 import { useCart, type PaymentMethod } from "../context/CartContext";
-import MorrowLogo from "../components/branding/MorrowLogo";
+import CangujetLogo from "../components/branding/CangujetLogo";
 import { useBranch, useKiosk } from "../context/BootstrapContext";
 import { useCurrentOrder, useOrderSubmission } from "../context/OrderContext";
 import { savePayAtCashierConfirmation } from "../services/orders/payAtCashierConfirmation";
@@ -165,7 +165,7 @@ export default function PaymentFlow({ onNavigate, onPayAtCashierConfirmed, onQrP
           <span className="text-sm">Back to Cart</span>
         </button>
         <div className="flex items-center gap-2">
-          <MorrowLogo variant="symbol" className="size-8 object-contain" alt="" />
+          <CangujetLogo variant="symbol" className="size-8 object-contain" alt="" />
           <Lock size={16} className="text-[#C41E19]" />
           <h1 className="font-bold text-lg">Secure Payment</h1>
         </div>

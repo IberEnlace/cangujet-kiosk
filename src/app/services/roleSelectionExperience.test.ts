@@ -15,17 +15,20 @@ test("DeviceWorkspaceStage is the only workspace-selection UI", () => {
   assert.match(setup, /<DeviceWorkspaceStage/);
 });
 
-test("the consolidated stage retains all five workspace choices and previews", () => {
+test("the consolidated stage exposes exactly the four device workspaces and previews", () => {
   assert.match(stage, /Configure this device/);
-  assert.match(stage, /morrow-workspace__preview-shell/);
-  assert.match(stage, /morrow-workspace__navigation/);
-  for (const role of ["Customer Kiosk", "Kitchen", "Cashier", "Admin", "Order Display"]) {
+  assert.match(stage, /Choose how this device will be used\./);
+  assert.match(stage, /cangujet-workspace__preview-shell/);
+  assert.match(stage, /cangujet-workspace__navigation/);
+  for (const role of ["Customer Kiosk", "Kitchen", "Cashier", "Order Display"]) {
     assert.match(stage, new RegExp(`title: "${role}"`));
     assert.match(stage, new RegExp(`action: "Use as ${role}"`));
   }
-  for (const preview of ["CustomerKioskPreview", "KitchenPreview", "CashierPreview", "AdminPreview", "OrderDisplayPreview"]) {
+  for (const preview of ["CustomerKioskPreview", "KitchenPreview", "CashierPreview", "OrderDisplayPreview"]) {
     assert.match(stage, new RegExp(preview));
   }
+  assert.equal((stage.match(/type: "(?:kiosk|kitchen_display|cashier_terminal|order_display)"/g) ?? []).length, 4);
+  assert.doesNotMatch(stage, /admin_terminal|title: "Admin"|Use as Admin|AdminPreview/);
 });
 
 test("workspace selection remains keyboard accessible and reduced-motion safe", () => {
@@ -42,7 +45,13 @@ test("a provisioned Change Mode flow selects a workspace without reactivation", 
   assert.match(app, /workspaceSelection=\{workspaceSelectionOverrideActive && Boolean\(device\.config\)\}/);
   assert.match(setup, /if \(workspaceSelection && config\) \{\s*onWorkspaceSelected\?\.\(deviceType\);\s*return;/s);
   assert.match(setup, /if \(workspaceSelection \|\| status !== "configured"/);
-  assert.match(setup, /onBack=\{workspaceSelection \? undefined : resetVerification\}/);
+  assert.doesNotMatch(stage, /Change key|cangujet-workspace__back/);
+});
+
+test("the workspace stage header and title are intentionally minimal", () => {
+  assert.doesNotMatch(stage, /Workspace stage|Connected|Device setup progress|Change key/);
+  assert.doesNotMatch(stage, /verification\.branch\.name/);
+  assert.doesNotMatch(styles, /cangujet-workspace__(?:header-context|branch|connected|steps|back)|workspace-status-pulse|preview-admin/);
 });
 
 test("all selection navigation canonicalizes to device setup", () => {

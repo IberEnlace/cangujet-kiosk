@@ -5,7 +5,7 @@ import {
   Check, X, AlertCircle, Package, ChevronDown, ChevronUp
 } from "lucide-react";
 import { useCart, type CartItem } from "../context/CartContext";
-import MorrowLogo from "../components/branding/MorrowLogo";
+import CangujetLogo from "../components/branding/CangujetLogo";
 import { useBootstrap } from "../context/BootstrapContext";
 import { useCurrentOrder, useOrderSubmission } from "../context/OrderContext";
 import { OrderClientError } from "../services/orders/OrderService";
@@ -101,7 +101,7 @@ export default function ShoppingCart({ onNavigate }: Props) {
           <span className="text-sm">Continue Shopping</span>
         </button>
         <div className="flex items-center gap-3">
-          <MorrowLogo variant="symbol" className="size-8 object-contain" alt="" />
+          <CangujetLogo variant="symbol" className="size-8 object-contain" alt="" />
           <CartIcon size={20} className="text-[#C41E19]" />
           <h1 className="font-bold text-lg tracking-tight">Your Cart</h1>
           <span className="flex size-6 items-center justify-center rounded-full bg-[#C41E19] text-xs font-bold text-white">

@@ -24,7 +24,7 @@ export function buildTestNotificationEmail(input: TestNotificationTemplateInput)
 
   const content = `
     <div style="display:inline-block;border-radius:999px;background-color:#D7FB69;padding:7px 11px;font-size:10px;line-height:12px;font-weight:800;letter-spacing:1.2px;color:#17200F;">TEST NOTIFICATION</div>
-    <h1 style="margin:22px 0 0 0;font-size:28px;line-height:35px;font-weight:750;color:#FFFFFF;">Your MORROW email notifications are working</h1>
+    <h1 style="margin:22px 0 0 0;font-size:28px;line-height:35px;font-weight:750;color:#FFFFFF;">Your cangujet email notifications are working</h1>
     <p style="margin:13px 0 0 0;font-size:15px;line-height:24px;color:#9CA39A;">This test confirms that your restaurant can receive system alerts and operational reports.</p>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin-top:27px;border-collapse:separate;border-spacing:0;border:1px solid #2a2e28;border-radius:12px;background-color:#1A1D18;">${details}</table>
     <table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="width:100%;margin-top:22px;border-collapse:separate;border-spacing:0;border-radius:12px;background-color:#D7FB69;">
@@ -36,11 +36,11 @@ export function buildTestNotificationEmail(input: TestNotificationTemplateInput)
 
   const html = emailLayout({
     content, branchName: input.branchName, sent: formatted.sent,
-    preheader: "Your MORROW email notifications are working.",
+    preheader: "Your cangujet email notifications are working.",
   });
-  const text = `MORROW Notification Test
+  const text = `cangujet Notification Test
 
-Your MORROW email notifications are working.
+Your cangujet email notifications are working.
 
 Branch: ${plainTextValue(input.branchName)}
 Recipient: ${plainTextValue(input.recipient)}
@@ -50,7 +50,7 @@ This test confirms that system alerts and reports can be delivered.
 Resend accepted this message for delivery.
 
 Do not reply to this automated message.`;
-  return { subject: "MORROW Notification Test", html, text };
+  return { subject: "cangujet Notification Test", html, text };
 }
 
 function detailRow(label: string, value: string) {

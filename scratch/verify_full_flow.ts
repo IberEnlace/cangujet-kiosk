@@ -10,7 +10,7 @@ async function main() {
   const restaurantId = "ead25343-99f0-4f74-99f9-c6f0d25a0b24";
   const menuId = "941aadc1-3dc6-422f-9f3b-ea544fe4d9ac";
 
-  console.log("=== MORROW Full Order Lifecycle & Kitchen Realtime Verification ===");
+  console.log("=== cangujet Full Order Lifecycle & Kitchen Realtime Verification ===");
 
   // 1. Cashier Flow Test
   console.log("\n--- 1. Testing Cashier Order Flow ---");

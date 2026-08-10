@@ -65,12 +65,12 @@ test("asks for a product before answering a customization question", async () =>
 
 test("uses the selected product for a later customization question", async () => {
   const agent = new NoriAgentService();
-  const selected = await agent.process(request("Tell me about the Morrow Classic Beef Burger."));
+  const selected = await agent.process(request("Tell me about the cangujet Classic Beef Burger."));
   const result = await agent.process(request("Can I remove the cheese?", selected.conversationState));
 
   assert.equal(result.intent, "customization_question");
   assert.equal(result.conversationState.selectedProductId, "burger-beef-classic");
-  assert.match(result.reply, /Morrow Classic Beef Burger/i);
+  assert.match(result.reply, /cangujet Classic Beef Burger/i);
   assert.match(result.reply, /cross-contact/i);
 });
 
@@ -106,7 +106,7 @@ test("summarizes totals and returns a confirmation action for checkout", async (
 
 test("compares two named products using menu data", async () => {
   const result = await new NoriAgentService().process(request(
-    "Compare Morrow Classic Beef Burger versus Spicy Nori Chicken Burger.",
+    "Compare cangujet Classic Beef Burger versus Spicy Nori Chicken Burger.",
   ));
   assert.equal(result.intent, "product_comparison");
   assert.equal(result.recommendedProducts.length, 2);

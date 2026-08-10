@@ -3,7 +3,7 @@ import path from "node:path";
 
 const root = process.cwd();
 const imageRoot = path.join(root, "public", "images", "products");
-const menuPath = path.join(root, "src", "app", "data", "morrow-menu-ai.json");
+const menuPath = path.join(root, "src", "app", "data", "cangujet-menu-ai.json");
 const outputPath = path.join(root, "src", "app", "data", "cashierMenuImages.generated.ts");
 const productImageOutputPath = path.join(root, "src", "app", "data", "productImages.generated.json");
 const validExtension = /\.(png|jpe?g|webp)$/i;

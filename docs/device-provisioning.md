@@ -2,7 +2,9 @@
 
 ## Architecture
 
-Device activation is a server-mediated flow. An authenticated administrator creates a branch-scoped activation key through `POST /api/v1/admin/device-activation-keys`. The API generates 120 random bits, encodes them as `MORROW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`, returns the raw key once, and stores only an HMAC-SHA256 digest made with `MORROW_DEVICE_KEY_PEPPER`.
+Device activation is a server-mediated flow. An authenticated administrator creates a branch-scoped activation key through `POST /api/v1/admin/device-activation-keys`. The API generates 120 random bits, encodes new keys as `CANGUJET-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX`, returns the raw key once, and stores only an HMAC-SHA256 digest made with `MORROW_DEVICE_KEY_PEPPER`.
+
+During the branding transition, unexpired and unrevoked legacy `MORROW-XXXX-XXXX-XXXX-XXXX-XXXX-XXXX` keys remain valid. Validation and normalization accept both prefixes, but the Admin creation endpoint generates only `CANGUJET-...` keys. The payload alphabet, 24-character payload length, HMAC input normalization, pepper, activation limits, and lifecycle rules are unchanged.
 
 The browser first calls `POST /api/v1/device/activation-key/verify`. A valid key reveals only the restaurant name, branch name, and allowed workspace types. The operator chooses the workspace on that device, then `POST /api/v1/device/activate` hashes the submitted key and calls the atomic `activate_device_key` database function with that choice. The function locks the key row, validates its tenant, branch, optional legacy fixed device type, expiration, revocation state, activation policy, and activation count, then creates the device or returns the existing device for an idempotent repeat from the same installation.
 

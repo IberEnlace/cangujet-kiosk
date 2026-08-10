@@ -1,4 +1,4 @@
-# Morrow idle-screen videos
+# cangujet idle-screen videos
 
 Add MP4 videos here as `intro-1.mp4`, `intro-2.mp4`, `intro-3.mp4`, and `intro-4.mp4`.
 

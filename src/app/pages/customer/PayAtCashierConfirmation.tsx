@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, CheckCircle2, Clock3, Printer, ReceiptText, RefreshCw } from "lucide-react";
-import MorrowLogo from "../../components/branding/MorrowLogo";
+import CangujetLogo from "../../components/branding/CangujetLogo";
 import ReceiptPrinterAnimation from "../../components/customer/ReceiptPrinterAnimation";
 import { useLanguage } from "../../context/LanguageContext";
 import {
@@ -111,7 +111,7 @@ export default function PayAtCashierConfirmation({ onReset }: { onReset: () => v
     <div className="relative mx-auto flex min-h-[100dvh] w-full max-w-[780px] flex-col overflow-hidden px-6 py-7 sm:px-12 sm:py-10">
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_top,rgba(196,30,25,.045),transparent_68%)]" />
       <header className="relative flex items-center justify-between">
-        <MorrowLogo variant="full" priority className="h-auto w-36" />
+        <CangujetLogo variant="full" priority className="h-auto w-36" />
         <span className="rounded-full border border-[#C41E19]/20 bg-[#FFFFFF] px-4 py-2 text-[11px] font-black uppercase tracking-[.18em] text-[#C41E19] shadow-[0_3px_10px_rgba(31,31,31,.04)]">Pay at Cashier</span>
       </header>
 
@@ -162,7 +162,7 @@ export default function PayAtCashierConfirmation({ onReset }: { onReset: () => v
 
 function TicketSummary({ snapshot, itemCount }: { snapshot: PayAtCashierConfirmationSnapshot; itemCount: number }) {
   return <article dir="ltr" className="rotate-[.5deg] bg-[#FFFFFF] px-5 py-5 text-left text-[#1F1F1F] shadow-[0_10px_28px_rgba(31,31,31,.10)] [clip-path:polygon(0_0,100%_0,100%_96%,95%_100%,90%_96%,85%_100%,80%_96%,75%_100%,70%_96%,65%_100%,60%_96%,55%_100%,50%_96%,45%_100%,40%_96%,35%_100%,30%_96%,25%_100%,20%_96%,15%_100%,10%_96%,5%_100%,0_96%)]">
-    <div className="flex items-center justify-between"><strong className="tracking-[.15em]">MORROW</strong><ReceiptText size={18} /></div>
+    <div className="flex items-center justify-between"><strong className="tracking-[.15em]">cangujet</strong><ReceiptText size={18} /></div>
     <p className="mt-3 border-y border-dashed border-[#ECECEC] py-3 text-center text-xs font-black">PAY AT CASHIER</p>
     <div className="mt-3 space-y-2 text-[11px]">
       <p className="flex justify-between"><span>Items</span><strong>{itemCount}</strong></p>

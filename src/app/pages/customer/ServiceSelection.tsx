@@ -5,7 +5,7 @@ import { serviceOptions } from "../../config/serviceOptions";
 import { useCart, type OrderType } from "../../context/CartContext";
 import { useLanguage } from "../../context/LanguageContext";
 import { useCustomerTranslation } from "../../hooks/useCustomerTranslation";
-import MorrowLogo from "../../components/branding/MorrowLogo";
+import CangujetLogo from "../../components/branding/CangujetLogo";
 import { useBranch } from "../../context/BootstrapContext";
 
 interface ServiceSelectionProps { onBack: () => void; onContinue: () => void; }
@@ -50,7 +50,7 @@ export default function ServiceSelection({ onBack, onContinue }: ServiceSelectio
             <BackArrow size={19} aria-hidden="true" /><span>{translation.back}</span>
           </button>
           <motion.div initial={reducedMotion ? undefined : { opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} dir="ltr">
-            <MorrowLogo variant="full" priority className="h-auto w-[clamp(8.5rem,22vw,12rem)]" />
+            <CangujetLogo variant="full" priority className="h-auto w-[clamp(8.5rem,22vw,12rem)]" />
           </motion.div>
         </header>
 

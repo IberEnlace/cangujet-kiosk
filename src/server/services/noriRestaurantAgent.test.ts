@@ -148,7 +148,7 @@ test("short refinements preserve context through comparison and cart confirmatio
 
 test("a confirmed main item receives one safe, non-mutating companion suggestion", async () => {
   const agent = new NoriAgentService();
-  const selected = await turn(agent, "Tell me about the Morrow Classic Beef Burger.");
+  const selected = await turn(agent, "Tell me about the cangujet Classic Beef Burger.");
   const pending = await turn(agent, "Add it to my cart.", selected.conversationState);
   const confirmed = await turn(agent, "Yes.", pending.conversationState);
   assert.equal(confirmed.actions.filter(action => action.type === "add_to_cart").length, 1);

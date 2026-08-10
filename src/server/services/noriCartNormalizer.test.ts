@@ -18,7 +18,7 @@ function customization(): NoriSelectedCustomization {
 
 function canonicalCart() {
   return [{
-    productId: "burger-beef-classic", name: "Morrow Classic Beef Burger", quantity: 1, unitPrice: 8.9,
+    productId: "burger-beef-classic", name: "cangujet Classic Beef Burger", quantity: 1, unitPrice: 8.9,
     customizations: { "sauce-choice": "No sauce" }, customizationObjects: [customization()],
     actionId: "pending-action-cart-contract",
   }];
@@ -48,7 +48,7 @@ test("customizationObjects do not invalidate a cart item", () => {
 test("customized burger appears in show-cart summary", async () => {
   const cart = normalizeNoriRequestCart(canonicalCart());
   const result = await new NoriAgentService().process({ message: "Show my cart.", cart, activeAllergens: [], language: "en" });
-  assert.doesNotMatch(result.reply, /cart is empty/i); assert.match(result.reply, /Morrow Classic Beef Burger/); assert.match(result.reply, /No sauce/);
+  assert.doesNotMatch(result.reply, /cart is empty/i); assert.match(result.reply, /cangujet Classic Beef Burger/); assert.match(result.reply, /No sauce/);
 });
 test("empty normalized cart returns the correct empty message", async () => {
   const result = await new NoriAgentService().process({ message: "Show my cart.", cart: normalizeNoriRequestCart([]), activeAllergens: [], language: "en" });

@@ -192,8 +192,8 @@ const VALID_COUPONS: Record<string, CouponResult> = {
 };
 
 const initialUser: UserProfile = {
-  name: "Alex Morrow",
-  email: "alex@morrow.co",
+  name: "Alex Carter",
+  email: "alex@example.com",
   phone: "+1 (555) 000-0000",
   loyaltyPoints: 2480,
   tier: "gold",

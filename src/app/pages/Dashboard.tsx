@@ -22,7 +22,7 @@ import {
   X,
 } from "lucide-react";
 import { toast, Toaster } from "sonner";
-import MorrowLogo from "../components/branding/MorrowLogo";
+import CangujetLogo from "../components/branding/CangujetLogo";
 import {
   Select,
   SelectContent,
@@ -1038,7 +1038,7 @@ function CategoryForm({
 
 function NotificationsPage() {
   const [v, setV] = useState<NotificationSettings>({
-    restaurantEmail: "admin@morrow.example",
+    restaurantEmail: "admin@cangujet.example",
     secondaryEmail: "",
     dailySalesReport: true,
     weeklySalesSummary: false,
@@ -1237,14 +1237,14 @@ function Field({
 }
 function SettingsPage() {
   const [restaurant, setRestaurant] = useState({
-    name: "Morrow Restaurant",
+    name: "cangujet Restaurant",
     currency: "EUR",
     tax: "8",
     language: "English",
     timezone: "Europe/Istanbul",
   });
   const [kiosk, setKiosk] = useState({
-    name: "Morrow Kiosk",
+    name: "cangujet Kiosk",
     number: "KSK-001",
     timeout: "60",
     autoReturn: true,
@@ -1433,7 +1433,7 @@ export default function Dashboard({ section, onNavigate }: Props) {
       <aside className="border-b border-[#ECECEC] bg-white md:sticky md:top-0 md:flex md:h-screen md:w-60 md:flex-col md:border-b-0 md:border-r">
         <div className="flex items-center justify-between border-b border-[#ECECEC] px-5 py-5">
           <div>
-            <MorrowLogo variant="full" priority className="h-auto w-36" />
+            <CangujetLogo variant="full" priority className="h-auto w-36" />
             <p className="mt-1 text-[10px] text-[#9CA3AF]">Admin Panel</p>
           </div>
           <MenuIcon className="text-[#9CA3AF] md:hidden" size={20} />

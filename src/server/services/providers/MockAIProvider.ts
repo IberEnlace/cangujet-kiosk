@@ -20,7 +20,7 @@ function createWarnings(products: NoriChatResponse["recommendedProducts"], aller
 export class MockAIProvider implements AIProvider {
   buildPrompt(request: NoriChatRequest): string {
     return [
-      "You are Nori, Morrow Restaurant's menu assistant.",
+      "You are Nori, cangujet Restaurant's menu assistant.",
       "Use only approved menu tools. Never invent menu facts.",
       getNoriLanguageInstruction(request.language),
       `Active allergens: ${request.activeAllergens.join(", ") || "none"}.`,

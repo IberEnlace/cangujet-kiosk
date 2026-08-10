@@ -37,7 +37,7 @@ test("healthy recommendation excludes direct active allergens", async () => {
 
 test("removing onions updates a pending add and preserves No sauce", async () => {
   const agent = new NoriAgentService();
-  const selected = await turn(agent, "Tell me about the Morrow Classic Beef Burger.");
+  const selected = await turn(agent, "Tell me about the cangujet Classic Beef Burger.");
   const add = await turn(agent, "Add it to my cart.", selected.conversationState);
   const sauce = await turn(agent, "No sauce.", add.conversationState);
   const onions = await turn(agent, "Remove onions.", sauce.conversationState);
@@ -48,7 +48,7 @@ test("removing onions updates a pending add and preserves No sauce", async () =>
 
 test("No onions works and unsupported removal stays documented", async () => {
   const agent = new NoriAgentService();
-  const selected = await turn(agent, "Tell me about the Morrow Classic Beef Burger.");
+  const selected = await turn(agent, "Tell me about the cangujet Classic Beef Burger.");
   const add = await turn(agent, "Add it to my cart.", selected.conversationState);
   assert.match((await turn(agent, "No onions.", add.conversationState)).reply, /No onion/i);
   const unsupported = await turn(agent, "Remove tomatoes.", add.conversationState);
@@ -222,10 +222,10 @@ test("milk-allergic kids request gives a specific allergen or cross-contact no-m
 });
 
 test("order review includes customizations totals and does not start checkout", async () => {
-  const cart: NoriCartItem[] = [{ productId: "burger-beef-classic", name: "Morrow Classic Beef Burger", quantity: 2, unitPrice: 8.9, customizations: { "sauce-choice": "No sauce" } }];
+  const cart: NoriCartItem[] = [{ productId: "burger-beef-classic", name: "cangujet Classic Beef Burger", quantity: 2, unitPrice: 8.9, customizations: { "sauce-choice": "No sauce" } }];
   const result = await turn(new NoriAgentService(), "Review my order.", undefined, cart);
   assert.equal(result.intent, "review_order");
-  assert.match(result.reply, /2 Morrow Classic Beef Burger with No sauce: \$17\.80/);
+  assert.match(result.reply, /2 cangujet Classic Beef Burger with No sauce: \$17\.80/);
   assert.match(result.reply, /Subtotal: \$17\.80.*Estimated tax: \$1\.42.*Total: \$19\.22/);
   assert.equal(result.actions.length, 0);
   assert.equal(result.conversationState.pendingAction, null);

@@ -7,7 +7,7 @@ import { getNoriLanguageInstruction } from "../../../shared/languages";
 import { NORI_SEMANTIC_JSON_SCHEMA } from "../noriSemanticInterpretation";
 
 const TOOL_DEFINITIONS: OpenAI.Chat.Completions.ChatCompletionTool[] = [
-  tool("searchProducts", "Search the Morrow menu using product names, descriptions, categories, tags, keywords, and vector tags.", {
+  tool("searchProducts", "Search the cangujet menu using product names, descriptions, categories, tags, keywords, and vector tags.", {
     query: { type: "string" },
   }, ["query"]),
   tool("recommendProducts", "Recommend menu products using structured customer filters.", {

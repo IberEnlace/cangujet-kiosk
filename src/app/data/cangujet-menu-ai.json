@@ -2,7 +2,7 @@
   "schemaVersion": "2.0.0",
   "restaurant": {
     "id": "morrow",
-    "name": "Morrow Restaurant",
+    "name": "cangujet Restaurant",
     "assistantName": "Nori AI Assistant",
     "defaultCurrency": "USD",
     "defaultTaxRate": 0.08,
@@ -11,7 +11,7 @@
   },
   "dataPolicy": {
     "nutritionValues": "estimated_for_prototype_not_lab_verified",
-    "ingredients": "fictional_standard_recipes_for_morrow_prototype",
+    "ingredients": "fictional_standard_recipes_for_cangujet_prototype",
     "allergenPolicy": "never_guarantee_allergen_free",
     "medicalPolicy": "do_not_diagnose_or_label_products_as_medically_safe",
     "diabetesGuidance": "Use nutrition values to compare options, but never tell a guest that an item is medically safe for diabetes. Suggest lower-added-sugar options and advise the guest to follow their healthcare plan."
@@ -45,7 +45,7 @@
   "products": [
     {
       "id": "burger-beef-classic",
-      "name": "Morrow Classic Beef Burger",
+      "name": "cangujet Classic Beef Burger",
       "description": "Halal beef patty, cheddar, lettuce, tomato, pickles and house sauce in a sesame bun.",
       "category": "burger",
       "price": 8.9,
@@ -189,7 +189,7 @@
         "drink-cold-brew"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/burger.png",
@@ -204,7 +204,7 @@
         "ketchup",
         "lettuce",
         "mayonnaise",
-        "morrow classic beef burger",
+        "cangujet classic beef burger",
         "mustard",
         "pickles",
         "sesame wheat bun",
@@ -220,13 +220,13 @@
         "ketchup",
         "lettuce",
         "mayonnaise",
-        "morrow classic beef burger",
+        "cangujet classic beef burger",
         "mustard",
         "pickles",
         "sesame wheat bun",
         "tomato",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -715,7 +715,7 @@
         "drink-iced-matcha"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/burger.png",
@@ -750,7 +750,7 @@
         "spicy nori chicken burger",
         "wheat flour coating",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -1218,7 +1218,7 @@
         "drink-lemon-mint"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/burger.png",
@@ -1259,7 +1259,7 @@
         "vegetarian",
         "zucchini",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -1747,7 +1747,7 @@
         "drink-cold-brew"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/burger.png",
@@ -1780,7 +1780,7 @@
         "whole-wheat bun",
         "yogurt herb sauce",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -2128,7 +2128,7 @@
     },
     {
       "id": "pizza-margherita",
-      "name": "Morrow Margherita Pizza",
+      "name": "cangujet Margherita Pizza",
       "description": "Tomato sauce, mozzarella, basil and olive oil on hand-tossed dough.",
       "category": "pizza",
       "price": 9.5,
@@ -2242,7 +2242,7 @@
         "side-green-salad"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/pizza.png",
@@ -2251,7 +2251,7 @@
       "keywords": [
         "basil",
         "halal",
-        "morrow margherita pizza",
+        "cangujet margherita pizza",
         "mozzarella",
         "olive oil",
         "pizza",
@@ -2263,7 +2263,7 @@
       "vectorTags": [
         "basil",
         "halal",
-        "morrow margherita pizza",
+        "cangujet margherita pizza",
         "mozzarella",
         "olive oil",
         "pizza",
@@ -2271,7 +2271,7 @@
         "vegetarian",
         "wheat dough",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -2741,7 +2741,7 @@
         "drink-lemon-mint"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/pizza.png",
@@ -2772,7 +2772,7 @@
         "red onion",
         "wheat dough",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -3223,7 +3223,7 @@
         "side-green-salad"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/pizza.png",
@@ -3260,7 +3260,7 @@
         "vegetarian",
         "wheat dough",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -3710,7 +3710,7 @@
         "drink-yogurt-mint"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/pizza.png",
@@ -3743,7 +3743,7 @@
         "spicy tomato sauce",
         "wheat dough",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -4189,7 +4189,7 @@
         "side-green-salad"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/pasta.png",
@@ -4220,7 +4220,7 @@
         "pasta",
         "wheat penne",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -4549,7 +4549,7 @@
         "side-green-salad"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/pasta.png",
@@ -4584,7 +4584,7 @@
         "vegetarian",
         "wheat penne",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -4915,7 +4915,7 @@
         "side-green-salad"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/pasta.png",
@@ -4950,7 +4950,7 @@
         "tomato",
         "wheat spaghetti",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -5256,7 +5256,7 @@
         "side-green-salad"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/pasta.png",
@@ -5291,7 +5291,7 @@
         "spinach",
         "wheat linguine",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -5645,7 +5645,7 @@
         "drink-cold-brew"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/salads.png",
@@ -5684,7 +5684,7 @@
         "tahini",
         "zucchini",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -6039,7 +6039,7 @@
         "drink-lemon-mint"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/salads.png",
@@ -6078,7 +6078,7 @@
         "vegetarian",
         "zen garden tofu bowl",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -6435,7 +6435,7 @@
         "drink-cold-brew"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/salads.png",
@@ -6476,7 +6476,7 @@
         "tomato",
         "tuna",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -6832,7 +6832,7 @@
         "drink-lemon-mint"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/salads.png",
@@ -6869,7 +6869,7 @@
         "vegetarian",
         "walnuts",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -7193,7 +7193,7 @@
         "burger-beef-classic"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/chicken.png",
@@ -7224,7 +7224,7 @@
         "vegan",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -7473,7 +7473,7 @@
         "burger-chicken-spicy"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/chicken.png",
@@ -7506,7 +7506,7 @@
         "vegan",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -7781,7 +7781,7 @@
         "pasta-chicken-alfredo"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/chicken.png",
@@ -7816,7 +7816,7 @@
         "vegan",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -8063,7 +8063,7 @@
         "pizza-margherita"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/chicken.png",
@@ -8092,7 +8092,7 @@
         "vegetarian",
         "wheat breadcrumbs",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -8341,7 +8341,7 @@
         "drink-americano"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/desserts.png",
@@ -8374,7 +8374,7 @@
         "vegetarian",
         "wheat flour",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -8582,7 +8582,7 @@
         "drink-cappuccino"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/desserts.png",
@@ -8613,7 +8613,7 @@
         "vegetarian",
         "wheat biscuits",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -8824,7 +8824,7 @@
         "drink-herbal-tea"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/desserts.png",
@@ -8861,7 +8861,7 @@
         "vegan",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -9073,7 +9073,7 @@
         "drink-americano"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/desserts.png",
@@ -9106,7 +9106,7 @@
         "oats",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -9311,7 +9311,7 @@
       "allowedAddons": [],
       "recommendedWith": [],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/coffee.png",
@@ -9340,7 +9340,7 @@
         "vegetarian",
         "water",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -9690,7 +9690,7 @@
       ],
       "recommendedWith": [],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/coffee.png",
@@ -9715,7 +9715,7 @@
         "vegetarian",
         "whole milk",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -10066,7 +10066,7 @@
       ],
       "recommendedWith": [],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/coffee.png",
@@ -10095,7 +10095,7 @@
         "milk",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -10422,7 +10422,7 @@
       "allowedAddons": [],
       "recommendedWith": [],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/coffee.png",
@@ -10455,7 +10455,7 @@
         "vegan",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -10805,7 +10805,7 @@
       ],
       "recommendedWith": [],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/drink.png",
@@ -10834,7 +10834,7 @@
         "vegan",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -11186,7 +11186,7 @@
       ],
       "recommendedWith": [],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/drink.png",
@@ -11215,7 +11215,7 @@
         "vanilla syrup",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -11542,7 +11542,7 @@
       "allowedAddons": [],
       "recommendedWith": [],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/drink.png",
@@ -11575,7 +11575,7 @@
         "vegetarian",
         "water",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -11901,7 +11901,7 @@
       "allowedAddons": [],
       "recommendedWith": [],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/drink.png",
@@ -11932,7 +11932,7 @@
         "water",
         "yogurt",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -12261,7 +12261,7 @@
         "drink-water"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/chicken%20(2).png",
@@ -12292,7 +12292,7 @@
         "tiny tenders combo",
         "wheat coating",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -12547,7 +12547,7 @@
         "drink-water"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/chicken%20(2).png",
@@ -12576,7 +12576,7 @@
         "mini beef burger meal",
         "wheat bun",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -12830,7 +12830,7 @@
         "drink-water"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/chicken%20(2).png",
@@ -12859,7 +12859,7 @@
         "vegetarian",
         "wheat pasta",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -13090,7 +13090,7 @@
         "drink-water"
       ],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/chicken%20(2).png",
@@ -13121,7 +13121,7 @@
         "plain yogurt",
         "vegetarian",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],
@@ -13343,7 +13343,7 @@
       "allowedAddons": [],
       "recommendedWith": [],
       "branchAvailability": [
-        "morrow-main"
+        "cangujet-main"
       ],
       "medicalSuitabilityNotice": "This product is not a medical meal and should not be treated as medical advice.",
       "image": "/images/products/drink.png",
@@ -13372,7 +13372,7 @@
         "vegetarian",
         "water",
         "restaurant",
-        "morrow",
+        "cangujet",
         "food ordering",
         "ai search"
       ],

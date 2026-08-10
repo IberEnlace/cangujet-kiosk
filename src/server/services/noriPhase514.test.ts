@@ -6,7 +6,7 @@ import type { NoriCartItem, NoriChatRequest, NoriConversationState } from "../ty
 
 const agent = new NoriAgentService();
 const burger = (quantity = 1, unitPrice = 8.9): NoriCartItem => ({
-  productId: "burger-beef-classic", name: "Morrow Classic Beef Burger", quantity, unitPrice,
+  productId: "burger-beef-classic", name: "cangujet Classic Beef Burger", quantity, unitPrice,
   customizations: { "sauce-choice": "No sauce" },
 });
 const request = (message: string, cart: NoriCartItem[] = [], conversationState?: NoriConversationState): NoriChatRequest => ({
@@ -67,7 +67,7 @@ test("show-cart interruption does not execute a pending clear", async () => {
   const interrupted = await agent.process(request("Show my cart.", [burger()], proposed.conversationState));
   assert.equal(interrupted.intent, "show_cart");
   assert.equal(interrupted.actions.some(action => action.type === "clear_cart"), false);
-  assert.match(interrupted.reply, /Morrow Classic Beef Burger/);
+  assert.match(interrupted.reply, /cangujet Classic Beef Burger/);
 });
 
 test("confirmed clear action transitions to completed history", async () => {

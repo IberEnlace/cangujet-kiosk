@@ -4,7 +4,7 @@ import { buildDailySalesReportEmail } from "../../../../supabase/functions/send-
 import type { DailyReportData } from "../../../../supabase/functions/send-notification-email/data/reportData";
 
 const base:DailyReportData={
-  branchName:"MORROW Main Branch",localDate:"24 July 2026",periodStart:"2026-07-23T21:00:00.000Z",periodEnd:"2026-07-24T21:00:00.000Z",
+  branchName:"cangujet Main Branch",localDate:"24 July 2026",periodStart:"2026-07-23T21:00:00.000Z",periodEnd:"2026-07-24T21:00:00.000Z",
   totalSales:"€66.53",grossSales:"€72.00",paidSales:"€66.53",totalOrders:6,submittedOrders:2,completedOrders:3,cancelledOrders:1,averageOrderValue:"€11.09",paidOrders:5,
   comparison:{sales:"+12%",orders:"+1"},
   topProducts:[

@@ -1,7 +1,7 @@
-import menu from "../../app/data/morrow-menu-ai.json";
+import menu from "../../app/data/cangujet-menu-ai.json";
 import type { AdminCategory, AdminProduct, DashboardStats, RecentOrder, SystemStatusItem } from "../types/adminTypes";
 
-export const dashboardStats: DashboardStats = { todaySales: 1284.5, todayOrders: 132, kioskName: "Morrow Kiosk 01", kioskNumber: "KSK-001" };
+export const dashboardStats: DashboardStats = { todaySales: 1284.5, todayOrders: 132, kioskName: "cangujet Kiosk 01", kioskNumber: "KSK-001" };
 export const recentOrders: RecentOrder[] = [
   { id: "#1847", time: "10:42", itemCount: 3, total: 32.4, status: "completed" }, { id: "#1846", time: "10:36", itemCount: 1, total: 10.5, status: "preparing" },
   { id: "#1845", time: "10:28", itemCount: 4, total: 47.2, status: "ready" }, { id: "#1844", time: "10:21", itemCount: 2, total: 18.9, status: "completed" },

@@ -14,7 +14,7 @@ set menu_id = m.id
 from public.menus m
 where c.menu_id is null
   and m.status = 'published'
-  and m.name = 'MORROW Default Menu';
+  and m.name = 'cangujet Default Menu';
 
 alter table public.categories
   alter column menu_id set not null,

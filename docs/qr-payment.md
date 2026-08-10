@@ -1,4 +1,4 @@
-# MORROW QR payment provider contract
+# cangujet QR payment provider contract
 
 ## Local mock provider
 
@@ -29,7 +29,7 @@ use a `VITE_` prefix.
 
 ## Create session
 
-MORROW sends an authenticated `POST` to `QR_PAYMENT_PROVIDER_CREATE_URL` with
+cangujet sends an authenticated `POST` to `QR_PAYMENT_PROVIDER_CREATE_URL` with
 an `Idempotency-Key` header and this body:
 
 ```json

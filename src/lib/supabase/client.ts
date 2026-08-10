@@ -6,7 +6,7 @@ const publishableKey = import.meta.env?.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
 export const isSupabaseConfigured = Boolean(url && publishableKey);
 
 if (!isSupabaseConfigured && import.meta.env?.DEV) {
-  console.warn("[MORROW] Supabase is not configured. Staff authentication is using the local development fallback.");
+  console.warn("[cangujet] Supabase is not configured. Staff authentication is using the local development fallback.");
 }
 
 export const supabase: SupabaseClient<Database> | null = isSupabaseConfigured

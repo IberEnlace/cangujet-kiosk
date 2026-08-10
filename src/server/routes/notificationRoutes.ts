@@ -62,7 +62,7 @@ async function execute(response: Response, action: () => Promise<void>) {
       response.status(error.status).json({ ok: false, code: error.code, message: error.message });
       return;
     }
-    console.error("[MORROW notifications]", {
+    console.error("[cangujet notifications]", {
       event: "notification_route_failed",
       errorName: error instanceof Error ? error.name : "UnknownError",
     });

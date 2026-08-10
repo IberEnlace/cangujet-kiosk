@@ -10,7 +10,7 @@ import { useLanguage } from "../context/LanguageContext";
 import type { NoriChatRequest, NoriConversationState } from "../../server/types/noriChat";
 import { executeNoriCartActions, serializeNoriCart } from "../services/noriCartActions";
 import { postNoriChat, shouldSubmitNoriKey } from "../services/noriChatClient";
-import MorrowLogo from "../components/branding/MorrowLogo";
+import CangujetLogo from "../components/branding/CangujetLogo";
 import { supportedLanguages } from "../config/languages";
 
 // Premium Unsplash Images for Kiosk Menu
@@ -168,7 +168,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
           <UtensilsCrossed size={22} />
         </span>
         <div>
-          <b className="text-lg tracking-tight text-[#1F1F1F]">Morrow Premium</b>
+          <b className="text-lg tracking-tight text-[#1F1F1F]">cangujet Premium</b>
           <div className="flex items-center gap-2 mt-0.5">
             <span className="font-['Plus_Jakarta_Sans'] text-[10px] tracking-widest text-[#C41E19]">KIOSK 04</span>
             <span className="text-[#9CA3AF] text-[10px]">•</span>
@@ -208,7 +208,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
           </div>
 
           <div className="text-center relative z-10 max-w-xl mx-auto">
-            <MorrowLogo variant="full" priority className="mx-auto mb-10 h-auto w-[clamp(15rem,38vw,22rem)]" />
+            <CangujetLogo variant="full" priority className="mx-auto mb-10 h-auto w-[clamp(15rem,38vw,22rem)]" />
             <p className="mt-4 font-['Plus_Jakarta_Sans'] text-xs tracking-[0.4em] text-[#C41E19] uppercase">
               Thoughtfully Crafted · Quietly Fast
             </p>
@@ -1210,7 +1210,7 @@ export default function KioskJourney({ onBackToSelection, onCheckout, initialScr
             <span className="grid size-8 place-items-center rounded-lg bg-[#C41E19] text-[#FFFFFF]">
               <UtensilsCrossed size={16} />
             </span>
-            <b className="text-sm">Morrow Demo Console</b>
+            <b className="text-sm">cangujet Demo Console</b>
           </div>
 
           <span className="font-['Plus_Jakarta_Sans'] text-[9px] tracking-[0.2em] text-[#9CA3AF] uppercase block mb-3">

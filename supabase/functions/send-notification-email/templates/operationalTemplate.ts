@@ -12,6 +12,6 @@ export function buildOperationalEmail(input: Input) {
   <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:24px;border:1px solid #2a2e28;border-radius:12px;background:#1A1D18;">${rows}</table>
   ${input.action ? `<div style="margin-top:20px;border-left:4px solid ${accent};background:#1A1D18;padding:14px 16px;font-size:13px;line-height:20px;color:#FFFFFF;"><strong>Recommended action:</strong> ${escapeHtml(input.action)}</div>` : ""}`;
   const html = emailLayout({ content, branchName: input.branchName, sent: input.timestamp, preheader: input.summary });
-  const text = `MORROW — ${plainTextValue(input.title)}\n\n${plainTextValue(input.summary)}\n\n${input.rows.map(([k,v])=>`${plainTextValue(k)}: ${plainTextValue(v)}`).join("\n")}${input.action?`\n\nRecommended action: ${plainTextValue(input.action)}`:""}\n\nDo not reply to this automated message.`;
-  return { subject: `MORROW — ${input.title}`, html, text };
+  const text = `cangujet — ${plainTextValue(input.title)}\n\n${plainTextValue(input.summary)}\n\n${input.rows.map(([k,v])=>`${plainTextValue(k)}: ${plainTextValue(v)}`).join("\n")}${input.action?`\n\nRecommended action: ${plainTextValue(input.action)}`:""}\n\nDo not reply to this automated message.`;
+  return { subject: `cangujet — ${input.title}`, html, text };
 }

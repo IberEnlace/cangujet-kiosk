@@ -1,4 +1,4 @@
-import menuCatalog from "./morrow-menu-ai.json";
+import menuCatalog from "./cangujet-menu-ai.json";
 import type { NormalizedMenuProduct } from "../services/supabase/menuModels";
 
 type CatalogProduct = {

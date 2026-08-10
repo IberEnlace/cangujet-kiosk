@@ -1,4 +1,4 @@
--- MORROW Supabase foundation. Apply with `supabase db push`.
+-- cangujet Supabase foundation. Apply with `supabase db push`.
 create extension if not exists pgcrypto;
 
 create type public.staff_role as enum ('admin', 'cashier', 'kitchen');

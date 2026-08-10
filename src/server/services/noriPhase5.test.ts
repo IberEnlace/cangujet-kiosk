@@ -102,7 +102,7 @@ test("phase5 next request summarizes the frontend-synchronized cart", async () =
     }),
   });
   const summary = await agent.process(request("Show my cart.", result.conversationState, cart));
-  assert.doesNotMatch(summary.reply, /cart is empty/i); assert.match(summary.reply, /Morrow Classic Beef Burger|No sauce/i);
+  assert.doesNotMatch(summary.reply, /cart is empty/i); assert.match(summary.reply, /cangujet Classic Beef Burger|No sauce/i);
 });
 test("phase5 confirmation is handled before generic recommendation routing", async () => {
   const { agent, modified } = await modifiedPendingAdd();

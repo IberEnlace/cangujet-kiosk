@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ArrowRight, Hand } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import BackgroundVideo from "../components/idle/BackgroundVideo";
-import MorrowLogo from "../components/branding/MorrowLogo";
+import CangujetLogo from "../components/branding/CangujetLogo";
 import { useKiosk } from "../context/BootstrapContext";
 
 export default function IdleScreen({ onStart }: { onStart: () => void }) {
@@ -46,7 +46,7 @@ export default function IdleScreen({ onStart }: { onStart: () => void }) {
       <motion.section animate={{ opacity: isStarting ? 0 : 1, scale: isStarting && !reducedMotion ? .985 : 1 }} transition={{ duration: reducedMotion ? .1 : .45 }}
         className="relative z-10 mx-auto flex min-h-[100dvh] max-w-5xl flex-col items-center justify-center px-6 py-12 text-center sm:px-10">
         <motion.div {...enter(0)} className="mb-7">
-          <MorrowLogo variant="full" priority className="h-auto w-[clamp(15rem,42vw,24rem)]" />
+          <CangujetLogo variant="full" priority className="h-auto w-[clamp(15rem,42vw,24rem)]" />
         </motion.div>
         <motion.p {...enter(.08)} className="mb-3 text-[11px] font-bold uppercase tracking-[.45em] text-[#C41E19] sm:text-xs">Restaurant kiosk</motion.p>
         <motion.p {...enter(.25)} className="mt-5 text-[clamp(1.15rem,2.8vw,1.8rem)] font-semibold tracking-wide text-white">{config.slogan}</motion.p>

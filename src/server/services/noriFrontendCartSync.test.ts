@@ -38,7 +38,7 @@ test("frontend keeps product identity separate from customization-specific cart 
   const mapped = mapNoriAddActionToCartItem(addAction());
   assert.equal(mapped?.productId, "burger-beef-classic");
   assert.equal(mapped?.id, "burger-beef-classic::no-sauce");
-  assert.equal(mapped?.name, "Morrow Classic Beef Burger");
+  assert.equal(mapped?.name, "cangujet Classic Beef Burger");
 });
 test("frontend preserves the full customization object", () => {
   const customization = mapNoriAddActionToCartItem(addAction())?.noriCustomizations?.[0];
@@ -113,7 +113,7 @@ test("actual response executor updates CartContext and the next request snapshot
   assert.equal(cartRef.current[0]?.id, "burger-beef-classic::no-sauce");
   assert.deepEqual(nextPayload.cart, [{
     productId: "burger-beef-classic",
-    name: "Morrow Classic Beef Burger",
+    name: "cangujet Classic Beef Burger",
     quantity: 1,
     unitPrice: 8.9,
     customizations: { "sauce-choice": "No sauce" },

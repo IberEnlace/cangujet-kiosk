@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MutableRefObject, type ReactNode } from "react";
 import {
-  ArrowLeft, ArrowRight, BarChart3, Check, ChefHat, CircleDollarSign, Loader2,
-  MapPin, Monitor, ReceiptText, TabletSmartphone, type LucideIcon,
+  ArrowRight, Check, ChefHat, Loader2, Monitor, ReceiptText, TabletSmartphone, type LucideIcon,
 } from "lucide-react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import type { BootstrapDeviceType, DeviceActivationKeyVerificationResponse } from "../../../shared/deviceBootstrap";
-import MorrowLogo from "../../components/branding/MorrowLogo";
+import CangujetLogo from "../../components/branding/CangujetLogo";
 
 export type WorkspaceDefinition = {
   type: BootstrapDeviceType;
@@ -14,7 +13,7 @@ export type WorkspaceDefinition = {
   description: string;
   action: string;
   backgroundWord: string;
-  previewId: "customer" | "kitchen" | "cashier" | "admin" | "display";
+  previewId: "customer" | "kitchen" | "cashier" | "display";
   icon: LucideIcon;
 };
 
@@ -22,7 +21,6 @@ export const workspaceDefinitions: WorkspaceDefinition[] = [
   { type: "kiosk", title: "Customer Kiosk", category: "Guest Ordering", description: "A polished self-service journey from welcome to payment.", action: "Use as Customer Kiosk", backgroundWord: "ORDER", previewId: "customer", icon: TabletSmartphone },
   { type: "kitchen_display", title: "Kitchen", category: "Food Preparation", description: "Live tickets, clear priorities, and a focused production flow.", action: "Use as Kitchen", backgroundWord: "PREPARE", previewId: "kitchen", icon: ChefHat },
   { type: "cashier_terminal", title: "Cashier", category: "Point of Sale", description: "Fast order entry, payments, receipts, and register control.", action: "Use as Cashier", backgroundWord: "SELL", previewId: "cashier", icon: ReceiptText },
-  { type: "admin_terminal", title: "Admin", category: "Management", description: "Restaurant intelligence, menus, settings, and operations.", action: "Use as Admin", backgroundWord: "MANAGE", previewId: "admin", icon: BarChart3 },
   { type: "order_display", title: "Order Display", category: "Pickup Screen", description: "A calm, legible view of preparing and ready orders.", action: "Use as Order Display", backgroundWord: "DISPLAY", previewId: "display", icon: Monitor },
 ];
 
@@ -41,11 +39,10 @@ type StageProps = {
   selectedType: BootstrapDeviceType | null;
   busy: boolean;
   error: readonly [string, string] | null;
-  onBack?: () => void;
   onActivate: (type: BootstrapDeviceType) => void | Promise<void>;
 };
 
-export default function DeviceWorkspaceStage({ verification, initialType, selectedType, busy, error, onBack, onActivate }: StageProps) {
+export default function DeviceWorkspaceStage({ verification, initialType, selectedType, busy, error, onActivate }: StageProps) {
   const reducedMotion = Boolean(useReducedMotion());
   const available = workspaceDefinitions.filter(workspace => verification.allowedDeviceTypes.includes(workspace.type));
   const [choice, setChoice] = useState<BootstrapDeviceType | null>(() => initialType && available.some(workspace => workspace.type === initialType) ? initialType : available[0]?.type ?? null);
@@ -81,54 +78,43 @@ export default function DeviceWorkspaceStage({ verification, initialType, select
     navigationRefs.current[next.type]?.focus();
   };
 
-  return <motion.div className={`morrow-workspace ${busy ? "is-launching" : ""}`} initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reducedMotion ? .12 : .45 }}>
+  return <motion.div className={`cangujet-workspace ${busy ? "is-launching" : ""}`} initial={reducedMotion ? false : { opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: reducedMotion ? .12 : .45 }}>
     <WorkspaceEnvironment workspace={activeWorkspace} reducedMotion={reducedMotion} />
 
-    <header className="morrow-workspace__header">
-      <MorrowLogo variant="full" priority className="morrow-workspace__logo" />
-      <div className="morrow-workspace__header-context">
-        <span className="morrow-workspace__branch"><MapPin size={13}/>{verification.branch.name}</span>
-        <span className="morrow-workspace__connected"><i/>Connected</span>
-      </div>
-      <ol className="morrow-workspace__steps" aria-label="Device setup progress">
-        <li className="is-complete"><span>01</span><b>Verified</b></li>
-        <li className="is-active" aria-current="step"><span>02</span><b>Workspace</b></li>
-        <li><span>03</span><b>Configure</b></li>
-      </ol>
-      {onBack && <button type="button" className="morrow-workspace__back" onClick={onBack} disabled={busy}><ArrowLeft size={15}/><span>Change key</span></button>}
+    <header className="cangujet-workspace__header">
+      <CangujetLogo variant="full" priority className="cangujet-workspace__logo" />
     </header>
 
-    <div className="morrow-workspace__heading">
-      <p>Workspace stage</p>
+    <div className="cangujet-workspace__heading">
       <h1>Configure this device</h1>
-      <span>Select the workspace this device will run.</span>
+      <span>Choose how this device will be used.</span>
     </div>
 
-    {error && <div role="alert" className="morrow-workspace__error"><strong>{error[0]}</strong><span>{error[1]}</span></div>}
+    {error && <div role="alert" className="cangujet-workspace__error"><strong>{error[0]}</strong><span>{error[1]}</span></div>}
 
-    <div className="morrow-workspace__viewport">
+    <div className="cangujet-workspace__viewport">
       <AnimatePresence mode="wait" initial={false} custom={{ direction, reducedMotion }}>
         {activeWorkspace && <motion.section
           key={activeWorkspace.type}
           id={`workspace-panel-${activeWorkspace.type}`}
           role="tabpanel"
           aria-labelledby={`workspace-tab-${activeWorkspace.type}`}
-          className="morrow-workspace__scene"
+          className="cangujet-workspace__scene"
           custom={{ direction, reducedMotion }}
           initial={reducedMotion ? { opacity: 0 } : { opacity: 0 }}
           animate={{ opacity: 1, transition: { duration: reducedMotion ? .12 : .18, staggerChildren: reducedMotion ? 0 : .07, delayChildren: reducedMotion ? 0 : .13 } }}
           exit={{ opacity: 0, transition: { duration: reducedMotion ? .1 : .17, staggerChildren: reducedMotion ? 0 : .035, staggerDirection: -1 } }}
         >
-          <motion.div className="morrow-workspace__copy" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 30 * direction }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -28 * direction }} transition={{ duration: reducedMotion ? .1 : .34, ease: [0.22, 1, 0.36, 1] }}>
-            <div className="morrow-workspace__workspace-icon">
+          <motion.div className="cangujet-workspace__copy" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 30 * direction }} animate={{ opacity: 1, x: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -28 * direction }} transition={{ duration: reducedMotion ? .1 : .34, ease: [0.22, 1, 0.36, 1] }}>
+            <div className="cangujet-workspace__workspace-icon">
               <motion.span initial={reducedMotion ? false : { opacity: 0, y: 22 }} animate={{ opacity: 1, y: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, y: -22 }} transition={{ duration: reducedMotion ? .1 : .35 }}>{ActiveWorkspaceIcon && <ActiveWorkspaceIcon size={31} strokeWidth={1.55}/>}</motion.span>
             </div>
-            <motion.p className="morrow-workspace__category" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? .1 : .3, delay: reducedMotion ? 0 : .08 }}>{activeWorkspace.category}</motion.p>
+            <motion.p className="cangujet-workspace__category" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? .1 : .3, delay: reducedMotion ? 0 : .08 }}>{activeWorkspace.category}</motion.p>
             <motion.h2 initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? .1 : .34, delay: reducedMotion ? 0 : .14 }}>{activeWorkspace.title}</motion.h2>
-            <motion.p className="morrow-workspace__description" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? .1 : .34, delay: reducedMotion ? 0 : .2 }}>{activeWorkspace.description}</motion.p>
+            <motion.p className="cangujet-workspace__description" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? .1 : .34, delay: reducedMotion ? 0 : .2 }}>{activeWorkspace.description}</motion.p>
             <motion.button
               type="button"
-              className="morrow-workspace__primary"
+              className="cangujet-workspace__primary"
               disabled={!activeWorkspace || busy}
               aria-busy={busy}
               onClick={() => void onActivate(activeWorkspace.type)}
@@ -145,7 +131,7 @@ export default function DeviceWorkspaceStage({ verification, initialType, select
           </motion.div>
 
           <motion.div
-            className="morrow-workspace__preview-shell"
+            className="cangujet-workspace__preview-shell"
             layoutId={workspaceLayoutId(activeWorkspace)}
             initial={reducedMotion ? { opacity: 0 } : { opacity: 0, scale: .94, filter: "blur(7px)" }}
             animate={{ opacity: 1, scale: busy ? 1.08 : 1, filter: "blur(0px)" }}
@@ -172,7 +158,7 @@ type NavigationProps = {
 };
 
 function WorkspaceNavigation({ workspaces, activeType, busy, navigationRefs, onSelect, onKeyDown }: NavigationProps) {
-  return <nav className="morrow-workspace__navigation" aria-label="Available workspaces">
+  return <nav className="cangujet-workspace__navigation" aria-label="Available workspaces">
     <div role="tablist" aria-orientation="horizontal">
       {workspaces.map((workspace, index) => {
         const Icon = workspace.icon;
@@ -191,8 +177,8 @@ function WorkspaceNavigation({ workspaces, activeType, busy, navigationRefs, onS
           onKeyDown={event => onKeyDown(event, index)}
           className={selected ? "is-selected" : ""}
         >
-          {selected && <motion.span className="morrow-workspace__nav-pill" layoutId="workspace-navigation-pill" transition={{ type: "spring", stiffness: 360, damping: 34 }}/>}
-          <span className="morrow-workspace__nav-icon"><Icon size={19} strokeWidth={1.7}/></span>
+          {selected && <motion.span className="cangujet-workspace__nav-pill" layoutId="workspace-navigation-pill" transition={{ type: "spring", stiffness: 360, damping: 34 }}/>}
+          <span className="cangujet-workspace__nav-icon"><Icon size={19} strokeWidth={1.7}/></span>
           <span>{workspace.title}</span>
           <i aria-hidden="true"/>
         </button>;
@@ -202,13 +188,13 @@ function WorkspaceNavigation({ workspaces, activeType, busy, navigationRefs, onS
 }
 
 function WorkspaceEnvironment({ workspace, reducedMotion }: { workspace: WorkspaceDefinition | null; reducedMotion: boolean }) {
-  return <div className={`morrow-workspace-environment workspace-${workspace?.previewId ?? "customer"}`} aria-hidden="true">
-    <div className="morrow-workspace-environment__base"/>
-    <div className="morrow-workspace-environment__grid"/>
+  return <div className={`cangujet-workspace-environment workspace-${workspace?.previewId ?? "customer"}`} aria-hidden="true">
+    <div className="cangujet-workspace-environment__base"/>
+    <div className="cangujet-workspace-environment__grid"/>
     <AnimatePresence mode="wait" initial={false}>
-      {workspace && <motion.span key={workspace.type} className="morrow-workspace-environment__word" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 70 }} animate={{ opacity: .026, x: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -70 }} transition={{ duration: reducedMotion ? .1 : .55, ease: [0.22, 1, 0.36, 1] }}>{workspace.backgroundWord}</motion.span>}
+      {workspace && <motion.span key={workspace.type} className="cangujet-workspace-environment__word" initial={reducedMotion ? { opacity: 0 } : { opacity: 0, x: 70 }} animate={{ opacity: .026, x: 0 }} exit={reducedMotion ? { opacity: 0 } : { opacity: 0, x: -70 }} transition={{ duration: reducedMotion ? .1 : .55, ease: [0.22, 1, 0.36, 1] }}>{workspace.backgroundWord}</motion.span>}
     </AnimatePresence>
-    <div className="morrow-workspace-environment__particles">{particles.map(([left, top, duration, size]) => <i key={`${left}-${top}`} style={{ left: `${left}%`, top: `${top}%`, width: size, height: size, animationDuration: `${duration}s` }}/>)}</div>
+    <div className="cangujet-workspace-environment__particles">{particles.map(([left, top, duration, size]) => <i key={`${left}-${top}`} style={{ left: `${left}%`, top: `${top}%`, width: size, height: size, animationDuration: `${duration}s` }}/>)}</div>
   </div>;
 }
 
@@ -217,7 +203,6 @@ function WorkspacePreview({ workspace }: { workspace: WorkspaceDefinition }) {
     case "customer": return <CustomerKioskPreview/>;
     case "kitchen": return <KitchenPreview/>;
     case "cashier": return <CashierPreview/>;
-    case "admin": return <AdminPreview/>;
     case "display": return <OrderDisplayPreview/>;
   }
 }
@@ -227,7 +212,7 @@ function PreviewFrame({ label, children }: { label: string; children: ReactNode 
 }
 
 function CustomerKioskPreview() {
-  return <PreviewFrame label="Guest ordering"><div className="preview-kiosk"><div className="preview-kiosk__welcome"><small>Welcome to MORROW</small><strong>What would you like?</strong></div><div className="preview-kiosk__categories"><i>Popular</i><i>Burgers</i><i>Drinks</i></div><div className="preview-kiosk__products"><span><i/><b>Truffle Burger</b><small>$14.00</small></span><span><i/><b>Green Bowl</b><small>$11.50</small></span><span><i/><b>Cold Brew</b><small>$4.50</small></span></div><div className="preview-kiosk__cart"><span><Check size={12}/>Added to order</span><b>1 item · $14.00</b></div><div className="preview-kiosk__payment"><Check size={18}/><span>Payment approved</span></div></div></PreviewFrame>;
+  return <PreviewFrame label="Guest ordering"><div className="preview-kiosk"><div className="preview-kiosk__welcome"><small>Welcome to cangujet</small><strong>What would you like?</strong></div><div className="preview-kiosk__categories"><i>Popular</i><i>Burgers</i><i>Drinks</i></div><div className="preview-kiosk__products"><span><i/><b>Truffle Burger</b><small>$14.00</small></span><span><i/><b>Green Bowl</b><small>$11.50</small></span><span><i/><b>Cold Brew</b><small>$4.50</small></span></div><div className="preview-kiosk__cart"><span><Check size={12}/>Added to order</span><b>1 item · $14.00</b></div><div className="preview-kiosk__payment"><Check size={18}/><span>Payment approved</span></div></div></PreviewFrame>;
 }
 
 function KitchenPreview() {
@@ -236,10 +221,6 @@ function KitchenPreview() {
 
 function CashierPreview() {
   return <PreviewFrame label="Point of sale"><div className="preview-cashier"><div className="preview-cashier__catalog"><small>Quick add</small><div><button>Burger</button><button>Salad</button><button>Coffee</button><button>More</button></div></div><div className="preview-cashier__order"><small>Current order</small><p><span>Truffle Burger</span><b>$14.00</b></p><p><span>Cold Brew</span><b>$4.50</b></p><div><span>Total</span><strong>$18.50</strong></div><em><Check size={13}/>Payment approved</em></div><div className="preview-cashier__receipt"><ReceiptText size={15}/><i/><i/><i/></div></div></PreviewFrame>;
-}
-
-function AdminPreview() {
-  return <PreviewFrame label="Management"><div className="preview-admin"><div className="preview-admin__metric"><small>Net revenue</small><strong>$24,860</strong><span>+12.4%</span></div><div className="preview-admin__chart"><svg viewBox="0 0 320 120" preserveAspectRatio="none"><path className="area" d="M0,106 C35,94 47,100 74,78 S121,83 146,58 S188,68 212,39 S268,48 320,13 L320,120 L0,120 Z"/><path className="line" d="M0,106 C35,94 47,100 74,78 S121,83 146,58 S188,68 212,39 S268,48 320,13"/></svg><div><i/><i/><i/><i/><i/><i/></div></div><div className="preview-admin__notice"><CircleDollarSign size={16}/><span><b>Daily target reached</b><small>Revenue is 8% above forecast</small></span></div></div></PreviewFrame>;
 }
 
 function OrderDisplayPreview() {
