@@ -39,7 +39,7 @@ test("Admin Devices preserves 403 and classified dependency 503 responses", asyn
 
   const unavailable = { snapshot: async () => { throw new DeviceManagementDependencyFailure(
     "supabase_rest", "admin_membership_lookup", "device_management_repository_unavailable",
-    "Administrator membership could not be verified.", { name: "PostgrestError", code: "PGRST000" },
+    "Administrator membership could not be verified.", { name: "PostgrestError", code: "PGRST000", causeCode: "EACCES" },
   ); } } as unknown as DeviceManagementService;
   const entries: unknown[][] = [];
   const original = console.error;
@@ -57,6 +57,7 @@ test("Admin Devices preserves 403 and classified dependency 503 responses", asyn
   assert.equal(diagnostic.dependency, "supabase_rest");
   assert.equal(diagnostic.operation, "admin_membership_lookup");
   assert.equal(diagnostic.errorCode, "PGRST000");
+  assert.equal(diagnostic.causeCode, "EACCES");
   assert.doesNotMatch(JSON.stringify(entries), /valid\.staff\.token/);
 });
 

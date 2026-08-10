@@ -9,6 +9,7 @@ import type {
 } from "../../shared/deviceManagement";
 import { createDeviceActivationKey, hashDeviceActivationKey } from "./deviceActivationKeyService";
 import { DeviceApiFailure } from "./deviceIdentityService";
+import { safeDependencyError } from "./serverDependencyDiagnostics";
 
 export type DeviceManagementDependency = "server_configuration" | "supabase_auth" | "supabase_rest";
 
@@ -16,19 +17,21 @@ export class DeviceManagementDependencyFailure extends DeviceApiFailure {
   public readonly upstreamName: string | null;
   public readonly upstreamCode: string | null;
   public readonly upstreamStatus: number | null;
+  public readonly upstreamCauseCode: string | null;
 
   constructor(
     public readonly dependency: DeviceManagementDependency,
     public readonly operation: string,
     code: string,
     message: string,
-    upstream?: { name?: string; code?: string; status?: number } | null,
+    upstream?: { name?: string; code?: string; status?: number; causeCode?: string } | null,
   ) {
     super(code, 503, message);
     this.name = "DeviceManagementDependencyFailure";
     this.upstreamName = upstream?.name ?? null;
     this.upstreamCode = upstream?.code ?? null;
     this.upstreamStatus = upstream?.status ?? null;
+    this.upstreamCauseCode = upstream?.causeCode ?? null;
   }
 }
 
@@ -264,15 +267,7 @@ function dependencyFailure(
   return new DeviceManagementDependencyFailure(dependency, operation, code, message, safeUpstream(upstream));
 }
 
-function safeUpstream(error: unknown) {
-  if (!error || typeof error !== "object") return null;
-  const value = error as { name?: unknown; code?: unknown; status?: unknown };
-  return {
-    name: typeof value.name === "string" ? value.name : undefined,
-    code: typeof value.code === "string" ? value.code : undefined,
-    status: typeof value.status === "number" ? value.status : undefined,
-  };
-}
+const safeUpstream = safeDependencyError;
 
 function isInvalidStaffCredentialError(error: { status?: number; name?: string }) {
   return error.status === 401 || error.status === 403 || error.name === "AuthSessionMissingError";

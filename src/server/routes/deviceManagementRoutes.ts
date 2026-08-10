@@ -74,6 +74,7 @@ function logDependencyFailure(request: Request, requestId: string, error: unknow
   const errorName = error instanceof DeviceManagementDependencyFailure ? error.upstreamName : error instanceof Error ? error.name : "UnknownError";
   const errorCode = error instanceof DeviceManagementDependencyFailure ? error.upstreamCode : null;
   const upstreamStatus = error instanceof DeviceManagementDependencyFailure ? error.upstreamStatus : null;
+  const causeCode = error instanceof DeviceManagementDependencyFailure ? error.upstreamCauseCode : null;
   console.error("[cangujet device management]", {
     event: "admin_device_dependency_failure",
     requestId,
@@ -84,6 +85,7 @@ function logDependencyFailure(request: Request, requestId: string, error: unknow
     operation,
     errorName,
     errorCode,
+    causeCode,
     upstreamStatus,
   });
 }

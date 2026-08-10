@@ -104,9 +104,9 @@ test("device state machine, heartbeat refresh, setup messages, and provider sing
     assert.match(context, new RegExp(`\\"${state}\\"`));
   }
   assert.match(context, /service\.heartbeat\(currentConfig\.configVersion/);
-  assert.match(setup, /This device key is invalid\./);
-  assert.match(setup, /This device key has expired\./);
-  assert.match(setup, /This device key has already been used\./);
-  assert.match(setup, /This device key has been revoked\./);
+  assert.match(setup, /This activation key is invalid\./);
+  assert.match(setup, /This activation key has expired\./);
+  assert.match(setup, /This activation key has already been used\./);
+  assert.match(setup, /This activation key has been revoked\./);
   assert.equal((app.match(/<DeviceProvider enabled=/g) ?? []).length, 1);
 });

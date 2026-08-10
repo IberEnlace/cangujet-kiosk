@@ -11,6 +11,16 @@ This repository implements Phases 1–7: the typed browser client, schema/RLS, s
 
 If either browser variable is absent, the app logs a development warning and retains the existing local staff credentials. This preserves the demo; it is not a production authentication mode.
 
+The Express runtime separately requires `SUPABASE_URL` and either
+`SUPABASE_SECRET_KEY` or `SUPABASE_SERVICE_ROLE_KEY`. The process that runs
+`npm run dev:server` or `npm run start:server` must be allowed to resolve the
+configured Supabase hostname and make outbound HTTPS connections on port 443.
+Successful browser authentication does not verify this server-side path. An
+`EACCES` transport code means the Node process is blocked by its execution
+sandbox, firewall, or service policy; restart it in an environment with
+outbound HTTPS permission. Retrying requests or changing credentials does not
+repair an `EACCES` denial.
+
 ## Authentication setup
 
 Disable public signup in Supabase Auth. Create staff through the dashboard or a future trusted admin workflow, then insert a matching profile:
