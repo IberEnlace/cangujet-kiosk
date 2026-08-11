@@ -1,17 +1,21 @@
 import { useEffect, useState, type FormEvent } from "react";
 import {
-  AlertTriangle, ArrowLeft, ArrowRight, CheckCircle2, Eye, EyeOff, Info, Loader2,
-  MonitorSmartphone, RotateCcw, ShieldCheck, Trash2,
+  AlertTriangle, ArrowLeft, ArrowRight, Eye, EyeOff, Loader2,
+  MonitorSmartphone, RotateCcw, ShieldCheck,
 } from "lucide-react";
-import { motion } from "motion/react";
 import type { BootstrapDeviceType, DeviceActivationKeyVerificationResponse } from "../../../shared/deviceBootstrap";
 import { isDeviceActivationKey, isSupportedDeviceProvisioningKey, normalizeDeviceActivationKey } from "../../../shared/deviceKey";
 import { SUPPORTED_LANGUAGE_CODES, type SupportedLanguage } from "../../config/languages";
 import CangujetLogo from "../../components/branding/CangujetLogo";
+import ConfigurationLoadingScreen from "../../components/configuration/ConfigurationLoadingScreen";
+import PreparingDeviceScreen from "../../components/configuration/PreparingDeviceScreen";
+import { useBootstrap } from "../../context/BootstrapContext";
 import { useDevice } from "../../context/DeviceContext";
 import type { DeviceStatus } from "../../types/device";
-import DeviceWorkspaceStage, { workspaceDefinitions, workspaceLayoutId } from "./DeviceWorkspaceStage";
+import DeviceWorkspaceStage, { workspaceDefinitions } from "./DeviceWorkspaceStage";
 import "./DeviceSetup.css";
+
+const PREPARING_VISUAL_THRESHOLD_MS = 150;
 
 const copy = {
   en: {
@@ -25,10 +29,6 @@ const copy = {
     show: "Show key",
     hide: "Hide key",
     retry: "Try again",
-    clear: "Clear setup",
-    info: "Show device information",
-    connected: "Configuring this device",
-    steps: ["Verifying device", "Loading branch settings", "Loading menu", "Preparing workspace"],
     validation: ["This activation key is invalid.", "Enter the complete activation key exactly as provided."],
     invalid_request: ["This activation key is invalid.", "Enter the complete activation key exactly as provided."],
     invalid_key: ["This activation key is invalid.", "Check the activation key and try again."],
@@ -55,10 +55,6 @@ const copy = {
     show: "Anahtarı göster",
     hide: "Anahtarı gizle",
     retry: "Tekrar dene",
-    clear: "Kurulumu temizle",
-    info: "Cihaz bilgilerini göster",
-    connected: "Bu cihaz yapılandırılıyor",
-    steps: ["Cihaz doğrulanıyor", "Şube ayarları yükleniyor", "Menü yükleniyor", "Çalışma alanı hazırlanıyor"],
     validation: ["Bu etkinleştirme anahtarı geçersiz.", "Etkinleştirme anahtarının tamamını size verildiği gibi girin."],
     invalid_request: ["Bu etkinleştirme anahtarı geçersiz.", "Etkinleştirme anahtarının tamamını size verildiği gibi girin."],
     invalid_key: ["Bu etkinleştirme anahtarı geçersiz.", "Etkinleştirme anahtarını kontrol edip tekrar deneyin."],
@@ -81,14 +77,14 @@ type ErrorStatus = Exclude<DeviceStatus, "checking" | "unconfigured" | "connecti
 const errorStatuses: ErrorStatus[] = ["invalid_request", "invalid_key", "network_error", "timeout", "session_expired", "disabled", "expired", "revoked", "already_used", "conflict", "server_error", "protocol_error", "configuration_error"];
 type DeviceSetupProps = {
   onConfigured: () => void;
-  onDeviceInfo: () => void;
   onStaffSignIn: () => void;
   workspaceSelection?: boolean;
   onWorkspaceSelected?: (type: BootstrapDeviceType) => void;
 };
 
-export default function DeviceSetup({ onConfigured, onDeviceInfo, onStaffSignIn, workspaceSelection = false, onWorkspaceSelected }: DeviceSetupProps) {
-  const { status, initializationStatus, config, verifyActivationKey, configureDevice, clearDeviceConfiguration, retryInitialization } = useDevice();
+export default function DeviceSetup({ onConfigured, onStaffSignIn, workspaceSelection = false, onWorkspaceSelected }: DeviceSetupProps) {
+  const { status, initializationStatus, config, verifyActivationKey, configureDevice, retryInitialization } = useDevice();
+  const bootstrap = useBootstrap();
   const [setupView, setSetupView] = useState<"entry" | "activation">("entry");
   const [language, setLanguage] = useState<SetupLanguage>("en");
   const [secretKey, setSecretKey] = useState("");
@@ -96,6 +92,7 @@ export default function DeviceSetup({ onConfigured, onDeviceInfo, onStaffSignIn,
   const [validationError, setValidationError] = useState(false);
   const [verifiedKey, setVerifiedKey] = useState<DeviceActivationKeyVerificationResponse | null>(null);
   const [selectedType, setSelectedType] = useState<BootstrapDeviceType | null>(null);
+  const [showPreparing, setShowPreparing] = useState(false);
   const text = copy[language];
   const error = errorStatuses.includes(status as ErrorStatus) ? text[status as ErrorStatus] : null;
   const displayedError = validationError ? text.validation : error;
@@ -105,12 +102,22 @@ export default function DeviceSetup({ onConfigured, onDeviceInfo, onStaffSignIn,
     allowedDeviceTypes: workspaceDefinitions.map(workspace => workspace.type),
   } : null;
   const stageVerification = provisionedVerification ?? verifiedKey;
+  const configurationReady = bootstrap.state === "ready" || bootstrap.state === "offline";
+  const preparing = !workspaceSelection && (initializationStatus === "registering" || (status === "configured" && Boolean(config) && !configurationReady && bootstrap.state !== "error"));
 
   useEffect(() => {
-    if (workspaceSelection || status !== "configured" || !config) return;
-    const timer = window.setTimeout(onConfigured, 2600);
+    if (workspaceSelection || status !== "configured" || !config || !configurationReady) return;
+    onConfigured();
+  }, [config, configurationReady, onConfigured, status, workspaceSelection]);
+
+  useEffect(() => {
+    if (!preparing) {
+      setShowPreparing(false);
+      return;
+    }
+    const timer = window.setTimeout(() => setShowPreparing(true), PREPARING_VISUAL_THRESHOLD_MS);
     return () => window.clearTimeout(timer);
-  }, [config, onConfigured, status, workspaceSelection]);
+  }, [preparing]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -164,11 +171,15 @@ export default function DeviceSetup({ onConfigured, onDeviceInfo, onStaffSignIn,
     && ["network_error", "timeout", "server_error", "protocol_error", "configuration_error"].includes(status);
   const reactivationRequired = ["session_expired", "revoked", "expired"].includes(status);
 
+  if (!workspaceSelection && status === "configured" && config && bootstrap.state === "error") {
+    return <ConfigurationLoadingScreen />;
+  }
+
   return <main dir="ltr" className={`device-setup-page ${workspaceMode ? "device-setup-page--workspace" : ""} min-h-[100dvh] bg-[#F8F9FA] px-5 py-8 text-[#1F1F1F] sm:px-10`}>
     <div className={`device-setup-shell mx-auto flex min-h-[calc(100dvh-4rem)] w-full flex-col ${workspaceMode ? "max-w-[1180px]" : "max-w-2xl"}`}>
       {!workspaceMode && <header className="device-setup-header flex items-center justify-between"><CangujetLogo variant="full" priority className="h-auto w-44" /><div className="device-setup-languages flex gap-1 rounded-xl border border-[#ECECEC] bg-[#FFFFFF] p-1 shadow-[0_3px_10px_rgba(31,31,31,.04)]">{SUPPORTED_LANGUAGE_CODES.map(item => <button type="button" key={item} onClick={() => setLanguage(item)} className={`min-h-10 rounded-lg px-3 text-xs font-bold uppercase transition active:scale-[.98] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#C41E19] ${language === item ? "bg-[#C41E19] text-[#FFFFFF] shadow-[0_4px_12px_rgba(196,30,25,.16)]" : "text-[#6B7280] hover:bg-[#F8F9FA] hover:text-[#1F1F1F]"}`}>{item}</button>)}</div></header>}
       <section className={workspaceMode ? "device-workspace-stage" : "my-auto rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] p-[clamp(1.5rem,5vw,3rem)] shadow-[0_10px_30px_rgba(31,31,31,.07)] transition duration-300 hover:shadow-[0_14px_36px_rgba(31,31,31,.09)]"}>
-        {!workspaceSelection && status === "configured" && config ? <ConfiguredState config={config} text={text.connected} steps={text.steps} selectedType={selectedType} /> : stageVerification ? <DeviceWorkspaceStage verification={stageVerification} initialType={workspaceSelection ? config?.bootstrap.device.type : undefined} selectedType={selectedType} busy={!workspaceSelection && initializationStatus === "registering"} error={displayedError} onActivate={activate} /> : deviceStateUnavailable ? <DeviceStateUnavailable onRetry={retryInitialization} onStaffSignIn={onStaffSignIn} /> : setupView === "entry" ? <FirstRunEntry reactivationRequired={reactivationRequired} onSetUp={() => setSetupView("activation")} onStaffSignIn={onStaffSignIn} /> : <>
+        {stageVerification ? <DeviceWorkspaceStage verification={stageVerification} initialType={workspaceSelection ? config?.bootstrap.device.type : undefined} selectedType={selectedType} busy={preparing} error={displayedError} onActivate={activate} /> : deviceStateUnavailable ? <DeviceStateUnavailable onRetry={retryInitialization} onStaffSignIn={onStaffSignIn} /> : setupView === "entry" ? <FirstRunEntry reactivationRequired={reactivationRequired} onSetUp={() => setSetupView("activation")} onStaffSignIn={onStaffSignIn} /> : <>
           <button type="button" onClick={returnToEntry} className="device-setup-back"><ArrowLeft size={16} /> {text.back}</button>
           <h1 className="mt-4 text-[clamp(2rem,6vw,3.5rem)] font-bold tracking-[-.05em]">{text.title}</h1><p className="mt-3 text-[#6B7280]">{text.description}</p>
           <form onSubmit={submit} className="mt-8"><label className="text-sm font-semibold text-[#1F1F1F]">{text.label}<div className="relative mt-2"><input type={visible ? "text" : "password"} value={secretKey} onChange={event => { const value = event.target.value; setSecretKey(/^\s*(?:cangujet|morrow)/i.test(value) ? normalizeDeviceActivationKey(value) : value); }} autoCapitalize="characters" autoCorrect="off" spellCheck={false} autoComplete="off" placeholder={text.placeholder} aria-describedby="device-key-help" className="min-h-16 w-full rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] px-5 pe-28 text-base uppercase tracking-[.08em] text-[#1F1F1F] outline-none transition placeholder:text-[#9CA3AF] hover:border-[#C41E19]/25 focus:border-[#C41E19] focus:ring-4 focus:ring-[#C41E19]/10 sm:text-lg" /><button type="button" onClick={() => setVisible(value => !value)} className="absolute end-3 top-3 flex min-h-10 items-center gap-2 rounded-xl px-3 text-xs text-[#6B7280] transition hover:bg-[#F8F9FA] hover:text-[#1F1F1F] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#C41E19]">{visible ? <EyeOff size={17}/> : <Eye size={17}/>} {visible ? text.hide : text.show}</button></div><span id="device-key-help" className="mt-2 block text-xs font-normal text-[#9CA3AF]">{text.help}</span></label>
@@ -177,8 +188,8 @@ export default function DeviceSetup({ onConfigured, onDeviceInfo, onStaffSignIn,
           </form>
         </>}
       </section>
-      {config && <footer className={`device-setup-footer flex flex-wrap justify-center gap-2 text-xs text-[#6B7280] ${workspaceMode ? "device-setup-footer--workspace" : ""}`}><button onClick={onDeviceInfo} className="flex min-h-11 items-center gap-2 rounded-xl border border-[#ECECEC] bg-[#FFFFFF] px-4 transition hover:-translate-y-0.5 hover:bg-[#F8F9FA] hover:text-[#1F1F1F] active:scale-[.98]"><Info size={15}/>{text.info}</button><button onClick={() => { void clearDeviceConfiguration(); setSecretKey(""); resetVerification(); setSetupView("entry"); }} className="flex min-h-11 items-center gap-2 rounded-xl border border-[#C41E19] bg-[#FFFFFF] px-4 text-[#C41E19] transition hover:-translate-y-0.5 hover:bg-[#C41E19] hover:text-[#FFFFFF] active:scale-[.98]"><Trash2 size={15}/>{text.clear}</button></footer>}
     </div>
+    {showPreparing && <PreparingDeviceScreen language={language} />}
   </main>;
 }
 
@@ -214,11 +225,6 @@ function DeviceStateUnavailable({ onRetry, onStaffSignIn }: { onRetry: () => voi
       <button type="button" onClick={onStaffSignIn} className="device-state-staff"><ShieldCheck size={17} /> Admin / Staff sign in</button>
     </div>
   </div>;
-}
-
-function ConfiguredState({ config, text, steps, selectedType }: { config: NonNullable<ReturnType<typeof useDevice>["config"]>; text: string; steps: readonly string[]; selectedType: BootstrapDeviceType | null }) {
-  const workspace = workspaceDefinitions.find(item => item.type === selectedType);
-  return <motion.div layoutId={workspaceLayoutId(workspace)} className="text-center"><span className="mx-auto grid size-20 place-items-center rounded-full bg-[#C41E19]/10"><CheckCircle2 className="size-12 text-[#C41E19]" /></span><h1 className="mt-6 text-3xl font-bold tracking-[-.03em]">{text}</h1><p className="mt-3 text-[#6B7280]">{config.kioskName} · {config.branchName}</p><div className="mx-auto mt-7 max-w-sm space-y-3 text-left">{steps.map((step, index) => <div key={step} className="flex items-center gap-3 rounded-2xl border border-[#ECECEC] bg-[#FFFFFF] px-4 py-3 text-sm text-[#6B7280] shadow-[0_3px_10px_rgba(31,31,31,.04)] transition hover:-translate-y-0.5 hover:shadow-[0_7px_16px_rgba(31,31,31,.06)]"><span className="grid size-6 place-items-center rounded-full bg-[#C41E19]/10 text-xs font-bold text-[#C41E19]">{index + 1}</span>{step}</div>)}</div></motion.div>;
 }
 
 function ErrorPanel({ error }: { error: readonly [string, string] }) {

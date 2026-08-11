@@ -258,8 +258,8 @@ function Application() {
   if (protectedAdminRoute && auth.isAuthenticated && auth.currentRole === "admin" && (adminSessionGate?.route !== route || adminSessionGate.state !== "valid")) {
     return <AdminSessionGate networkError={adminSessionGate?.route === route && adminSessionGate.state === "network_error"} onRetry={() => setAdminSessionRetry(value => value + 1)} onLogin={() => { void auth.logout().then(() => navigateTo(ROUTES.adminLogin)); }} />;
   }
-  if (requiresDeviceSession && !staffDeviceAlternativeRoute && device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceRouteForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)} onStaffSignIn={() => navigateTo(ROUTES.adminLogin)} />;
-  if (requiresDeviceSession && device.initializationStatus === "authenticated" && ["waiting_for_device", "loading_configuration", "loading_menu", "error"].includes(bootstrap.state)) return <ConfigurationLoadingScreen />;
+  if (requiresDeviceSession && !staffDeviceAlternativeRoute && device.initializationStatus === "setup_required" && route !== ROUTES.deviceSetup) return <DeviceSetup onConfigured={() => navigateTo(workspaceRouteForDevice(device.config?.bootstrap.device.type ?? "kiosk"))} onStaffSignIn={() => navigateTo(ROUTES.adminLogin)} />;
+  if (route !== ROUTES.deviceSetup && requiresDeviceSession && device.initializationStatus === "authenticated" && ["waiting_for_device", "loading_configuration", "loading_menu", "error"].includes(bootstrap.state)) return <ConfigurationLoadingScreen />;
   if ([ROUTES.nori, ROUTES.noriChat, ROUTES.noriVoice].includes(route as "/nori" | "/nori/chat" | "/nori/voice") && !bootstrap.kiosk?.ai.enabled) return null;
   if (route === ROUTES.noriVoice && !bootstrap.kiosk?.ai.voiceEnabled) return null;
   if (guardedRoute !== route) return null;
@@ -267,7 +267,6 @@ function Application() {
     workspaceSelection={workspaceSelectionOverrideActive && Boolean(device.config)}
     onWorkspaceSelected={selectWorkspace}
     onConfigured={() => navigateTo(workspaceRouteForDevice(device.config?.bootstrap.device.type ?? "kiosk"))}
-    onDeviceInfo={() => navigateTo(ROUTES.deviceInfo)}
     onStaffSignIn={() => navigateTo(ROUTES.adminLogin)}
   />;
   if (route === ROUTES.deviceInfo) return <DeviceInfo onBack={() => enterWorkspaceSelection("device_info_back")} onCleared={() => { completeIntentionalWorkspaceSelection(); navigateTo(ROUTES.deviceSetup); }} />;
